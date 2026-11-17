@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime
+
 from attrs import Factory
 
 from composeui.core.view import (
@@ -101,6 +103,34 @@ class ChartPage(PageView):
             ReferenceLine(20, "Max: 20"),
             # past the x bounds: not drawn, nor labeled
             ReferenceLine(15, "Late", vertical=True),
+        ],
+    )
+    visits: ChartView = child(
+        ChartView,
+        title="Visits",
+        x=Axis("Day", scale=Scale.TIME),
+        # a bar a day, given as dates; the line's ends as times
+        series=[
+            Series.bars(
+                "Visits",
+                [5, 8, 6, 9, 12, 4, 3],
+                x=[datetime.date(2026, 11, day) for day in range(1, 8)],
+            ),
+            Series.line(
+                "Trend",
+                [
+                    datetime.datetime(2026, 11, 1, tzinfo=datetime.timezone.utc),
+                    datetime.datetime(2026, 11, 7, tzinfo=datetime.timezone.utc),
+                ],
+                [6, 7],
+            ),
+        ],
+        reference_lines=[
+            ReferenceLine(
+                datetime.datetime(2026, 11, 4, 12, tzinfo=datetime.timezone.utc),
+                "Release",
+                vertical=True,
+            )
         ],
     )
     ages: ChartView = child(

@@ -2440,6 +2440,21 @@ def _chart_points(
     return _thin(x, y, CHART_MAX_POINTS)
 
 
+#: how precise a time axis' times are, by the format they show in (`ChartView.time_format`)
+_TIME_PRECISIONS = {"%Y-%m-%d": "day", "%Y-%m-%d %H:%M": "minute", "%Y-%m-%d %H:%M:%S": "second"}
+
+
+def _x_spec(view: ChartViewLike, *, is_log: bool) -> dict[str, Any]:
+    """Get what the page's script draws the x axis with, e.g. how precise its times are."""
+    # an x axis of categories has no bounds: they are its own
+    spec = _axis_spec(view.x, is_log=is_log, is_bounded=len(view.categories) == 0)
+    if ChartView.is_x_time(view.x, view.categories):
+        # which the legend shows at the cursor
+        time_format = ChartView.time_format(x for series in view.series for x in series.x)
+        spec["time"] = _TIME_PRECISIONS[time_format]
+    return spec
+
+
 def _axis_spec(axis: Axis, *, is_log: bool, is_bounded: bool = True) -> dict[str, Any]:
     """Get what the page's script draws an axis with: its bounds only when it has them."""
     spec: dict[str, Any] = {"label": axis.label, "unit": axis.unit, "log": is_log}
@@ -2509,8 +2524,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         )
         spec: dict[str, Any] = {
             "title": view.title,
-            # an x axis of categories has no bounds: they are its own
-            "x": _axis_spec(view.x, is_log=x_log, is_bounded=len(view.categories) == 0),
+            "x": _x_spec(view, is_log=x_log),
             "y": _axis_spec(view.y, is_log=view.y.is_log),
             "series": [
                 {

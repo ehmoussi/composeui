@@ -11,6 +11,10 @@ The notable changes of each release of ComposeUI. The format follows
 - Layers in a chart: a `ChartView` draws lines, dots and bars over the same axes, for example
   a line over bars. The bars of several series stand side by side at each x, and the lines
   and dots are over them, on Qt, Textual, the web and in report images.
+- Dates on a chart's x axis: `Axis(scale=Scale.TIME)` shows the x as dates and times, in UTC,
+  as written. A series' x, a vertical reference line and an axis' bounds take `datetime.date`
+  and `datetime.datetime` values, held as seconds since 1970. The hovered values show as
+  precisely as the data. On Qt, Textual, the web and in report images.
 - Axis bounds: `Axis(minimum=..., maximum=...)` sets the ends of a chart's axis, one or both,
   for example `Axis("Load", unit="kN", minimum=0)`. The other end fits the data. The user can
   still zoom past them on Qt and the web. On Qt, Textual, the web and in report images.

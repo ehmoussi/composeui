@@ -435,6 +435,16 @@ section covers what users see.
   and the last bar show whole. It adds it only when the range is the whole data: uPlot runs a
   scale's range function on a zoom too, and a zoom widened at each draw would drift as the
   series change.
+- **A chart's bounds.** `charts.js` wraps each scale's range function last, so that an axis'
+  bounds (`Axis.minimum`, `Axis.maximum`) win over the bars' 0 and the reference lines. The x
+  range keeps a zoom as the user made it, which uPlot also asks the range function for. The
+  zoom kept across a swap, and the image's address, take the whole data at the bounds for no
+  zoom.
+- **A chart's times.** A time axis' values are seconds since 1970, in UTC, on every backend.
+  The page shows them in UTC whatever the browser's time zone: uPlot's `tzDate` and the legend
+  read them as `Etc/UTC`. So a naive `datetime`, which the core takes as UTC, shows as the app
+  wrote it, as Qt (`DateAxisItem(utcOffset=0)`), Textual and matplotlib show it. The server
+  sends how precise the times are (`time`: `day`, `minute` or `second`), which the legend shows.
 - **The order of the listeners.** Listeners of one event and phase run in the order they were
   added, and `tables.js` adds its after all of `page.js`'s. `page.js`'s captured Enter
   dispatches `activate`, which selects a row, before `tables.js` activates it. A cell's Escape is
