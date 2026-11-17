@@ -154,8 +154,7 @@ The SQLite model is complete otherwise: do not rebuild it.
 
 - **Evaluate [`textual-plot`](https://github.com/davidfokkema/textual-plot)** (Now). Zoom and pan
   on Textual, if it matches `textual-plotext`'s charts and keeps Python 3.9 support.
-- **Dates, ranges and bars** (Now). Dates on the x axis, axis ranges set by the app, and stacked
-  and horizontal bars.
+- **Dates and bars** (Now). Dates on the x axis, and stacked and horizontal bars.
 - **Histograms** (Now). Bins computed in the core, by count, percent or density.
 - **Range selection** (Now). Selecting an x range emits it, for example to filter a table. Not
   on Textual.

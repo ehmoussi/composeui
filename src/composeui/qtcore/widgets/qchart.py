@@ -141,7 +141,11 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         plot.getViewBox().sigResized.connect(self._fit_view2)
         #: the plot's own y range, before its last change, which the second view follows
         self._y_range = tuple(plot.getViewBox().viewRange()[1])
+        # the axes' bounds first, which `_follow_y` then reads
+        plot.getViewBox().sigXRangeChanged.connect(self._keep_x_bounds)
+        plot.getViewBox().sigYRangeChanged.connect(self._keep_y_bounds)
         plot.getViewBox().sigYRangeChanged.connect(self._follow_y)
+        self._view2.sigYRangeChanged.connect(self._keep_y2_bounds)
         self._legend = plot.addLegend()
         self._legend.setParentItem(self._overlay)
         # pyqtgraph thins and clips what it draws itself: a million points stay fluid
@@ -182,6 +186,8 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         categories or bars stays linear.
         """
         self.getPlotItem().setLabel(side, axis.title or None, units=axis.unit or None)
+        view_box = self.getPlotItem().getViewBox()
+        old = {"bottom": self._x, "left": self._y}.get(side, self._y2)
         if side == "bottom":
             self._x = axis
         elif side == "left":
@@ -189,14 +195,59 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         else:
             self._y2 = axis
         self._draw()
+        if (old.minimum, old.maximum) != (axis.minimum, axis.maximum):
+            # the app's new bounds, over the user's zoom: the view fits the data again
+            view = self._view2 if side == "right" else view_box
+            index = 0 if side == "bottom" else 1
+            view.enableAutoRange(axis=index)
+            self._keep_bounds(view, index)
 
-    def _follow_y(self, view_box: pg.ViewBox, y_range: tuple[float, float]) -> None:
+    def _keep_x_bounds(self, view_box: pg.ViewBox, _x_range: tuple[float, float]) -> None:
+        self._keep_bounds(view_box, 0)
+
+    def _keep_y_bounds(self, view_box: pg.ViewBox, _y_range: tuple[float, float]) -> None:
+        self._keep_bounds(view_box, 1)
+
+    def _keep_y2_bounds(self, view_box: pg.ViewBox, _y_range: tuple[float, float]) -> None:
+        self._keep_bounds(view_box, 1)
+
+    def _keep_bounds(self, view_box: pg.ViewBox, index: int) -> None:
+        """Give a view that fits its data its axis' bounds: pyqtgraph fits the data alone.
+
+        Not once the user zoomed, which stops it fitting: back out, it fits them again. An
+        x axis of categories has no bounds.
+        """
+        if index == 0:
+            axis, is_log = self._x, self._x_log
+            if len(self._categories) > 0:
+                return
+        elif view_box is self._view2:
+            axis, is_log = self._y2, self._y2.is_log
+        else:
+            axis, is_log = self._y, self._y.is_log
+        if not axis.has_bounds or view_box.autoRangeEnabled()[index] is False:
+            return
+        shown = view_box.viewRange()[index]
+        low, high = (10**value for value in shown) if is_log else shown
+        bounded = axis.bounded(low, high)
+        target = [math.log10(value) for value in bounded] if is_log else list(bounded)
+        if not np.allclose(target, shown):
+            # still fitting the data: a change of the data fits it again
+            view_box.setRange(
+                **{"xRange" if index == 0 else "yRange": target},
+                padding=0,
+                disableAutoRange=False,
+            )
+
+    def _follow_y(self, view_box: pg.ViewBox, _y_range: tuple[float, float]) -> None:
         """Zoom and pan the second y axis as the user does the first, in proportion.
 
         The two axes then show the same part of the plot. While the first fits its data,
-        e.g. once the user double clicks, the second fits its own.
+        e.g. once the user double clicks, the second fits its own. The view's range, not
+        the signal's: `_keep_bounds` may have bounded it since.
         """
-        (low, high), self._y_range = self._y_range, y_range
+        (low, high), self._y_range = self._y_range, tuple(view_box.viewRange()[1])
+        y_range = self._y_range
         if view_box.autoRangeEnabled()[1] is not False:
             self._view2.enableAutoRange(y=True)
             return

@@ -100,6 +100,29 @@ The axes belong to the code of the app, as a title does. The study does not save
 does not draw a point at an x of 0 or less, and a y of 0 or less leaves a gap. An x axis that
 shows categories or bars stays linear.
 
+### Axis bounds
+
+The range of an axis fits the data. `minimum` and `maximum` set its ends instead, for
+example a load that is never negative, or a percentage:
+
+```python
+from composeui.core.view import Axis
+
+chart.y = Axis("Load", unit="kN", minimum=0)
+```
+
+- **One end or both.** With `minimum` alone, the axis starts there, and its top still fits
+  the data.
+- **The bounds win.** They take the place of what else sets the range: the data, a reference
+  line past the data, or bars that stand on 0. The chart does not draw a reference line past
+  the bounds.
+- **The user's zoom.** The user can still zoom past the bounds on Qt and the web. Back out
+  (a double click), the axis shows its bounds again. On Qt, when the app sets new bounds, the
+  axis shows them over the user's zoom.
+- **Checked when made.** `minimum` must be below `maximum`, and the bounds of a log axis
+  above 0, else `Axis` raises `ValueError`.
+- **Not on categories.** An x axis that shows categories keeps their range.
+
 ### A second y axis
 
 `y2` is a second y axis, at the right of the chart. It shows the values of another quantity

@@ -440,6 +440,37 @@ def test_an_axis_label_shows_its_unit() -> None:
     assert Axis(unit="s").label == "(s)"
 
 
+def test_an_axis_bound_is_a_finite_value_it_can_show_and_below_the_other() -> None:
+    assert Axis(minimum=0, maximum=1).minimum == 0.0
+    assert Axis(scale=Scale.LOG, minimum=1).minimum == 1.0
+    with pytest.raises(ValueError, match="finite"):
+        Axis(maximum=math.inf)
+    with pytest.raises(ValueError, match="log axis"):
+        Axis(scale=Scale.LOG, minimum=0)
+    with pytest.raises(ValueError, match=r"from 1\.0 to 1\.0"):
+        Axis(minimum=1, maximum=1)
+
+
+@pytest.mark.parametrize(
+    ("axis", "fitted", "shown"),
+    [
+        (Axis(), (-5, 10), (-5, 10)),
+        (Axis(minimum=0), (-5, 10), (0, 10)),
+        (Axis(maximum=100), (-5, 10), (-5, 100)),
+        (Axis(minimum=0, maximum=100), (-5, 10), (0, 100)),
+        # a bound past the data's other end: a unit on its side, rather than no range
+        (Axis(minimum=0), (-5, -1), (0, 1)),
+        (Axis(maximum=0), (2, 5), (-1, 0)),
+        (Axis(scale=Scale.LOG, minimum=10), (1, 5), (10, 100)),
+        (Axis(scale=Scale.LOG, maximum=1), (5, 50), (0.1, 1)),
+    ],
+)
+def test_an_axis_shows_the_range_that_fits_the_data_at_its_bounds(
+    axis: Axis, fitted: tuple[float, float], shown: tuple[float, float]
+) -> None:
+    assert axis.bounded(*fitted) == pytest.approx(shown)
+
+
 def test_a_study_saves_its_charts_series(tmp_path: Path) -> None:
     view = PipeChartMainView()
     view.add_curve()

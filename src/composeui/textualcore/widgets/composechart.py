@@ -121,11 +121,23 @@ class ComposeChart(PlotextPlot):
         # without any, e.g. an empty chart's
         lines = self._drawn_lines()
         xs, _ys = self._extent(on_y2=False)
-        if self._x_log and (len(xs) > 0 or any(line.vertical for line in lines)):
+        xs += [line.value + self._offset for line in lines if line.vertical]
+        x_log = self._x_log and len(xs) > 0
+        if x_log:
             plt.xscale("log")
+        # an x axis of categories has no bounds: `_plot_bars` gives it their own range after
+        x_limits = self._limits(self.x, xs, is_log=x_log)
+        if x_limits is not None:
+            plt.xlim(*x_limits)
         for on_y2 in (False, True):
-            if self._y_axis(on_y2=on_y2).is_log and self._has_y(lines, on_y2=on_y2):
+            axis, ys = self._y_axis(on_y2=on_y2), self._y_values(lines, on_y2=on_y2)
+            y_log = axis.is_log and len(ys) > 0
+            if y_log:
                 plt.yscale("log", yside=_SIDES[on_y2])
+            y_limits = self._limits(axis, ys, is_log=y_log)
+            if y_limits is not None:
+                # plotext bounds a side, which its stub types as a number
+                plt.ylim(*y_limits, yside=_SIDES[on_y2])  # type: ignore[arg-type]
         self._plot_bars(colors)
         self._plot_curves(colors)
         self._plot_reference_lines()
@@ -150,10 +162,28 @@ class ComposeChart(PlotextPlot):
             y2_log=self.y2.is_log,
         )
 
-    def _has_y(self, lines: list[ReferenceLine], *, on_y2: bool) -> bool:
-        """Tell whether plotext gets a value of a y axis: a series' or a line's across it."""
+    def _y_values(self, lines: list[ReferenceLine], *, on_y2: bool) -> list[float]:
+        """Get the values plotext gets on a y axis: its series' and the lines across it."""
         _xs, ys = self._extent(on_y2=on_y2)
-        return len(ys) > 0 or any(not line.vertical and line.is_on_y2 == on_y2 for line in lines)
+        return ys + [line.value for line in lines if not line.vertical and line.is_on_y2 == on_y2]
+
+    @staticmethod
+    def _shown(axis: Axis, values: list[float]) -> list[float]:
+        """Get the ends of the range an axis with bounds shows; `values` without bounds."""
+        if not axis.has_bounds or len(values) == 0:
+            return values
+        return list(axis.bounded(min(values), max(values)))
+
+    @staticmethod
+    def _limits(axis: Axis, values: list[float], *, is_log: bool) -> tuple[float, float] | None:
+        """Get the limits of an axis with bounds, as plotext takes them: a log axis' logs.
+
+        None without bounds, which leaves plotext fitting the values, or without values.
+        """
+        if not axis.has_bounds or len(values) == 0:
+            return None
+        low, high = axis.bounded(min(values), max(values))
+        return (math.log10(low), math.log10(high)) if is_log else (low, high)
 
     def _points(self, curve: Series) -> tuple[list[float], list[float]]:
         """Get the points of a line or of dots as plotext draws them, in its values.
@@ -239,6 +269,10 @@ class ComposeChart(PlotextPlot):
                 for other in lines
                 if not other.vertical and other.is_on_y2 == line.is_on_y2
             ]
+            # the range shown, at the axes' bounds: a label past them isn't drawn
+            if len(self.categories) == 0:
+                xs = self._shown(self.x, xs)
+            ys = self._shown(self._y_axis(on_y2=line.is_on_y2), ys)
             color = Color.parse(line.color).rgb if line.color is not None else ink
             if line.vertical:
                 x = line.value + offset

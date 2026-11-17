@@ -89,6 +89,20 @@ class ChartPage(PageView):
             ReferenceLine(0, "Break-even", on_y2=True),
         ],
     )
+    load: ChartView = child(
+        ChartView,
+        title="Load",
+        # the app's bounds: x from 0 to 10, y from 0 with its top fitting the data
+        x=Axis("Time", unit="s", minimum=0, maximum=10),
+        y=Axis("Load", unit="kN", minimum=0),
+        series=[Series.line("Crane", [1, 5, 12], [3, 8, -2])],
+        reference_lines=[
+            # within the bounds, past the data: the top takes it in
+            ReferenceLine(20, "Max: 20"),
+            # past the x bounds: not drawn, nor labeled
+            ReferenceLine(15, "Late", vertical=True),
+        ],
+    )
     ages: ChartView = child(
         ChartView,
         title="Ages",

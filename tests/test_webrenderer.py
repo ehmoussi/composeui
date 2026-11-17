@@ -9356,6 +9356,24 @@ def test_a_series_on_the_second_y_axis_is_sent_with_that_axis() -> None:
     assert spec["data"][2] == [3.2, 41, 0]
 
 
+def test_an_axis_is_sent_with_its_bounds_but_one_of_categories() -> None:
+    main_view = ChartPagesMainView()
+    main_view.render(RendererType.WEB)
+    main_view.router.navigate(main_view.router.chart.route)  # built once it shows
+    page = main_view.router.chart
+    assert isinstance(page.load.renderer, WebChartRenderer)
+    assert isinstance(page.orders.renderer, WebChartRenderer)
+    page.orders.x = attrs.evolve(page.orders.x, minimum=1, maximum=2)
+
+    load = json.loads(page.load.renderer.chart_json())
+    orders = json.loads(page.orders.renderer.chart_json())
+
+    assert (load["x"]["minimum"], load["x"]["maximum"]) == (0, 10)
+    assert load["y"]["minimum"] == 0
+    assert "maximum" not in load["y"]  # its top fits the data
+    assert "minimum" not in orders["x"]  # the categories' own range
+
+
 def test_bars_without_categories_are_sent_at_their_x_on_a_linear_axis() -> None:
     main_view = ChartPagesMainView()
     main_view.render(RendererType.WEB)

@@ -2440,6 +2440,18 @@ def _chart_points(
     return _thin(x, y, CHART_MAX_POINTS)
 
 
+def _axis_spec(axis: Axis, *, is_log: bool, is_bounded: bool = True) -> dict[str, Any]:
+    """Get what the page's script draws an axis with: its bounds only when it has them."""
+    spec: dict[str, Any] = {"label": axis.label, "unit": axis.unit, "log": is_log}
+    if is_bounded:
+        spec.update(
+            (name, bound)
+            for name, bound in (("minimum", axis.minimum), ("maximum", axis.maximum))
+            if bound is not None
+        )
+    return spec
+
+
 def _query_range(query: Mapping[str, str], axis: str) -> tuple[float, float] | None:
     """Get an axis' range from a query's `x_min` and `x_max` (or `y_...`, `y2_...`), if any."""
     low, high = query.get(f"{axis}_min"), query.get(f"{axis}_max")
@@ -2497,8 +2509,9 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         )
         spec: dict[str, Any] = {
             "title": view.title,
-            "x": {"label": view.x.label, "unit": view.x.unit, "log": x_log},
-            "y": {"label": view.y.label, "unit": view.y.unit, "log": view.y.is_log},
+            # an x axis of categories has no bounds: they are its own
+            "x": _axis_spec(view.x, is_log=x_log, is_bounded=len(view.categories) == 0),
+            "y": _axis_spec(view.y, is_log=view.y.is_log),
             "series": [
                 {
                     "name": series.name,
@@ -2528,7 +2541,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         }
         if ChartView.has_y2(view.series, view.reference_lines):
             # at the right: shown only with something on it, flagged `on_y2`
-            spec["y2"] = {"label": view.y2.label, "unit": view.y2.unit, "log": view.y2.is_log}
+            spec["y2"] = _axis_spec(view.y2, is_log=view.y2.is_log)
             for series, sent in zip(view.series, spec["series"]):
                 if series.on_y2:
                     sent["on_y2"] = True

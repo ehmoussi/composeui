@@ -3111,6 +3111,9 @@ class _PlotMonitor(Protocol):
     yside: list[str]
     hcoord: list[list[float]]
     vcoord: list[list[float]]
+    #: the ranges drawn, by side: the bottom's then the top's, the left's then the right's
+    xlim: list[list[float]]
+    ylim: list[list[float]]
     hcolors: list[list[tuple[int, int, int]]]
     color: list[list[tuple[int, int, int]]]
     fillx: list[float | bool]
@@ -3277,6 +3280,43 @@ async def test_a_series_on_the_second_y_axis_is_plotted_against_an_axis_at_the_r
         assert plotted.ylabel == ["Units", None]
         assert plotted.yside == ["left"] * 4
         assert plotted.y[3] == [3.2, 41, 0]
+
+
+@pytest.mark.asyncio
+async def test_an_axis_shows_the_app_s_bounds() -> None:
+    view = ChartPagesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    page = view.router.chart
+    charts = {}
+    for name in ("load", "sales", "orders"):
+        renderer = getattr(page, name).renderer
+        assert isinstance(renderer, TextualWidgetRenderer)
+        assert isinstance(renderer.widget, ComposeChart)
+        charts[name] = renderer.widget
+
+    async with app.run_test(size=(120, 200)) as pilot:
+        view.router.current_route = "chart"
+        await pilot.pause()
+        page.sales.y2 = attrs.evolve(page.sales.y2, maximum=100)
+        page.orders.x = attrs.evolve(page.orders.x, minimum=1, maximum=2)
+        await pilot.pause()
+
+        text = charts["load"].render().plain  # type: ignore[union-attr]
+        plotted = _plot_monitor(charts["load"])
+        # from 0 to 10, and from 0 up to the maximum's line, its label at the bounds' end
+        assert plotted.xlim[0] == [0, 10]
+        assert plotted.ylim[0] == [0, 20]
+        assert "Max: 20" in text
+        assert "Late" not in text  # past the x bounds
+        # a log axis takes its bounds as their logs, here the right one
+        charts["sales"].render()
+        assert _plot_monitor(charts["sales"]).ylim[1][1] == pytest.approx(2)
+        # an x axis of categories: its own range, whatever the bounds
+        charts["orders"].render()
+        assert _plot_monitor(charts["orders"]).xlim[0] == [0.5, 3.5]
 
 
 @pytest.mark.asyncio
