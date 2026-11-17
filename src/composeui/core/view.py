@@ -637,8 +637,7 @@ def set_references(root: View, main_view: MainView, model: Optional[Model]) -> N
     while len(views) > 0:
         current_view = views.popleft()
         current_view._main_view = main_view_reference  # noqa: SLF001
-        if isinstance(current_view, ListView):
-            current_view._model = None if model is None else weakref.ref(model)  # noqa: SLF001
+        current_view._keep_model(model)  # noqa: SLF001
         # its children, not only its view fields: e.g. a language menu's actions
         views.extend(current_view.children_views)
         # the signals made so far: the others get them as they're made (see `_LazySignal`)
@@ -670,11 +669,7 @@ def _retranslate(view: View, translate: Translate) -> None:
         else:
             setattr(view, f.name, translated)
     view.retranslate()
-    # a message on show is in the previous language
-    if isinstance(view, LogMixin) and view.log_message != "":
-        view.run_validator()
-    if isinstance(view, FormView) and view.log_view.log_message != "":
-        view.validate()
+    view._check_again()  # noqa: SLF001
 
 
 _ListItemT = TypeVar("_ListItemT")
@@ -1089,6 +1084,15 @@ class View:
         `MainView.set_language` calls it on every view once their text is translated,
         children before their parent.
         """
+
+    def _check_again(self) -> None:
+        """Run the view's check again: its message on show is in the previous language.
+
+        `MainView.set_language` calls it after `retranslate`. A view with a check sets it.
+        """
+
+    def _keep_model(self, model: Optional[Model]) -> None:
+        """Keep `model` for the views that the view builds later (see `set_references`)."""
 
     @property
     def children_views(self) -> list[View]:
@@ -3311,6 +3315,10 @@ class LogMixin:
         self.log_type = LogType.ERROR if message else LogType.INFO
         # most rows' isn't connected: don't make it. A mixin of views only
         emit_if_made(cast("View", self), "checked")
+
+    def _check_again(self) -> None:
+        if self.log_message != "":
+            self.run_validator()
 
 
 @define_view
@@ -8577,6 +8585,10 @@ class FormView(View):
         for signal in signals:
             signal.connect(self.validate)
 
+    def _check_again(self) -> None:
+        if self.log_view.log_message != "":
+            self.validate()
+
     def validate(self, *_args: Any) -> None:
         """Re-run every registered validator and push the combined result to `log_view`.
 
@@ -9435,6 +9447,9 @@ class ListView(View, Generic[ItemT]):
     _model: Optional[Callable[[], Optional[Model]]] = attrs.field(
         default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
+
+    def _keep_model(self, model: Optional[Model]) -> None:
+        self._model = None if model is None else weakref.ref(model)
 
     @property
     def children_views(self) -> list[View]:
