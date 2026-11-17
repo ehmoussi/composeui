@@ -16,8 +16,8 @@ from typing import TYPE_CHECKING
 
 from composeui.core.registry import RendererType, create_renderer
 from composeui.core.view import LabelRowInputView, StatusBar
-from composeui.qtcore.qtrenderer import RENDERERS as QT_RENDERERS
-from composeui.qtcore.qtrenderer import QtStatusBarRenderer
+from composeui.qtcore._renderers.content import QtStatusBarRenderer
+from composeui.qtcore.renderers import RENDERERS as QT_RENDERERS
 from composeui.textualcore._renderers.content import TextualStatusBarRenderer
 from composeui.textualcore.renderers import RENDERERS as TEXTUAL_RENDERERS
 from composeui.webcore.renderers import RENDERERS as WEB_RENDERERS
@@ -47,7 +47,7 @@ def test_every_backend_registers_the_same_renderer_keys_except_graphical_maps() 
 def test_loading_the_qt_backend_without_maps_does_not_load_qt_quick() -> None:
     code = (
         "import sys\n"
-        "import composeui.qtcore.qtrenderer\n"
+        "import composeui.qtcore.renderers\n"
         "assert 'qtpy.QtQuickWidgets' not in sys.modules\n"
     )
     subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603

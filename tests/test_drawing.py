@@ -255,7 +255,9 @@ def test_a_dimension_s_label_stands_on_the_right_of_its_line(
 def qt_drawing(qtbot: QtBot) -> tuple[DrawingView, QDrawing]:
     """Get a drawing of 2 by 1 shown on 200 by 100 pixels: 100 pixels per unit."""
     pytest.importorskip("qtpy")
-    from composeui.qtcore.qtrenderer import QtDrawingRenderer  # noqa: PLC0415 (Qt is optional)
+    from composeui.qtcore._renderers.graphics import (  # noqa: PLC0415 (Qt is optional)
+        QtDrawingRenderer,
+    )
 
     view = DrawingView(bounds=(0, 0, 2, 1))
     view.render(RendererType.QT)
@@ -636,7 +638,9 @@ def test_qt_sets_the_height_and_gives_it_back_to_the_layout(
 def test_qt_keeps_its_widget_when_rendered_again(
     qt_drawing: tuple[DrawingView, QDrawing],
 ) -> None:
-    from composeui.qtcore.qtrenderer import QtDrawingRenderer  # noqa: PLC0415 (Qt is optional)
+    from composeui.qtcore._renderers.graphics import (  # noqa: PLC0415 (Qt is optional)
+        QtDrawingRenderer,
+    )
 
     view, widget = qt_drawing
     assert isinstance(view.renderer, QtDrawingRenderer)
@@ -647,7 +651,9 @@ def test_qt_keeps_its_widget_when_rendered_again(
 
 
 def test_qt_gives_a_drawing_room_in_a_window(qtbot: QtBot) -> None:
-    from composeui.qtcore.qtrenderer import QtMainRenderer  # noqa: PLC0415 (Qt is optional)
+    from composeui.qtcore._renderers.navigation import (  # noqa: PLC0415 (Qt is optional)
+        QtMainRenderer,
+    )
     from composeui.qtcore.widgets.qdrawing import QDrawing  # noqa: PLC0415 (Qt is optional)
 
     main_view = _DrawingMainView()

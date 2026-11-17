@@ -123,13 +123,10 @@ from composeui.core.view import (
     UploadedFile,
     replace_cell,
 )
-from composeui.qtcore.qtrenderer import RENDERERS as QT_RENDERERS
-from composeui.qtcore.qtrenderer import (
-    QtActionRenderer,
-    QtMainRenderer,
-    QtMainWindow,
-    QtWidgetRenderer,
-)
+from composeui.qtcore._renderers.actions import QtActionRenderer
+from composeui.qtcore._renderers.navigation import QtMainRenderer, QtMainWindow
+from composeui.qtcore.qtrenderer import QtWidgetRenderer
+from composeui.qtcore.renderers import RENDERERS as QT_RENDERERS
 from composeui.qtcore.widgets.qchart import QChart
 from composeui.qtcore.widgets.qchecklist import QCheckList, QMultiComboBox
 from composeui.qtcore.widgets.qconsole import QConsoleBox
@@ -3134,7 +3131,7 @@ def test_a_confirmation_opens_over_the_window_and_answers_with_its_buttons(
 def test_a_dialog_s_title_is_its_bold_text_where_a_message_box_has_no_title(
     qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr("composeui.qtcore.qtrenderer._TITLE_AS_TEXT", True)  # as on macOS
+    monkeypatch.setattr("composeui.qtcore._renderers.dialogs._TITLE_AS_TEXT", True)  # as on macOS
     view, _window, box = _dialog_window(qtbot)
 
     view.confirm_clear.open()
