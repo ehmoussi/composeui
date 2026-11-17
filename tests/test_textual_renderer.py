@@ -3168,6 +3168,7 @@ async def test_a_scatter_series_is_plotted_as_dots() -> None:
         view.add_curve()
         view.add_measurements()
         await pilot.pause()
+        chart.render()  # plotext's figure of the view now, not of the last paint
         plotted = _plot_monitor(chart)
         assert plotted.label == ["D = 50 mm", "Measured, D = 50 mm"]
         assert plotted.lines == [True, False]  # a line, then dots
@@ -3176,6 +3177,7 @@ async def test_a_scatter_series_is_plotted_as_dots() -> None:
             attrs.evolve(curve, kind=ChartKind.SCATTER) for curve in view.chart.series
         ]
         await pilot.pause()
+        chart.render()  # plotext's figure of the view now, not of the last paint
         assert _plot_monitor(chart).lines == [False, False]
 
 
@@ -3250,6 +3252,7 @@ async def test_a_series_on_the_second_y_axis_is_plotted_against_an_axis_at_the_r
     async with app.run_test(size=(120, 200)) as pilot:
         view.router.current_route = "chart"
         await pilot.pause()
+        chart.render()  # plotext's figure of the view now, not of the last paint
         plotted = _plot_monitor(chart)
         assert plotted.ylabel == ["Units", "Revenue (k€)"]
         assert plotted.yscale == ["linear", "log"]
@@ -3269,6 +3272,7 @@ async def test_a_series_on_the_second_y_axis_is_plotted_against_an_axis_at_the_r
         sales.series = [attrs.evolve(curve, on_y2=False) for curve in sales.series]
         sales.reference_lines = sales.reference_lines[:1]
         await pilot.pause()
+        chart.render()  # plotext's figure of the view now, not of the last paint
         plotted = _plot_monitor(chart)
         assert plotted.ylabel == ["Units", None]
         assert plotted.yside == ["left"] * 4
@@ -3338,6 +3342,7 @@ async def test_a_log_axis_plots_what_it_can_show() -> None:
         page.energy.series = [Series.bars("Heating", [1000, 0, 50])]
         page.energy.y = attrs.evolve(page.energy.y, scale=Scale.LOG)
         await pilot.pause()
+        chart.render()  # plotext's figure of the view now, not of the last paint
         plotted = _plot_monitor(chart)
         # the scales of the axes at the bottom and left, those drawn
         assert (plotted.xscale[0], plotted.yscale[0]) == ("log", "log")
@@ -3519,6 +3524,7 @@ async def test_a_series_of_its_own_color_is_plotted_so_filled() -> None:
 
     async with app.run_test(size=(120, 60)) as pilot:
         await pilot.pause()
+        chart.render()  # plotext's figure of the view now, not of the last paint
         plotted = _plot_monitor(chart)
         assert [colors[0] for colors in plotted.color] == [(255, 215, 0)] * 2 + [(0, 0, 0)] * 2
         assert plotted.fillx == [0] * 4  # filled down to 0; an unfilled one is False
