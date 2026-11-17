@@ -676,7 +676,7 @@ async def _running(
 ) -> AsyncGenerator[tuple[Any, Any, ComposeDrawing], None]:
     """Run a main view on Textual, and give its app, its pilot and its drawing's widget."""
     pytest.importorskip("textual")
-    from composeui.textualcore.textualrenderer import TextualMainRenderer  # noqa: PLC0415
+    from composeui.textualcore._renderers.navigation import TextualMainRenderer  # noqa: PLC0415
     from composeui.textualcore.widgets.composedrawing import (  # noqa: PLC0415 (optional)
         ComposeDrawing,
     )
@@ -1153,7 +1153,7 @@ async def test_textual_follows_the_theme_without_a_change_of_the_shapes() -> Non
 
 
 def test_textual_keeps_its_widget_when_rendered_again() -> None:
-    from composeui.textualcore.textualrenderer import TextualDrawingRenderer  # noqa: PLC0415
+    from composeui.textualcore._renderers.graphics import TextualDrawingRenderer  # noqa: PLC0415
 
     view = DrawingView()
     view.render(RendererType.TEXTUAL)
