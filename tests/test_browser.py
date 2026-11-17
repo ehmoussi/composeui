@@ -904,7 +904,11 @@ def test_open_over_unsaved_changes_asks_then_shows_the_study_opened(
 
     with page.expect_file_chooser() as chooser:
         page.keyboard.press("Alt+Shift+KeyO")
-    with _posted(page):
+    # Open posts the study to /state, not to a widget: `_posted` would wait for another
+    # post, such as the field's as it lost the focus, which may come before or not at all
+    with page.expect_response(
+        lambda response: response.request.method == "POST" and response.url.endswith("/state")
+    ):
         chooser.value.set_files(saved)
     dialog = page.get_by_role("dialog")
     expect(dialog).to_contain_text("The study has unsaved changes. Discard them?")
