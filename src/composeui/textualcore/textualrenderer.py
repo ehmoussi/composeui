@@ -32,7 +32,6 @@ from composeui.core.view import (
     Align,
     ButtonVariant,
     CellKind,
-    ChartKind,
     ChartView,
     ConsoleView,
     DateRangeInputMixin,
@@ -1949,7 +1948,6 @@ class TextualProgressBarRenderer(TextualWidgetRenderer[ProgressBarViewLike, Prog
 
 
 class ChartViewLike(ViewLike, Protocol):
-    kind: ChartKind
     title: str
     x: Axis
     y: Axis
@@ -1971,7 +1969,6 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
-                "kind": self._refresh_kind,
                 "title": self._refresh_title,
                 "x": self._refresh_x,
                 "y": self._refresh_y,
@@ -1987,13 +1984,6 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
         if self._rendered_object is None:
             self._rendered_object = ComposeChart()
             self._rendered_object.image_path_chosen.connect(self._save_image)
-
-    @staticmethod
-    def _refresh_kind(
-        _view: ChartViewLike, rendered_object: ComposeChart, value: ChartKind
-    ) -> None:
-        rendered_object.kind = value
-        rendered_object.refresh()
 
     @staticmethod
     def _refresh_title(_view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:

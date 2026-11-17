@@ -1,8 +1,9 @@
 # Charts
 
 A `ChartView` plots results, for example a quantity against time or a swept dimension. Its
-`series` is a list of `Series`. Each series is a curve with its own `x` and `y` (as many of
-each) and a `name` for the legend. A NaN leaves a gap in its curve.
+`series` is a list of `Series`. Each series is a layer of the chart: a line, dots, or bars,
+with its own `x` and `y` (as many of each) and a `name` for the legend. The chart draws its
+series over the same axes. A NaN is a point that the chart does not draw.
 
 These sections cover the kinds of chart, axes and reference lines, colors, what each backend
 draws, clicks, and report images.
@@ -14,7 +15,7 @@ chart: ChartView = child(
     ChartView, title="Pressure Drop", x=Axis("Flow Rate", unit="L/s"), y=Axis(unit="kPa")
 )
 
-chart.series = [*chart.series, Series(name="D = 50 mm", x=flows, y=drops)]
+chart.series = [*chart.series, Series.line("D = 50 mm", flows, drops)]
 ```
 
 As for the rows of a table, set a new `series` list to draw the chart again. A job that
@@ -22,31 +23,48 @@ adds points does the same. The study saves the series.
 
 ## Kinds of chart
 
-The `kind` of the chart (`ChartKind`) draws the series as lines (`LINE`, the default) or
-dots (`SCATTER`). The `kind` of a series overrides it, for example measurements as dots over
-the curve of a model.
+Three functions make a series, each of one kind (its `kind`, a `ChartKind`):
 
-A `BAR` chart draws values per case: a group of bars for each of its `categories`, one bar
-per series. The x of a series names a category by its index, and its y is the height of the
-bar:
+- `Series.line(name, x, y)` joins the points with a line. A NaN leaves a gap in the line.
+- `Series.scatter(name, x, y)` draws the points as dots, for example measurements over the
+  curve of a model.
+- `Series.bars(name, values)` draws a bar for each value.
+
+A chart can mix the kinds. The chart draws the bars first, then the lines and the dots over
+them.
+
+A chart with `categories` shows values per case. Its x axis shows the categories, and the x
+of a series names a category by its index. `Series.bars` puts its values in the categories
+in order. The bars of several series stand side by side in each category:
 
 ```python
-from composeui.core.view import Axis, ChartKind, ChartView, Series, child
+from composeui.core.view import Axis, ChartView, Series, child
 
-energy: ChartView = child(
+orders: ChartView = child(
     ChartView,
-    kind=ChartKind.BAR,
-    y=Axis(unit="kWh"),
-    categories=["Kitchen", "Bedroom", "Office"],
-    series=[Series(name="Heating", x=[0, 1, 2], y=[120, 80, 95])],
+    title="Orders",
+    y=Axis(unit="k"),
+    categories=["Jan", "Feb", "Mar"],
+    series=[
+        Series.bars("Shop", [120, 140, 90]),
+        Series.bars("Online", [80, 95, 130]),
+        Series.line("Target", [0, 1, 2], [100, 110, 125]),
+    ],
 )
 ```
 
-`Series.bars("Heating", [120, 80, 95])` makes the same series: a bar per value, in the
-categories in order.
+- **Bars at an x.** `Series.bars("People", [4, 6, 5], x=[10, 20, 40])` puts each bar at an x.
+  With categories, the x is the index of a category: a category without an x has no bar.
+  Without categories, the x is a value of the x axis. The bars then share the smallest step
+  between two x.
+- **Another kind for a series.** A `Series` does not change. To draw a series as another
+  kind, make a new one: `attrs.evolve(series, kind=ChartKind.SCATTER)`.
+- **Older studies.** Before, the chart held the kind. A study saved then opens with each
+  series as the chart drew it.
 
-`bar_chart`, from `composeui.core.dashboard`, gives a view field a bar chart. It takes the
-chart's `title` and `categories`, and optionally its axes (`x`, `y`) and its `height`:
+`bar_chart`, from `composeui.core.dashboard`, gives a view field a chart of categories. It
+takes the chart's `title` and `categories`, and optionally its axes (`x`, `y`) and its
+`height`:
 
 ```python
 from composeui.core.dashboard import bar_chart
@@ -55,7 +73,7 @@ from composeui.core.view import Axis, ChartView
 energy: ChartView = bar_chart("Energy", ["Kitchen", "Bedroom", "Office"], y=Axis("Energy"))
 ```
 
-`series_of(frame, x, y)` from `composeui.core.dataframesource` makes a series of two columns of a
+`series_of(frame, x, y)` from `composeui.core.dataframesource` makes a line of two columns of a
 pandas, Polars, or PyArrow frame. It leaves out the rows missing a value. Its `name` is the y
 column's, or the `name` that you give.
 
@@ -79,15 +97,16 @@ The axes belong to the code of the app, as a title does. The study does not save
 `tr` translates their titles.
 
 `Scale.LOG` makes an axis a log axis. A log axis leaves out what it cannot show: the chart
-does not draw a point at an x of 0 or less, and a y of 0 or less leaves a gap.
+does not draw a point at an x of 0 or less, and a y of 0 or less leaves a gap. An x axis that
+shows categories or bars stays linear.
 
 ## Reference lines
 
 `reference_lines` draws lines across the chart at values. Each line is a `ReferenceLine`:
 
 - A horizontal line at a y, for example a capacity.
-- With `vertical=True`, a vertical line at an x, for example now. On a bar chart, the x is
-  the index of a category.
+- With `vertical=True`, a vertical line at an x, for example now. On a chart with
+  categories, the x is the index of a category.
 
 ```python
 from composeui.core.view import LineStyle, ReferenceLine
@@ -114,10 +133,10 @@ with these exceptions:
 
 - **A color of its own.** A series can have a `color` (`"#rrggbb"`), the same in every theme, for
   example the color of a logo.
-- **Fill.** `fill=True` fills the area between the line of the series and 0, in the color of the
+- **Fill.** On a line, `fill=True` fills the area between the line of the series and 0, in the color of the
   line. With `fill`, set `fill_color` (`"#rrggbb"`) to give the area its own color, for example a
   pale area under a strong line. This color is the same in every theme.
-- **Steps.** A series with `step=True` holds each value until its next point, for example the number
+- **Steps.** A line with `step=True` holds each value until its next point, for example the number
   of jobs running over time. With `fill`, it draws a step area. When the user hovers over the
   series, the chart shows the value held at the cursor.
   [`src/examples/taskview.py`](../../src/examples/taskview.py) charts its running tasks this way.
@@ -136,6 +155,7 @@ height to the backend.
   out. The legend shows the values at the cursor. Before the server sends a long series, it
   thins the series to the extremes of each bucket of its points.
 - **Textual** draws the chart with `textual-plotext` (in the `tui` extra), without zoom or hover.
+  Its legend names the bars before the lines and the dots.
 
 A new `series` list keeps the user's zoom.
 

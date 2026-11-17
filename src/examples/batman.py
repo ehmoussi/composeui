@@ -100,7 +100,7 @@ def _outline(
         step = (x_max - x_min) / POINTS_PER_PIECE
         xs.extend(x_min + index * step for index in range(POINTS_PER_PIECE))
     xs.append(pieces[-1][1])
-    return Series(name=name, x=xs, y=[_edge(pieces, x) for x in xs], color=color, fill=True)
+    return Series.line(name, xs, [_edge(pieces, x) for x in xs], color=color, fill=True)
 
 
 @define_view

@@ -291,10 +291,10 @@ class TaskMainView(MainView):
         """Add the count of tasks running now to the chart, held until it changes."""
         self._running_counts.append((time.monotonic() - self._started, running))
         self.running.series = [
-            Series(
-                name=self.tr(TaskStatus.RUNNING.value),
-                x=[seconds for seconds, _ in self._running_counts],
-                y=[count for _, count in self._running_counts],
+            Series.line(
+                self.tr(TaskStatus.RUNNING.value),
+                [seconds for seconds, _ in self._running_counts],
+                [count for _, count in self._running_counts],
                 step=True,
                 fill=True,
             )

@@ -12,7 +12,7 @@ from textual_plotext import PlotextPlot
 from composeui.core import chartimage
 from composeui.core.chartcolors import series_color
 from composeui.core.signal import Signal
-from composeui.core.view import Axis, ChartKind, ChartView
+from composeui.core.view import BAR_GROUP_WIDTH, Axis, ChartKind, ChartView
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -55,7 +55,6 @@ class ComposeChart(PlotextPlot):
         self.y = Axis()
         self.series: list[Series] = []
         self.reference_lines: list[ReferenceLine] = []
-        self.kind = ChartKind.LINE
         self.categories: list[str] = []
         self.image_name = "chart.pdf"
         self.image_path_chosen: Signal[Path] = Signal()
@@ -98,7 +97,7 @@ class ComposeChart(PlotextPlot):
         return super().render()
 
     def _fill_figure(self) -> None:
-        """Give plotext the chart's title, labels and series."""
+        """Give plotext the chart's title, labels and series: the bars, then what is over them."""
         plt = self.plt
         plt.clear_figure()
         plt.title(self.chart_title)
@@ -109,24 +108,34 @@ class ComposeChart(PlotextPlot):
             Color.parse(curve.color or series_color(index, is_dark=is_dark)).rgb
             for index, curve in enumerate(self.series)
         ]
-        if self.kind is ChartKind.BAR:
-            self._plot_bars(colors)
-        else:
-            self._plot_curves(colors)
-        self._plot_reference_lines()
-
-    def _plot_curves(self, colors: list[tuple[int, int, int]]) -> None:
-        plt = self.plt
-        if self.x.is_log:
+        if self._x_log:
             plt.xscale("log")
         if self.y.is_log:
             plt.yscale("log")
+        self._plot_bars(colors)
+        self._plot_curves(colors)
+        self._plot_reference_lines()
+
+    @property
+    def _x_log(self) -> bool:
+        return ChartView.is_x_log(self.x, self.categories, self.series)
+
+    @property
+    def _offset(self) -> int:
+        """Get where plotext draws the first category: it counts them from 1."""
+        return 1 if len(self.categories) > 0 else 0
+
+    def _plot_curves(self, colors: list[tuple[int, int, int]]) -> None:
+        plt = self.plt
         for index, curve in enumerate(self.series):
-            is_dots = ChartView.kind_of(curve, self.kind) is ChartKind.SCATTER
+            if curve.kind is ChartKind.BAR:
+                continue
+            is_dots = curve.kind is ChartKind.SCATTER
             draw = plt.scatter if is_dots else plt.plot
-            x, y = ChartView.drawn_points(curve, x_log=self.x.is_log, y_log=self.y.is_log)
+            x, y = ChartView.drawn_points(curve, x_log=self._x_log, y_log=self.y.is_log)
             if curve.step and not is_dots:
                 x, y = ChartView.step_points(x, y)
+            x = [value + self._offset for value in x]
             # plotext fills in the color of the line: an area of its own, under the line
             if curve.fill and curve.fill_color is not None:
                 draw(x, y, color=Color.parse(curve.fill_color).rgb, marker="braille", fillx=True)
@@ -142,35 +151,25 @@ class ComposeChart(PlotextPlot):
             )
 
     def _extent(self) -> tuple[list[float], list[float]]:
-        """Get the x and y the series reach, in plotext's values: a bar chart's x from 1."""
-        if self.kind is ChartKind.BAR:
-            heights = [
-                height
-                for curve in self.series
-                for height in ChartView.bar_heights(
-                    curve, len(self.categories), y_log=self.y.is_log
-                )
-                if math.isfinite(height)
-            ]
-            return [0.5, len(self.categories) + 0.5], heights
-        xs: list[float] = []
+        """Get the x and y the series reach, in plotext's values."""
+        count = len(self.categories)
+        xs: list[float] = [0.5, count + 0.5] if count > 0 else []
         ys: list[float] = []
         for curve in self.series:
-            x, y = ChartView.drawn_points(curve, x_log=self.x.is_log, y_log=self.y.is_log)
-            xs.extend(value for value in x if math.isfinite(value))
+            if curve.kind is ChartKind.BAR:
+                x, y = ChartView.bars_of(curve, self.categories, y_log=self.y.is_log)
+            else:
+                x, y = ChartView.drawn_points(curve, x_log=self._x_log, y_log=self.y.is_log)
+            xs.extend(value + self._offset for value in x if math.isfinite(value))
             ys.extend(value for value in y if math.isfinite(value))
         return xs, ys
 
     def _plot_reference_lines(self) -> None:
         """Draw the reference lines, each labeled at its end, solid: a terminal has no dashes."""
-        is_bar = self.kind is ChartKind.BAR
-        lines = ChartView.drawn_lines(
-            self.reference_lines, x_log=self.x.is_log and not is_bar, y_log=self.y.is_log
-        )
+        lines = ChartView.drawn_lines(self.reference_lines, x_log=self._x_log, y_log=self.y.is_log)
         if len(lines) == 0:
             return
-        # plotext draws a bar chart's categories from 1
-        offset = 1 if is_bar else 0
+        offset = self._offset
         xs, ys = self._extent()
         xs += [line.value + offset for line in lines if line.vertical]
         ys += [line.value for line in lines if not line.vertical]
@@ -191,25 +190,41 @@ class ComposeChart(PlotextPlot):
                     self.plt.text(line.label, max(xs), line.value, color, alignment="right")
 
     def _plot_bars(self, colors: list[tuple[int, int, int]]) -> None:
-        if len(self.series) == 0 or len(self.categories) == 0:
-            return
-        heights = [
-            ChartView.bar_heights(curve, len(self.categories), y_log=self.y.is_log)
-            for curve in self.series
+        """Draw the bar series, a group of their bars at each x."""
+        count = len(self.categories)
+        bars = [
+            (index, ChartView.bars_of(curve, self.categories, y_log=self.y.is_log))
+            for index, curve in enumerate(self.series)
+            if curve.kind is ChartKind.BAR
         ]
-        drawn = [height for bars in heights for height in bars if math.isfinite(height)]
+        xs = sorted({x for _index, (bar_xs, _heights) in bars for x in bar_xs})
+        if count > 0:
+            xs = [float(category) for category in range(count)]
+            if len(bars) == 0:
+                # no bars to name them: the categories under the lines and dots
+                self.plt.xticks([category + 1 for category in xs], self.categories)
+                self.plt.xlim(0.5, count + 0.5)
+        if len(bars) == 0 or len(xs) == 0:
+            return
+        drawn = [height for _index, (_xs, heights) in bars for height in heights]
         base = 0.0
         if self.y.is_log:
-            self.plt.yscale("log")
             # from the power of 10 under the lowest bar: a log axis has no 0
             base = 10.0 ** math.floor(math.log10(min(drawn))) if len(drawn) > 0 else 1.0
         # plotext draws numbers only: no bar is a bar from the base to itself
-        heights = [[h if math.isfinite(h) else base for h in bars] for bars in heights]
+        heights = [
+            [dict(zip(bar_xs, bar_heights)).get(x, base) for x in xs]
+            for _index, (bar_xs, bar_heights) in bars
+        ]
+        # plotext takes a group's width as a share of the average room between the x
+        spread = (xs[-1] - xs[0]) / (len(xs) - 1) if len(xs) > 1 else 1.0
+        step = ChartView.bar_step(self.series, self.categories)
         # plotext takes a label and a color per series, as its stub doesn't say
         self.plt.multiple_bar(  # type: ignore[call-arg]
-            self.categories,
+            self.categories if count > 0 else xs,
             heights,
-            labels=[curve.name for curve in self.series],
-            color=colors,  # type: ignore[arg-type]
+            labels=[self.series[index].name for index, _bars in bars],
+            color=[colors[index] for index, _bars in bars],  # type: ignore[arg-type]
             minimum=base,
+            width=BAR_GROUP_WIDTH * step / spread,
         )

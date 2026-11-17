@@ -494,7 +494,7 @@ It shows:
   slider: it gives the table the rows of the hour, marks the hour on the chart, and starts the
   query of the map's points. One shows the points in the map.
 - a [bar chart](user-guide/charts.md#kinds-of-chart) of the pickups per hour, which counts
-  all the rows. `bar_chart`, from `composeui.core.dashboard`, sets its kind and its hours. A
+  all the rows. `bar_chart`, from `composeui.core.dashboard`, sets its hours. A
   vertical [reference line](user-guide/charts.md#reference-lines) marks the slider's hour.
   The counts do not change with the slider.
 - a [sidebar](user-guide/organizing-the-window.md#sidebar) of filters: a check box, and a

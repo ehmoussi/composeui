@@ -26,7 +26,7 @@ from composeui.core.chartimage import (
     image_style,
     save_chart_image,
 )
-from composeui.core.view import Axis, ChartKind, ChartView, ReferenceLine, Scale, Series
+from composeui.core.view import Axis, ChartView, ReferenceLine, Scale, Series
 from examples.pipechart import PipeChartMainView
 from tests.charts import ChartPagesMainView
 
@@ -74,7 +74,7 @@ def test_the_title_and_log_axes_are_drawn_when_asked() -> None:
         title="Decay",
         x=Axis(scale=Scale.LOG),
         y=Axis(scale=Scale.LOG),
-        series=[Series(name="Activity", x=[0, 1, 10, 100], y=[1, 1000, -1, 10])],
+        series=[Series.line("Activity", [0, 1, 10, 100], [1, 1000, -1, 10])],
     )
 
     (axes,) = chart_figure(chart, ImageOptions(show_title=True)).axes
@@ -88,7 +88,6 @@ def test_the_title_and_log_axes_are_drawn_when_asked() -> None:
 
 def test_a_bar_chart_draws_a_group_of_bars_per_category() -> None:
     energy = ChartPagesMainView().router.chart.energy
-    assert energy.kind is ChartKind.BAR
 
     (axes,) = chart_figure(energy).axes
 
@@ -103,9 +102,42 @@ def test_a_bar_chart_draws_a_group_of_bars_per_category() -> None:
     ]
 
 
+def test_a_line_is_drawn_over_the_bars_of_the_same_categories() -> None:
+    orders = ChartPagesMainView().router.chart.orders
+
+    (axes,) = chart_figure(orders).axes
+
+    shop, online = axes.containers
+    (target,) = axes.get_lines()
+    # only the bars share a category's room: the line stands at the categories
+    assert [bar.get_x() + bar.get_width() / 2 for bar in shop] == pytest.approx([-0.2, 0.8, 1.8])
+    assert [bar.get_x() + bar.get_width() / 2 for bar in online] == pytest.approx([0.2, 1.2, 2.2])
+    assert list(np.asarray(target.get_xdata())) == [0, 1, 2]
+    assert target.get_zorder() > shop[0].get_zorder()
+    legend = axes.get_legend()
+    assert legend is not None
+    assert [text.get_text() for text in legend.get_texts()] == ["Shop", "Target", "Online"]
+    assert [label.get_text() for label in axes.get_xticklabels()] == ["Jan", "Feb", "Mar"]
+
+
+def test_bars_without_categories_stand_at_their_x_on_a_linear_axis() -> None:
+    ages = ChartPagesMainView().router.chart.ages
+
+    (axes,) = chart_figure(ages).axes
+
+    (people,) = axes.containers
+    # as wide as its share of the smallest step between two x, 10
+    assert [(bar.get_x(), bar.get_width()) for bar in people] == [
+        pytest.approx((6, 8)),
+        pytest.approx((16, 8)),
+        pytest.approx((36, 8)),
+    ]
+    assert axes.get_xscale() == "linear"  # bars: never a log axis, even when asked
+
+
 def test_many_series_are_named_beside_the_data() -> None:
     chart = ChartView(
-        series=[Series(name=f"Run {index}", x=[0, 1], y=[index, index]) for index in range(5)]
+        series=[Series.line(f"Run {index}", [0, 1], [index, index]) for index in range(5)]
     )
 
     figure = chart_figure(chart)
@@ -191,8 +223,8 @@ def test_an_image_is_named_after_its_chart_s_title() -> None:
 def test_a_series_of_its_own_color_is_drawn_so_filled_down_to_0() -> None:
     chart = ChartView(
         series=[
-            Series(name="Oval", x=[0, 1], y=[1, 1], color="#ffd700", fill=True),
-            Series(name="Theme", x=[0, 1], y=[2, 2]),
+            Series.line("Oval", [0, 1], [1, 1], color="#ffd700", fill=True),
+            Series.line("Theme", [0, 1], [2, 2]),
         ]
     )
 
@@ -207,7 +239,9 @@ def test_a_series_of_its_own_color_is_drawn_so_filled_down_to_0() -> None:
 
 def test_a_series_fill_color_paints_its_area_under_a_line_of_its_own_color() -> None:
     chart = ChartView(
-        series=[Series("Load", [0, 1], [1, 1], color="#6096dd", fill=True, fill_color="#e2ebf7")]
+        series=[
+            Series.line("Load", [0, 1], [1, 1], color="#6096dd", fill=True, fill_color="#e2ebf7")
+        ]
     )
 
     (axes,) = chart_figure(chart).axes

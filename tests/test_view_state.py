@@ -69,6 +69,7 @@ from composeui.core.view import (
 from examples.pipechart import PipeChartMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, styled_site
+from tests.charts import ChartPagesMainView
 from tests.console import RunMainView
 from tests.datafiles import DataFileMainView
 from tests.filters import FiltersMainView
@@ -288,10 +289,10 @@ def test_a_progress_bar_shows_a_count_within_its_range_of_steps() -> None:
 
 
 def test_a_series_has_one_y_per_x() -> None:
-    series = Series(name="Pressure", x=(0, 1), y=[2, math.nan])  # any numbers, as floats
+    series = Series.line("Pressure", (0, 1), [2, math.nan])  # any numbers, as floats
     assert (series.x, series.y[0]) == ([0.0, 1.0], 2.0)
     with pytest.raises(ValueError, match="2 x for 1 y"):
-        Series(name="Pressure", x=[0, 1], y=[2])
+        Series.line("Pressure", [0, 1], [2])
 
 
 def test_a_bar_series_puts_each_value_in_its_chart_s_category_in_order() -> None:
@@ -299,31 +300,80 @@ def test_a_bar_series_puts_each_value_in_its_chart_s_category_in_order() -> None
     assert (series.name, series.x, series.y) == ("Pickups", [0.0, 1.0, 2.0], [3.0, 0.0, 5.0])
 
 
-def test_a_series_is_drawn_as_its_chart_unless_it_says_otherwise() -> None:
-    line = Series(name="Model", x=[0], y=[0])
-    dots = Series(name="Measured", x=[0], y=[0], kind=ChartKind.SCATTER)
-    assert ChartView.kind_of(line, ChartKind.LINE) is ChartKind.LINE
-    assert ChartView.kind_of(line, ChartKind.SCATTER) is ChartKind.SCATTER
-    assert ChartView.kind_of(dots, ChartKind.LINE) is ChartKind.SCATTER
-
-
-def test_a_bar_chart_draws_only_bars_a_bar_per_category() -> None:
-    dots = Series(name="Measured", x=[0, 2, 0.5, 7, 2], y=[1, 2, 3, 4, 5], kind=ChartKind.SCATTER)
-    assert ChartView.kind_of(dots, ChartKind.BAR) is ChartKind.BAR
+def test_a_bar_series_draws_a_bar_per_category() -> None:
+    bars = Series.bars("Measured", [1, 2, 3, 4, 5], x=[0, 2, 0.5, 7, 2])
     # by the category its x names; none past the categories, the last of one wins
-    assert str(ChartView.bar_heights(dots, 3)) == str([1.0, math.nan, 5.0])
-    with pytest.raises(ValueError, match="as bars"):
-        Series(name="Measured", x=[0], y=[1], kind=ChartKind.BAR)
+    assert str(ChartView.bar_heights(bars, 3)) == str([1.0, math.nan, 5.0])
+    assert ChartView.bars_of(bars, ["Kitchen", "Bedroom", "Office"]) == ([0, 2], [1, 5])
 
 
-def test_a_category_s_bars_are_side_by_side_around_its_index() -> None:
-    assert ChartView.bar_slot(0, 1) == (0, 0.8)
-    assert ChartView.bar_slot(0, 2) == (-0.2, 0.4)
-    assert ChartView.bar_slot(1, 2) == (0.2, 0.4)
+def test_a_bar_series_without_categories_draws_a_bar_at_each_x() -> None:
+    bars = Series.bars("Count", [4, math.nan, 0, 6], x=[10, 20, 30, math.nan])
+    assert ChartView.bars_of(bars, []) == ([10, 30], [4, 0])
+    assert ChartView.bars_of(bars, [], y_log=True) == ([10], [4])  # no bar of 0 on a log axis
+
+
+def test_the_bars_at_an_x_are_side_by_side_around_it() -> None:
+    line = Series.line("Trend", [0, 1], [1, 2])
+    heating, cooling = Series.bars("Heating", [1, 2]), Series.bars("Cooling", [3, 4])
+    rooms = ["Kitchen", "Office"]
+    assert ChartView.bar_slots([line], rooms) == {}
+    assert ChartView.bar_slots([heating, line], rooms) == {0: (0, 0.8)}
+    # only the bar series share the room: the line is over them
+    assert ChartView.bar_slots([heating, line, cooling], rooms) == {0: (-0.2, 0.4), 2: (0.2, 0.4)}
+
+
+def test_bars_without_categories_share_the_smallest_step_between_their_x() -> None:
+    wide = Series.bars("Wide", [1, 1], x=[0, 10])
+    narrow = Series.bars("Narrow", [1, 1, 1], x=[10, 12.5, math.nan])
+    line = Series.line("Trend", [0, 0.1], [1, 1])  # not a bar: its x don't count
+    assert ChartView.bar_step([wide, narrow, line], []) == 2.5
+    assert ChartView.bar_step([Series.bars("One", [1], x=[7])], []) == 1  # no step to take
+    assert ChartView.bar_step([wide, narrow], ["a", "b"]) == 1  # a category apart
+    assert ChartView.bar_slots([wide, line, narrow], []) == {0: (-0.5, 1.0), 2: (0.5, 1.0)}
+
+
+def test_an_x_axis_of_categories_or_bars_is_never_a_log_axis() -> None:
+    log = Axis(scale=Scale.LOG)
+    line, bars = Series.line("Decay", [1, 10], [1, 2]), Series.bars("Count", [1, 2])
+    assert ChartView.is_x_log(log, [], [line])
+    assert not ChartView.is_x_log(Axis(), [], [line])
+    assert not ChartView.is_x_log(log, ["a", "b"], [line])
+    assert not ChartView.is_x_log(log, [], [line, bars])
+
+
+def test_a_study_saved_before_a_series_had_its_kind_loads_its_charts_as_they_were() -> None:
+    view = ChartPagesMainView()
+    state = view.state_data()
+    page = state["router"]["chart"]
+    # as saved then: the chart's kind, which a series without one took
+    page["energy"]["kind"] = ChartKind.BAR.value
+    page["energy"]["series"] = [
+        {"name": "Heating", "x": [0, 1], "y": [120, 80], "kind": None},
+        # a bar chart drew every series as bars, whatever its kind
+        {"name": "Cooling", "x": [0], "y": [30], "kind": ChartKind.SCATTER.value},
+    ]
+    page["chart"]["kind"] = ChartKind.LINE.value
+    page["chart"]["series"] = [
+        {"name": "Inlet", "x": [0, 1], "y": [1, 3], "kind": None},
+        {"name": "Measured", "x": [0], "y": [2], "kind": ChartKind.SCATTER.value},
+    ]
+
+    view.load_state_data(state)
+
+    page_view = view.router.chart
+    assert [curve.kind for curve in page_view.energy.series] == [ChartKind.BAR, ChartKind.BAR]
+    assert [curve.kind for curve in page_view.chart.series] == [ChartKind.LINE, ChartKind.SCATTER]
+    # as saved now, a series holds its kind
+    assert [curve.kind for curve in page_view.orders.series] == [
+        ChartKind.BAR,
+        ChartKind.LINE,
+        ChartKind.BAR,
+    ]
 
 
 def test_a_log_axis_leaves_out_what_it_cannot_show() -> None:
-    series = Series(name="Decay", x=[-1, 0, 1, 10], y=[5, 5, 0, 10])
+    series = Series.line("Decay", [-1, 0, 1, 10], [5, 5, 0, 10])
     assert ChartView.drawn_points(series, x_log=False, y_log=False) == (series.x, series.y)
     # an x of 0 or less: no point; a y of 0 or less: a gap
     x, y = ChartView.drawn_points(series, x_log=True, y_log=True)
@@ -357,12 +407,12 @@ def test_a_series_of_whole_numbers_tells_its_values_are_counts() -> None:
 
 
 def test_a_series_color_is_given_as_rrggbb() -> None:
-    assert Series(name="Oval", x=[0], y=[0], color="#FFD700", fill=True).color == "#FFD700"
+    assert Series.line("Oval", [0], [0], color="#FFD700", fill=True).color == "#FFD700"
     for color in ("yellow", "#ffd70", "ffd700"):
         with pytest.raises(ValueError, match="#rrggbb"):
-            Series(name="Oval", x=[0], y=[0], color=color)
+            Series.line("Oval", [0], [0], color=color)
         with pytest.raises(ValueError, match="#rrggbb"):
-            Series(name="Oval", x=[0], y=[0], fill_color=color)
+            Series.line("Oval", [0], [0], fill_color=color)
 
 
 def test_a_reference_line_s_color_is_given_as_rrggbb() -> None:

@@ -8,6 +8,11 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
+- Layers in a chart: a `ChartView` draws lines, dots and bars over the same axes, for example
+  a line over bars. The bars of several series stand side by side at each x, and the lines
+  and dots are over them, on Qt, Textual, the web and in report images.
+- Bars without categories: `Series.bars(name, values, x=...)` puts a bar at each x of a
+  numeric axis, as wide as its share of the smallest step between two x.
 - `MetricView.delta_format` sets the number format of its change badge on Qt, Textual and
   the web, for example `".1f"` for one decimal place. Its default keeps the existing format.
   Formats are limited to 64 characters, with width and precision at most 1,000, to prevent
@@ -141,6 +146,13 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Changed
 
+- **Breaking:** each series of a chart has its own kind, and a `ChartView` has no `kind`.
+  Make a series with `Series.line(name, x, y)`, `Series.scatter(name, x, y)` or
+  `Series.bars(name, values)`: `Series(...)` now needs its `kind`, and takes its options by
+  name. Give a chart of bars its `categories` and `Series.bars` series, without
+  `kind=ChartKind.BAR`. `ChartView.kind_of` and `ChartView.bar_slot` are gone
+  (`ChartView.bar_slots` gives each bar series' slot). A study saved before opens with each
+  series as its chart drew it.
 - **Breaking:** the axes of a `ChartView` are `Axis` objects. `x=Axis("Time", unit="s")` and
   `y=Axis(scale=Scale.LOG)` replace `x_title`, `x_unit`, `x_log`, `y_title`, `y_unit` and
   `y_log`, and `Axis.label` replaces `ChartView.axis_label`. To change an axis, set a new one:

@@ -68,7 +68,7 @@ declare global {
     fill_color: string | null;
     step: boolean;
     whole: boolean;
-    /* a bar's, in its category's group */
+    /* a bar's, in the group at its x */
     offset: number;
     width: number;
   }
@@ -89,6 +89,8 @@ declare global {
     data?: uPlot.AlignedData;
     pairs?: uPlot.AlignedData[];
     categories?: string[];
+    /* with bars: the room between two of their x */
+    bar_step?: number;
   }
   /* the x range the user zoomed into */
   interface ChartZoom {

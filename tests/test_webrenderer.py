@@ -9072,8 +9072,8 @@ def test_the_chart_sends_its_series_for_the_page_to_draw(
     }
 
     chart.series = [
-        Series(name="Pressure", x=[0, 1, 2], y=[1, math.nan, math.inf]),
-        Series(name="Temperature", x=[0, 1, 2], y=[5, 6, 7], step=True),
+        Series.line("Pressure", [0, 1, 2], [1, math.nan, math.inf]),
+        Series.line("Temperature", [0, 1, 2], [5, 6, 7], step=True),
     ]
     markup = chart_client.get(f"/widget/{_widget_id(chart.renderer)}").text
     spec = _chart_spec(markup, chart)
@@ -9107,8 +9107,8 @@ def test_the_chart_sends_its_series_for_the_page_to_draw(
     )
 
     chart.series = [
-        Series(name="Model", x=[2, 0, 1], y=[4, 0, 1]),  # sorted for uPlot
-        Series(name="Measured", x=[0.5], y=[0.4]),
+        Series.line("Model", [2, 0, 1], [4, 0, 1]),  # sorted for uPlot
+        Series.line("Measured", [0.5], [0.4]),
     ]
     spec = _chart_spec(chart_client.get(f"/widget/{_widget_id(chart.renderer)}").text, chart)
     # each series by its own x, joined by the page
@@ -9129,7 +9129,7 @@ def test_each_series_is_sent_with_how_it_is_drawn(
     assert len(spec["pairs"][1][0]) == len(MEASUREMENTS)  # the measured flow rates, their own x
 
     with collect_dirty() as dirty:
-        chart.kind = ChartKind.SCATTER
+        chart.series = [attrs.evolve(curve, kind=ChartKind.SCATTER) for curve in chart.series]
         spec = _chart_spec(render_dirty(dirty), chart)
     assert [series["kind"] for series in spec["series"]] == ["scatter", "scatter"]
 
@@ -9139,7 +9139,7 @@ def test_a_long_series_is_thinned_keeping_its_peaks_and_gaps() -> None:
     y = [math.sin(index / 50) for index in range(count)]
     y[500], y[70_000] = 5.0, -5.0  # spikes the thinning must keep
     y[30_000] = math.nan
-    chart = ChartView(series=[Series(name="Signal", x=range(count), y=y)])
+    chart = ChartView(series=[Series.line("Signal", range(count), y)])
     chart.render(RendererType.WEB)
     assert isinstance(chart.renderer, WebChartRenderer)
 
@@ -9274,8 +9274,8 @@ def test_a_bar_chart_sends_its_categories_and_each_series_bars() -> None:
 
     spec = _chart_spec(markup, energy)
     assert spec["categories"] == ["Kitchen", "Bedroom", "Office"]
-    # x, the categories' indexes; no cooling in the bedroom
-    assert spec["data"] == [[0, 1, 2], [120, 80, 95], [30, None, 45]]
+    # each series' bars by their categories' indexes; no cooling in the bedroom
+    assert spec["pairs"] == [[[0, 1, 2], [120, 80, 95]], [[0, 2], [30, 45]]]
     assert spec["series"] == [
         {
             "name": "Heating",
@@ -9305,6 +9305,56 @@ def test_a_bar_chart_sends_its_categories_and_each_series_bars() -> None:
     assert plot.attributes["aria-label"] == "Energy: Heating, Cooling for Kitchen, Bedroom, Office"
 
 
+def test_a_line_over_bars_is_sent_with_the_slots_of_the_bars_alone() -> None:
+    main_view = ChartPagesMainView()
+    main_view.render(RendererType.WEB)
+    main_view.router.navigate(main_view.router.chart.route)  # built once it shows
+    orders = main_view.router.chart.orders
+    assert isinstance(orders.renderer, WebChartRenderer)
+
+    spec = json.loads(orders.renderer.chart_json())
+
+    shop, target, online = spec["series"]
+    assert [series["kind"] for series in spec["series"]] == ["bar", "line", "bar"]
+    # only the bars share a category's room
+    assert (shop["offset"], shop["width"]) == (pytest.approx(-0.2), 0.4)
+    assert (online["offset"], online["width"]) == (pytest.approx(0.2), 0.4)
+    assert "offset" not in target
+    assert spec["bar_step"] == 1
+    assert spec["categories"] == ["Jan", "Feb", "Mar"]
+    assert spec["data"] == [[0, 1, 2], [120, 140, 90], [100, 110, 125], [80, 95, 130]]
+    assert _chart_spec(orders.renderer.to_html(), orders) == spec
+    plot = _element(orders.renderer.to_html(), f"{_widget_id(orders.renderer)}-plot")
+    assert plot.attributes["aria-label"] == "Orders: Shop, Target, Online for Jan, Feb, Mar"
+
+
+def test_bars_without_categories_are_sent_at_their_x_on_a_linear_axis() -> None:
+    main_view = ChartPagesMainView()
+    main_view.render(RendererType.WEB)
+    main_view.router.navigate(main_view.router.chart.route)  # built once it shows
+    ages = main_view.router.chart.ages
+    assert isinstance(ages.renderer, WebChartRenderer)
+
+    spec = json.loads(ages.renderer.chart_json())
+
+    assert "categories" not in spec
+    assert spec["x"]["log"] is False  # bars: never a log axis, even when asked
+    assert spec["data"] == [[10, 20, 40], [4, 6, 5]]
+    # the smallest step between two x, which a bar takes its share of
+    assert spec["bar_step"] == 10
+    assert (spec["series"][0]["offset"], spec["series"][0]["width"]) == (0, 8)
+
+
+def test_a_chart_without_bars_sends_no_bar_step() -> None:
+    main_view = ChartPagesMainView()
+    main_view.render(RendererType.WEB)
+    main_view.router.navigate(main_view.router.chart.route)  # built once it shows
+    chart = main_view.router.chart.chart
+    assert isinstance(chart.renderer, WebChartRenderer)
+
+    assert "bar_step" not in json.loads(chart.renderer.chart_json())
+
+
 def test_a_log_axis_sends_only_what_it_can_show() -> None:
     main_view = ChartPagesMainView()
     main_view.render(RendererType.WEB)
@@ -9313,10 +9363,10 @@ def test_a_log_axis_sends_only_what_it_can_show() -> None:
     chart, energy = page.chart, page.energy
     assert isinstance(chart.renderer, WebChartRenderer)
     assert isinstance(energy.renderer, WebChartRenderer)
-    chart.series = [Series(name="Decay", x=[0, 1, 10, 100], y=[5, -1, 10, 100])]
+    chart.series = [Series.line("Decay", [0, 1, 10, 100], [5, -1, 10, 100])]
     chart.x = attrs.evolve(chart.x, scale=Scale.LOG)
     chart.y = attrs.evolve(chart.y, scale=Scale.LOG)
-    energy.series = [Series(name="Heating", x=[0, 1, 2], y=[1000, 0, 50])]
+    energy.series = [Series.bars("Heating", [1000, 0, 50])]
     energy.x = attrs.evolve(energy.x, scale=Scale.LOG)
     energy.y = attrs.evolve(energy.y, scale=Scale.LOG)
 
@@ -9326,7 +9376,7 @@ def test_a_log_axis_sends_only_what_it_can_show() -> None:
     assert spec["data"] == [[1, 10, 100], [None, 10, 100]]
     bars = json.loads(energy.renderer.chart_json())
     assert (bars["x"]["log"], bars["y"]["log"]) == (False, True)  # x: its categories
-    assert bars["data"] == [[0, 1, 2], [1000, None, 50]]
+    assert bars["data"] == [[0, 2], [1000, 50]]  # no bar of 0 on a log axis
 
 
 def test_the_chart_s_corner_downloads_its_image_at_the_zoom_asked(
@@ -10337,7 +10387,7 @@ def test_a_long_series_s_bucket_of_gaps_only_stays_a_gap() -> None:
     count = 100_000
     y = [math.sin(index / 50) for index in range(count)]
     y[40_000:41_000] = [math.nan] * 1000  # a whole bucket, and more
-    chart = ChartView(series=[Series(name="Signal", x=range(count), y=y)])
+    chart = ChartView(series=[Series.line("Signal", range(count), y)])
     chart.render(RendererType.WEB)
     assert isinstance(chart.renderer, WebChartRenderer)
 

@@ -15,7 +15,6 @@ from __future__ import annotations
 import contextlib
 import importlib.util
 import io
-import math
 import threading
 from typing import TYPE_CHECKING, Any
 
@@ -27,7 +26,9 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
     from pathlib import Path
 
+    from matplotlib.artist import Artist
     from matplotlib.axes import Axes
+    from matplotlib.container import Container
     from matplotlib.figure import Figure
 
 __all__ = ["ImageOptions", "chart_figure", "save_chart_image"]
@@ -175,10 +176,7 @@ def chart_figure(chart: ChartView, options: ImageOptions = DEFAULT_OPTIONS) -> F
             layout="constrained",
         )
         axes = figure.add_subplot()
-        if chart.kind is ChartKind.BAR:
-            _draw_bars(axes, chart)
-        else:
-            _draw_curves(axes, chart)
+        handles = _draw_series(axes, chart)
         _draw_reference_lines(axes, chart)
         if options.show_title and chart.title:
             axes.set_title(chart.title)
@@ -188,20 +186,43 @@ def chart_figure(chart: ChartView, options: ImageOptions = DEFAULT_OPTIONS) -> F
             axes.set_xlim(*options.x_range)
         if options.y_range is not None:
             axes.set_ylim(*options.y_range)
-        _add_legend(figure, axes, chart)
+        _add_legend(figure, axes, handles)
     return figure
 
 
-def _draw_curves(axes: Axes, chart: ChartView) -> None:
-    if chart.x.is_log:
+def _draw_series(axes: Axes, chart: ChartView) -> list[Artist | Container]:
+    """Draw each series as its kind: matplotlib draws the lines and dots over the bars.
+
+    Returns what the legend names, in the series' order.
+    """
+    handles: list[Artist | Container] = []
+    x_log = ChartView.is_x_log(chart.x, chart.categories, chart.series)
+    y_log = chart.y.is_log
+    if x_log:
         axes.set_xscale("log")
-    if chart.y.is_log:
+    if y_log:
         axes.set_yscale("log")
+    slots = ChartView.bar_slots(chart.series, chart.categories)
     for index, series in enumerate(chart.series):
-        x, y = ChartView.drawn_points(series, x_log=chart.x.is_log, y_log=chart.y.is_log)
         color = series.color or SERIES_COLORS[index % len(SERIES_COLORS)]
-        if ChartView.kind_of(series, chart.kind) is ChartKind.SCATTER:
-            axes.plot(
+        if series.kind is ChartKind.BAR:
+            xs, heights = ChartView.bars_of(series, chart.categories, y_log=y_log)
+            offset, width = slots[index]
+            bars = axes.bar(
+                [x + offset for x in xs],
+                heights,
+                width=width,
+                color=color,
+                hatch=HATCHES[index % len(HATCHES)],
+                edgecolor="white",
+                linewidth=0.5,
+                label=series.name,
+            )
+            handles.append(bars)
+            continue
+        x, y = ChartView.drawn_points(series, x_log=x_log, y_log=y_log)
+        if series.kind is ChartKind.SCATTER:
+            handles += axes.plot(
                 x,
                 y,
                 linestyle="none",
@@ -215,7 +236,7 @@ def _draw_curves(axes: Axes, chart: ChartView) -> None:
         else:
             # a NaN is a gap in a matplotlib line too; its path simplification keeps what
             # shows at the figure's resolution, so a long series needs no thinning
-            axes.plot(
+            handles += axes.plot(
                 x,
                 y,
                 linestyle=LINE_STYLES[index % len(LINE_STYLES)],
@@ -234,33 +255,15 @@ def _draw_curves(axes: Axes, chart: ChartView) -> None:
                     linewidth=0,
                     step="post" if series.step else None,
                 )
-
-
-def _draw_bars(axes: Axes, chart: ChartView) -> None:
-    count = len(chart.categories)
-    if chart.y.is_log:
-        axes.set_yscale("log")
-    for index, series in enumerate(chart.series):
-        heights = ChartView.bar_heights(series, count, y_log=chart.y.is_log)
-        offset, width = ChartView.bar_slot(index, len(chart.series))
-        drawn = [category for category, height in enumerate(heights) if math.isfinite(height)]
-        axes.bar(
-            [category + offset for category in drawn],
-            [heights[category] for category in drawn],
-            width=width,
-            color=series.color or SERIES_COLORS[index % len(SERIES_COLORS)],
-            hatch=HATCHES[index % len(HATCHES)],
-            edgecolor="white",
-            linewidth=0.5,
-            label=series.name,
-        )
-    axes.set_xticks(range(count), chart.categories)
-    axes.grid(visible=False, axis="x")
+    if len(chart.categories) > 0:
+        axes.set_xticks(range(len(chart.categories)), chart.categories)
+        axes.grid(visible=False, axis="x")
+    return handles
 
 
 def _draw_reference_lines(axes: Axes, chart: ChartView) -> None:
     """Draw the chart's reference lines, labeled inside the axes, at their ends."""
-    x_log = chart.x.is_log and chart.kind is not ChartKind.BAR
+    x_log = ChartView.is_x_log(chart.x, chart.categories, chart.series)
     for line in ChartView.drawn_lines(chart.reference_lines, x_log=x_log, y_log=chart.y.is_log):
         color = line.color or REFERENCE_LINE_COLOR
         style = REFERENCE_LINE_STYLES[line.style]
@@ -294,14 +297,14 @@ def _draw_reference_lines(axes: Axes, chart: ChartView) -> None:
             )
 
 
-def _add_legend(figure: Figure, axes: Axes, chart: ChartView) -> None:
-    """Name the series, beside the axes when there are more than a few of them."""
-    if len(chart.series) == 0:
+def _add_legend(figure: Figure, axes: Axes, handles: list[Artist | Container]) -> None:
+    """Name the series, in their order, beside the axes when there are more than a few."""
+    if len(handles) == 0:
         return
-    if len(chart.series) <= _INSIDE_LEGEND_MAX:
-        axes.legend(frameon=False)
+    if len(handles) <= _INSIDE_LEGEND_MAX:
+        axes.legend(handles=handles, frameon=False)
     else:
-        figure.legend(loc="outside right upper", frameon=False)
+        figure.legend(handles=handles, loc="outside right upper", frameon=False)
 
 
 def save_figure(figure: Figure, path: Path, options: ImageOptions = DEFAULT_OPTIONS) -> None:

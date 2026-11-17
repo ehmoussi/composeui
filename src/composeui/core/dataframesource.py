@@ -293,12 +293,12 @@ class DataFrameSource:
 
 
 def series_of(frame: IntoFrame, x: str, y: str, *, name: Optional[str] = None) -> Series:
-    """Make a chart's series of a frame's columns `x` and `y`, under `name`, else `y`.
+    """Make a chart's line of a frame's columns `x` and `y`, under `name`, else `y`.
 
     The rows missing either value are left out, in the frame's order otherwise.
     """
     rows = _collected(nw.from_native(frame).select(x, y).drop_nulls())
-    return Series(
+    return Series.line(
         y if name is None else name, rows.get_column(x).to_list(), rows.get_column(y).to_list()
     )
 

@@ -3081,7 +3081,7 @@ async def test_the_chart_draws_its_titles_and_series() -> None:
         view.add_curve()
         view.chart.series = [
             *view.chart.series,
-            Series(name="Measured", x=[0.5, 1, 1.5], y=[1, math.nan, 3]),
+            Series.line("Measured", [0.5, 1, 1.5], [1, math.nan, 3]),
         ]
         await pilot.pause()
         text = chart.render().plain  # type: ignore[union-attr]
@@ -3137,7 +3137,7 @@ async def test_a_series_fill_color_paints_its_area_under_a_line_of_its_own_color
     async with app.run_test(size=(120, 60)) as pilot:
         await pilot.pause()
         view.chart.series = [
-            Series("Load", [0, 1], [1, 1], color="#6096dd", fill=True, fill_color="#e2ebf7")
+            Series.line("Load", [0, 1], [1, 1], color="#6096dd", fill=True, fill_color="#e2ebf7")
         ]
         await pilot.pause()
         text = chart.render().plain  # type: ignore[union-attr]
@@ -3168,7 +3168,9 @@ async def test_a_scatter_series_is_plotted_as_dots() -> None:
         assert plotted.label == ["D = 50 mm", "Measured, D = 50 mm"]
         assert plotted.lines == [True, False]  # a line, then dots
         assert len(plotted.x[1]) == len(MEASUREMENTS)
-        view.chart.kind = ChartKind.SCATTER
+        view.chart.series = [
+            attrs.evolve(curve, kind=ChartKind.SCATTER) for curve in view.chart.series
+        ]
         await pilot.pause()
         assert _plot_monitor(chart).lines == [False, False]
 
@@ -3195,6 +3197,81 @@ async def test_a_bar_chart_plots_a_bar_per_series_in_each_category() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_line_is_plotted_over_the_bars_of_the_same_categories() -> None:
+    view = ChartPagesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    orders = view.router.chart.orders
+    assert isinstance(orders.renderer, TextualWidgetRenderer)
+    chart = orders.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 150)) as pilot:
+        view.router.current_route = "chart"
+        await pilot.pause()
+        text = chart.render().plain  # type: ignore[union-attr]
+        for name in ("Shop", "Online", "Target", "Jan", "Feb", "Mar"):
+            assert name in text
+        plotted = _plot_monitor(chart)
+        # plotext counts the categories from 1: the line stands at them, over the bars,
+        # which alone share a category's room
+        assert plotted.x[-1] == [1, 2, 3]
+        assert plotted.y[-1] == [100, 110, 125]
+        assert plotted.x[0][1:3] == pytest.approx([0.55, 0.95])  # the shop's bar of January
+        assert plotted.x[3][1:3] == pytest.approx([1.05, 1.45])  # the online one beside it
+
+        # no bars to name the categories: the line and dots still stand at them
+        orders.series = [Series.scatter("Target", [0, 1, 2], [100, 110, 125])]
+        await pilot.pause()
+        text = chart.render().plain  # type: ignore[union-attr]
+        for name in ("Jan", "Feb", "Mar"):
+            assert name in text
+        assert _plot_monitor(chart).x == [[1, 2, 3]]
+
+
+@pytest.mark.asyncio
+async def test_bars_without_categories_are_plotted_at_their_x_on_a_linear_axis() -> None:
+    view = ChartPagesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    ages = view.router.chart.ages
+    assert isinstance(ages.renderer, TextualWidgetRenderer)
+    chart = ages.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 150)) as pilot:
+        view.router.current_route = "chart"
+        await pilot.pause()
+        chart.render()
+        plotted = _plot_monitor(chart)
+        # as wide as its share of the smallest step between two x, 10, though the x are
+        # uneven; on a linear axis: bars are never on a log one, even when asked
+        assert [bar[1:3] for bar in plotted.x] == [[6, 14], [16, 24], [36, 44]]
+        assert plotted.xscale[0] == "linear"
+
+        # series whose bars are at other x: each where it has one, none elsewhere
+        ages.series = [
+            Series.bars("Women", [4, 6], x=[10, 20]),
+            Series.bars("Men", [5], x=[20]),
+            Series.bars("None", [math.nan], x=[30]),
+        ]
+        await pilot.pause()
+        chart.render()
+        plotted = _plot_monitor(chart)
+        # at 10 and 20, the x that have a bar: the women's, the men's, then none
+        assert [bar[1] for bar in plotted.y] == [4, 6, 0, 5, 0, 0]
+
+        ages.series = [Series.bars("None", [math.nan], x=[30])]  # no bar to draw
+        await pilot.pause()
+        chart.render()
+        assert _plot_monitor(chart).x == []
+
+
+@pytest.mark.asyncio
 async def test_a_log_axis_plots_what_it_can_show() -> None:
     view = ChartPagesMainView()
     view.render(RendererType.TEXTUAL)
@@ -3211,10 +3288,10 @@ async def test_a_log_axis_plots_what_it_can_show() -> None:
 
     async with app.run_test(size=(120, 60)) as pilot:
         view.router.current_route = "chart"
-        page.chart.series = [Series(name="Decay", x=[0, 1, 10, 100], y=[5, -1, 10, 100])]
+        page.chart.series = [Series.line("Decay", [0, 1, 10, 100], [5, -1, 10, 100])]
         page.chart.x = attrs.evolve(page.chart.x, scale=Scale.LOG)
         page.chart.y = attrs.evolve(page.chart.y, scale=Scale.LOG)
-        page.energy.series = [Series(name="Heating", x=[0, 1, 2], y=[1000, 0, 50])]
+        page.energy.series = [Series.bars("Heating", [1000, 0, 50])]
         page.energy.y = attrs.evolve(page.energy.y, scale=Scale.LOG)
         await pilot.pause()
         plotted = _plot_monitor(chart)

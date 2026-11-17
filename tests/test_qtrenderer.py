@@ -3798,8 +3798,8 @@ def test_the_chart_shows_its_titles_units_and_series(qtbot: QtBot) -> None:
     assert plot.getAxis("left").labelText == "Drop"
 
     view.chart.series = [
-        Series(name="Pressure", x=[0, 1, 2, 3], y=[1, math.nan, 3, 4]),
-        Series(name="Temperature", x=[0, 0.5], y=[2, 2]),  # an x of its own
+        Series.line("Pressure", [0, 1, 2, 3], [1, math.nan, 3, 4]),
+        Series.line("Temperature", [0, 0.5], [2, 2]),  # an x of its own
     ]
 
     assert chart.legend_names() == ["Pressure", "Temperature"]
@@ -3829,7 +3829,7 @@ def test_new_series_keep_the_user_s_zoom(qtbot: QtBot) -> None:
 
 def test_hovering_the_chart_shows_the_values_at_the_cursor(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
-    view.chart.series = [Series(name="Pressure", x=[0, 1, 2], y=[10, 20, 30.5])]
+    view.chart.series = [Series.line("Pressure", [0, 1, 2], [10, 20, 30.5])]
     view_box = _view_box(chart)
     qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 2)
     assert chart.hover_text() == ""
@@ -3848,7 +3848,7 @@ def test_hovering_the_chart_shows_the_values_at_the_cursor(qtbot: QtBot) -> None
 
 def test_a_step_series_holds_each_value_until_the_next_point(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
-    view.chart.series = [Series(name="Running", x=[0, 2, 5], y=[1, 3, 2], step=True)]
+    view.chart.series = [Series.line("Running", [0, 2, 5], [1, 3, 2], step=True)]
     (running,) = _plot_item(chart).listDataItems()
 
     x, y = running.getData()
@@ -3860,13 +3860,13 @@ def test_a_step_series_holds_each_value_until_the_next_point(qtbot: QtBot) -> No
     qtbot.waitUntil(lambda: chart.hover_text() != "")
     assert chart.hover_text().splitlines()[1] == "Running: 3 kPa"  # a count, as it is
 
-    view.chart.kind = ChartKind.SCATTER  # dots: as they are
+    view.chart.series = [Series.scatter("Running", [0, 2, 5], [1, 3, 2])]  # dots: as they are
     assert len(running.getData()[0]) == 3
 
 
 def test_the_chart_follows_the_palette(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
-    view.chart.series = [Series(name="Pressure", x=[0, 1], y=[0, 1])]
+    view.chart.series = [Series.line("Pressure", [0, 1], [0, 1])]
     (curve,) = _plot_item(chart).listDataItems()
     assert curve.opts["pen"].color().name() == SERIES_COLORS[False][0]
     palette = chart.palette()
@@ -3893,12 +3893,12 @@ def test_a_scatter_series_is_drawn_as_dots_over_the_lines(qtbot: QtBot) -> None:
     assert measured.opts["symbolBrush"].color().name() == SERIES_COLORS[False][1]
     assert chart.legend_names() == ["D = 50 mm", "Measured, D = 50 mm"]
 
-    view.chart.kind = ChartKind.SCATTER  # the series without a kind of their own follow
+    view.chart.series = [attrs.evolve(curve, kind=ChartKind.SCATTER) for curve in view.chart.series]
     assert model.opts["symbol"] == "o"
     assert model.opts["pen"].style() == Qt.PenStyle.NoPen
 
 
-def _chart_page_chart(qtbot: QtBot) -> tuple[ChartPagesMainView, QChart]:
+def _chart_page_chart(qtbot: QtBot, name: str = "energy") -> tuple[ChartPagesMainView, QChart]:
     view = ChartPagesMainView()
     view.render(RendererType.QT)
     assert isinstance(view.renderer, QtWidgetRenderer)
@@ -3908,9 +3908,9 @@ def _chart_page_chart(qtbot: QtBot) -> tuple[ChartPagesMainView, QChart]:
     window.resize(900, 900)
     window.show()
     view.router.current_route = "chart"
-    energy = view.router.chart.energy
-    assert isinstance(energy.renderer, QtWidgetRenderer)
-    chart = energy.renderer.qt_object
+    chart_view = getattr(view.router.chart, name)
+    assert isinstance(chart_view.renderer, QtWidgetRenderer)
+    chart = chart_view.renderer.qt_object
     assert isinstance(chart, QChart)
     return view, chart
 
@@ -3932,10 +3932,71 @@ def test_a_bar_chart_groups_a_bar_per_series_in_each_category(qtbot: QtBot) -> N
     ticks = plot.getAxis("bottom")._tickLevels  # noqa: SLF001
     assert ticks == [[(0, "Kitchen"), (1, "Bedroom"), (2, "Office")]]
 
-    view.router.chart.energy.kind = ChartKind.LINE  # its series as curves again
+    energy = view.router.chart.energy
+    # its series as curves again, over the same categories
+    energy.series = [attrs.evolve(curve, kind=ChartKind.LINE) for curve in energy.series]
     assert sum(isinstance(item, pg.PlotDataItem) for item in plot.items) == 2
     assert not any(isinstance(item, pg.BarGraphItem) for item in plot.items)
-    assert plot.getAxis("bottom")._tickLevels is None  # noqa: SLF001
+    assert plot.getAxis("bottom")._tickLevels == ticks  # noqa: SLF001
+
+
+def test_a_line_is_drawn_over_the_bars_of_the_same_categories(qtbot: QtBot) -> None:
+    view, chart = _chart_page_chart(qtbot, "orders")
+    plot = _plot_item(chart)
+    shop, online = (item for item in plot.items if isinstance(item, pg.BarGraphItem))
+    (target,) = (item for item in plot.items if isinstance(item, pg.PlotDataItem))
+
+    # only the bars share a category's room: the line stands at the categories
+    assert shop.opts["width"] == online.opts["width"] == pytest.approx(0.4)
+    assert list(np.asarray(shop.opts["x0"])) == pytest.approx([-0.4, 0.6, 1.6])
+    assert list(np.asarray(online.opts["x0"])) == pytest.approx([0.0, 1.0, 2.0])
+    assert target.xData is not None
+    assert list(target.xData) == [0, 1, 2]
+    assert target.zValue() > shop.zValue()
+    # each in its series' color and place in the legend, bars or not
+    assert pg.mkBrush(online.opts["brush"]).color().name() == SERIES_COLORS[False][2]
+    assert pg.mkPen(target.opts["pen"]).color().name() == SERIES_COLORS[False][1]
+    assert chart.legend_names() == ["Shop", "Target", "Online"]
+    view_box = _view_box(chart)
+    qtbot.waitUntil(lambda: view_box.viewRange()[0][1] > 2)
+    chart.show_hover(view_box.mapViewToScene(QPointF(1.1, 50)))
+    assert chart.hover_text().splitlines() == [
+        "Feb",
+        "Shop: 140 k",
+        "Target: 110 k",
+        "Online: 95 k",
+    ]
+
+    orders = view.router.chart.orders
+    # the line as bars too: its item replaced, and a third of the room each
+    orders.series = [attrs.evolve(curve, kind=ChartKind.BAR) for curve in orders.series]
+    bars = [item for item in plot.items if isinstance(item, pg.BarGraphItem)]
+    assert not any(isinstance(item, pg.PlotDataItem) for item in plot.items)
+    assert [item.opts["width"] for item in bars] == [pytest.approx(0.8 / 3)] * 3
+    assert chart.legend_names() == ["Shop", "Target", "Online"]
+
+
+def test_bars_without_categories_stand_at_their_x_on_a_linear_axis(qtbot: QtBot) -> None:
+    view, chart = _chart_page_chart(qtbot, "ages")
+    plot = _plot_item(chart)
+    (people,) = (item for item in plot.items if isinstance(item, pg.BarGraphItem))
+
+    # as wide as its share of the smallest step between two x, 10
+    assert list(np.asarray(people.opts["x0"])) == pytest.approx([6, 16, 36])
+    assert people.opts["width"] == pytest.approx(8)
+    assert plot.getAxis("bottom")._tickLevels is None  # noqa: SLF001 (numbers, not categories)
+    assert not plot.getAxis("bottom").logMode  # bars: never a log axis, even when asked
+    view_box = _view_box(chart)
+    qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 40)
+    chart.show_hover(view_box.mapViewToScene(QPointF(22, 3)))
+    assert chart.hover_text().splitlines()[1:] == ["People: 6"]
+    # between two bars, further than half a step from each: no bar there
+    chart.show_hover(view_box.mapViewToScene(QPointF(30, 3)))
+    assert chart.hover_text().splitlines()[1:] == []
+
+    ages = view.router.chart.ages
+    ages.series = [Series.line("Trend", [10, 40], [5, 5])]
+    assert plot.getAxis("bottom").logMode  # no bars left: the log axis asked
 
 
 def test_hovering_a_bar_chart_shows_its_category_s_values(qtbot: QtBot) -> None:
@@ -3953,7 +4014,7 @@ def test_hovering_a_bar_chart_shows_its_category_s_values(qtbot: QtBot) -> None:
 def test_a_log_axis_leaves_out_what_it_cannot_show(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     plot = _plot_item(chart)
-    view.chart.series = [Series(name="Decay", x=[0, 1, 10, 100], y=[5, -1, 10, 100])]
+    view.chart.series = [Series.line("Decay", [0, 1, 10, 100], [5, -1, 10, 100])]
 
     view.chart.x = attrs.evolve(view.chart.x, scale=Scale.LOG)
     view.chart.y = attrs.evolve(view.chart.y, scale=Scale.LOG)
@@ -3974,7 +4035,7 @@ def test_a_log_axis_leaves_out_what_it_cannot_show(qtbot: QtBot) -> None:
 
 def test_a_log_axis_shows_the_hovered_value_not_its_log(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
-    view.chart.series = [Series(name="Decay", x=[1, 10, 100], y=[3, 2, 1])]
+    view.chart.series = [Series.line("Decay", [1, 10, 100], [3, 2, 1])]
     view.chart.x = attrs.evolve(view.chart.x, scale=Scale.LOG)
     view_box = _view_box(chart)
     # the log range, 0 to 2: the linear one, 1 to 100, reaches 2 too
@@ -3990,7 +4051,7 @@ def test_a_log_axis_shows_the_hovered_value_not_its_log(qtbot: QtBot) -> None:
 def test_log_bars_rise_from_the_power_of_10_under_the_lowest(qtbot: QtBot) -> None:
     view, chart = _chart_page_chart(qtbot)
     energy = view.router.chart.energy
-    energy.series = [Series(name="Heating", x=[0, 1, 2], y=[1000, 0, 50])]
+    energy.series = [Series.bars("Heating", [1000, 0, 50])]
 
     energy.y = attrs.evolve(energy.y, scale=Scale.LOG)
 
@@ -4068,7 +4129,7 @@ def test_without_matplotlib_the_chart_offers_only_its_own_export(
 
 def test_a_click_on_the_plot_emits_its_point(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
-    view.chart.series = [Series(name="Decay", x=[1, 10, 100], y=[3, 2, 1])]
+    view.chart.series = [Series.line("Decay", [1, 10, 100], [3, 2, 1])]
     view_box = _view_box(chart)
     qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 100)
     clicks: list[tuple[float, float]] = []
@@ -4085,8 +4146,8 @@ def test_a_click_on_the_plot_emits_its_point(qtbot: QtBot) -> None:
 def test_a_series_of_its_own_color_is_drawn_so_filled_down_to_0(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     view.chart.series = [
-        Series(name="Oval", x=[0, 1], y=[1, 1], color="#ffd700", fill=True),
-        Series(name="Theme", x=[0, 1], y=[2, 2]),
+        Series.line("Oval", [0, 1], [1, 1], color="#ffd700", fill=True),
+        Series.line("Theme", [0, 1], [2, 2]),
     ]
     oval, theme = (item for item in _plot_item(chart).items if isinstance(item, pg.PlotDataItem))
 
@@ -4106,7 +4167,7 @@ def test_a_series_of_its_own_color_is_drawn_so_filled_down_to_0(qtbot: QtBot) ->
 def test_a_series_fill_color_paints_its_area_under_a_line_of_its_own_color(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     view.chart.series = [
-        Series("Load", [0, 1], [1, 1], color="#6096dd", fill=True, fill_color="#e2ebf7")
+        Series.line("Load", [0, 1], [1, 1], color="#6096dd", fill=True, fill_color="#e2ebf7")
     ]
     (load,) = (item for item in _plot_item(chart).items if isinstance(item, pg.PlotDataItem))
 
@@ -4117,7 +4178,7 @@ def test_a_series_fill_color_paints_its_area_under_a_line_of_its_own_color(qtbot
 def test_reference_lines_are_styled_labeled_and_in_range(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     plot = _plot_item(chart)
-    view.chart.series = [Series(name="Decay", x=[1, 10], y=[3, 2])]
+    view.chart.series = [Series.line("Decay", [1, 10], [3, 2])]
 
     view.chart.reference_lines = [
         ReferenceLine(40, "Max: {40}", color="#d03030", style=LineStyle.DOTTED),  # braces are text
@@ -5229,7 +5290,7 @@ def test_a_check_all_box_follows_its_column_turning_read_only_or_plain(qtbot: Qt
 def test_a_click_with_the_left_button_alone_emits_its_point(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     qtbot.waitExposed(chart.window())
-    view.chart.series = [Series(name="Decay", x=[1, 10, 100], y=[1, 10, 100])]
+    view.chart.series = [Series.line("Decay", [1, 10, 100], [1, 10, 100])]
     view_box = _view_box(chart)
     view.chart.y = attrs.evolve(view.chart.y, scale=Scale.LOG)
     qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 100 and view_box.viewRange()[1][1] < 3)
@@ -5248,7 +5309,7 @@ def test_a_click_with_the_left_button_alone_emits_its_point(qtbot: QtBot) -> Non
 
 def test_a_log_chart_s_shown_range_is_its_values_not_their_logs(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
-    view.chart.series = [Series(name="Decay", x=[1, 10, 100], y=[1, 10, 100])]
+    view.chart.series = [Series.line("Decay", [1, 10, 100], [1, 10, 100])]
     view.chart.x = attrs.evolve(view.chart.x, scale=Scale.LOG)
     view.chart.y = attrs.evolve(view.chart.y, scale=Scale.LOG)
 
@@ -5266,10 +5327,9 @@ def test_the_hover_leaves_out_what_isn_t_drawn_there(qtbot: QtBot) -> None:
     view_box.setRange(xRange=(-3, 5), padding=0)  # zoomed out, past the categories
     chart.show_hover(view_box.mapViewToScene(QPointF(4, 50)))
     past = chart.hover_text()
-    energy.kind = ChartKind.LINE
     energy.series = [
-        Series(name="Heating", x=[0, 1, 2], y=[10, 20, 30]),
-        Series(name="Unknown", x=[0, 1, 2], y=[math.nan] * 3),  # no point drawn
+        Series.line("Heating", [0, 1, 2], [10, 20, 30]),
+        Series.line("Unknown", [0, 1, 2], [math.nan] * 3),  # no point drawn
     ]
     chart.show_hover(view_box.mapViewToScene(QPointF(1, 20)))
 

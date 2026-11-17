@@ -268,8 +268,11 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
 - **Give a chart's axes as `Axis` objects:** `ChartView(x=Axis("Time", unit="s"),
   y=Axis(scale=Scale.LOG))`. An `Axis` does not change: set a new one, such as
   `chart.y = attrs.evolve(chart.y, scale=Scale.LOG)`. A study does not save the axes.
-- **Build a bar chart's series with `Series.bars(name, values)`.** `series_of` and `points_of` from
-  `composeui.core.dataframesource` read a chart's series or a map's points from a frame.
+- **Make a chart's series with `Series.line(name, x, y)`, `Series.scatter(name, x, y)` or
+  `Series.bars(name, values)`,** not `Series(...)`. A chart mixes them, such as a line over
+  bars. A `ChartView` has no `kind`: each series has its own. With `categories`, a series' x
+  is the index of a category. `series_of` and `points_of` from
+  `composeui.core.dataframesource` read a chart's line or a map's points from a frame.
   See https://ehmoussi.github.io/composeui/user-guide/charts.html
 - **Build a dashboard's filters with `column_filter(cls, column, ...)`**, from
   `composeui.core.dashboard`, on a choice, a range slider or a date range. Fill them from the

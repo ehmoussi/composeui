@@ -256,10 +256,10 @@ class PipeSweepMainView(MainView):
         runs = model.runs.all()
         self.runs.rows = [[f"{found.radius:g}", f"{found.stress:g}"] for found in runs]
         self.chart.series = [
-            Series(
-                name=self.tr("Hoop Stress"),
-                x=[found.radius for found in runs],
-                y=[found.stress for found in runs],
+            Series.line(
+                self.tr("Hoop Stress"),
+                [found.radius for found in runs],
+                [found.stress for found in runs],
             )
         ]
         self.progress.value = len(runs)
