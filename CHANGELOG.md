@@ -220,6 +220,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- On Qt and Textual, a metric shows a NumPy number as its change, e.g. a `numpy.float64` read
+  from a pandas column, instead of failing.
 - Textual draws a chart whose axis has no value to show, instead of failing: an empty chart
   with a log axis, a log y axis with only vertical lines or with all its series on `y2`, and a
   series of gaps alone, such as one whose values a log axis can't show. Such a series isn't

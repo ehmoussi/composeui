@@ -2971,6 +2971,9 @@ def test_a_metric_shows_its_value_large_and_its_change_as_a_badge_colored_by_sig
     view.summary.failed.delta = 1
     assert failed.badge.isVisibleTo(window)
     assert failed.badge.text() == "↑ 1.0"
+    fall_from_pandas: Any = np.float64(-1.5)  # numpy 2.0's stubs don't make it a float
+    view.summary.failed.delta = fall_from_pandas
+    assert failed.badge.text() == "↓ 1.5"
 
 
 def test_the_progress_bar_follows_its_view(qtbot: QtBot) -> None:

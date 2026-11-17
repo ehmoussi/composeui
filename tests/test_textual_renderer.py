@@ -27,6 +27,7 @@ import types
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional, Protocol, Union, cast
 
+import numpy as np
 from attrs import Factory
 from PIL import Image as PILImage
 from rich.color import Color
@@ -2323,6 +2324,11 @@ async def test_a_metric_shows_its_change_as_a_badge_colored_by_sign() -> None:
         await pilot.pause()
         assert str(running_metric.badge.render()) == "↓ 2.00"
         assert not failed_metric.badge.display
+
+        rise_from_pandas: Any = np.float64(1.5)  # numpy 2.0's stubs don't make it a float
+        view.summary.running.delta = rise_from_pandas
+        await pilot.pause()
+        assert str(running_metric.badge.render()) == "↑ 1.50"
 
 
 @pytest.mark.asyncio
