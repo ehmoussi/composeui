@@ -19,6 +19,7 @@ import datetime
 import io
 import math
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -3280,6 +3281,30 @@ async def test_a_series_on_the_second_y_axis_is_plotted_against_an_axis_at_the_r
         assert plotted.ylabel == ["Units", None]
         assert plotted.yside == ["left"] * 4
         assert plotted.y[3] == [3.2, 41, 0]
+
+
+@pytest.mark.asyncio
+async def test_a_time_axis_shows_dates_in_utc() -> None:
+    view = ChartPagesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    visits = view.router.chart.visits
+    assert isinstance(visits.renderer, TextualWidgetRenderer)
+    chart = visits.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 200)) as pilot:
+        view.router.current_route = "chart"
+        await pilot.pause()
+        text = chart.render().plain  # type: ignore[union-attr]
+
+        # round days, as many as fit, as the times were given
+        labels = re.findall(r"2026-11-\d\d", text)
+        assert labels == sorted(labels)
+        assert 2 <= len(labels) <= 120 // 18
+        assert "Release" in text
 
 
 @pytest.mark.asyncio

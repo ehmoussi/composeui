@@ -9,6 +9,7 @@ without them, these tests are skipped.
 from __future__ import annotations
 
 import contextlib
+import datetime
 import io
 import re
 import secrets
@@ -3018,6 +3019,33 @@ def test_an_axis_shows_the_app_s_bounds_until_the_user_zooms(chart_pages_page: P
     chart_pages_page.mouse.dblclick(box["x"] + box["width"] / 2, middle)
     assert plot.evaluate(scales)[:3] == [0, 10, 0]
     expect(link).to_have_attribute("href", re.compile(r"\?format=pdf$"))
+
+
+def test_a_time_axis_shows_dates_in_utc_whatever_the_browser_s_zone(
+    browser: Browser, chart_pages_base_url: str
+) -> None:
+    fourth = (datetime.date(2026, 11, 4) - datetime.date(1970, 1, 1)).days * 86400
+    # west of UTC: its midnight is the day before there
+    with browser.new_context(
+        base_url=chart_pages_base_url, timezone_id="America/Los_Angeles"
+    ) as context:
+        page = context.new_page()
+        page.goto("/chart")
+        visits = page.locator("figure").filter(has_text="Visits")
+        expect(visits.locator("canvas")).to_have_count(1)
+        visits.scroll_into_view_if_needed()  # the mouse reaches only what the window shows
+        plot = visits.locator("[data-chart]")
+        x = plot.evaluate(
+            "(element, x) => ComposeUI.charts.drawn.get(element).valToPos(x, 'x')", fourth
+        )
+
+        visits.locator(".u-over").hover(position={"x": x, "y": 10})
+
+        expect(visits.locator(".u-legend")).to_contain_text("2026-11-04")
+        # uPlot draws the ticks' labels: each at a midnight in UTC (its `_splits`)
+        splits = plot.evaluate("element => ComposeUI.charts.drawn.get(element).axes[0]._splits")
+        assert len(splits) > 1
+        assert all(split % 86400 == 0 for split in splits)
 
 
 def test_bars_without_categories_show_whole_and_a_zoom_stays_as_it_is(

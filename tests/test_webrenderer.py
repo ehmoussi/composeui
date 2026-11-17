@@ -9374,6 +9374,25 @@ def test_an_axis_is_sent_with_its_bounds_but_one_of_categories() -> None:
     assert "minimum" not in orders["x"]  # the categories' own range
 
 
+def test_a_time_axis_is_sent_with_how_precise_its_times_are() -> None:
+    main_view = ChartPagesMainView()
+    main_view.render(RendererType.WEB)
+    main_view.router.navigate(main_view.router.chart.route)  # built once it shows
+    visits = main_view.router.chart.visits
+    assert isinstance(visits.renderer, WebChartRenderer)
+
+    spec = json.loads(visits.renderer.chart_json())
+    first = (datetime.date(2026, 11, 1) - datetime.date(1970, 1, 1)).days * 86400
+
+    assert spec["x"]["time"] == "day"  # dates alone
+    assert spec["pairs"][0][0][:2] == [first, first + 86400]  # seconds since 1970, in UTC
+    # a time of day: shown with its hours and minutes
+    visits.series = [*visits.series, Series.scatter("Visit", [first + 9 * 3600], [1])]
+    assert json.loads(visits.renderer.chart_json())["x"]["time"] == "minute"
+    visits.x = attrs.evolve(visits.x, scale=Scale.LINEAR)
+    assert "time" not in json.loads(visits.renderer.chart_json())["x"]
+
+
 def test_bars_without_categories_are_sent_at_their_x_on_a_linear_axis() -> None:
     main_view = ChartPagesMainView()
     main_view.render(RendererType.WEB)

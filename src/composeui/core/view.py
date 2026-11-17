@@ -3965,6 +3965,32 @@ def _to_floats(values: Iterable[float]) -> list[float]:
     return [float(value) for value in values]
 
 
+#: a value of a chart's axis: a number, or on a time axis (`Scale.TIME`) a date or a time too
+ChartValue = Union[float, datetime.date]
+
+_EPOCH = datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+#: a day of a time axis (`Scale.TIME`), whose values are seconds
+SECONDS_PER_DAY = 86400
+
+
+def _chart_value(value: ChartValue) -> float:
+    """Get a value as a chart holds it: a date or a time as its seconds since 1970, in UTC.
+
+    A naive time is taken as UTC, so the chart shows it as written; an aware one is shown
+    at its instant, in UTC. A date is its midnight.
+    """
+    if isinstance(value, datetime.datetime):
+        aware = value if value.tzinfo is not None else value.replace(tzinfo=datetime.timezone.utc)
+        return (aware - _EPOCH).total_seconds()
+    if isinstance(value, datetime.date):
+        return float((value - _EPOCH.date()).days * SECONDS_PER_DAY)
+    return float(value)
+
+
+def _to_chart_values(values: Iterable[ChartValue]) -> list[float]:
+    return [_chart_value(value) for value in values]
+
+
 class ChartKind(enum.Enum):
     """How a `Series` draws its points."""
 
@@ -4126,7 +4152,8 @@ class Series:
 
     #: the legend's entry
     name: str
-    x: list[float] = attrs.field(converter=_to_floats)
+    #: on a time axis (`Scale.TIME`), seconds since 1970 in UTC; given as dates or times too
+    x: list[float] = attrs.field(converter=_to_chart_values)
     y: list[float] = attrs.field(converter=_to_floats, validator=[_check_y])
     #: how it is drawn: as a line, dots or bars
     kind: ChartKind = attrs.field(kw_only=True)
@@ -4148,7 +4175,7 @@ class Series:
     def line(  # noqa: PLR0913 (a line's options, each by its name)
         cls,
         name: str,
-        x: Iterable[float],
+        x: Iterable[ChartValue],
         y: Iterable[float],
         *,
         color: Optional[str] = None,
@@ -4174,7 +4201,7 @@ class Series:
     def scatter(
         cls,
         name: str,
-        x: Iterable[float],
+        x: Iterable[ChartValue],
         y: Iterable[float],
         *,
         color: Optional[str] = None,
@@ -4189,7 +4216,7 @@ class Series:
         name: str,
         values: Iterable[float],
         *,
-        x: Optional[Iterable[float]] = None,
+        x: Optional[Iterable[ChartValue]] = None,
         color: Optional[str] = None,
         on_y2: bool = False,
     ) -> Series:
@@ -4232,8 +4259,9 @@ class ReferenceLine:
             msg = f"Cannot color the reference line {self.label!r} {color!r}: give it as #rrggbb."
             raise ValueError(msg)
 
-    #: where it crosses its axis: a y, or an x if `vertical` (with categories, an index)
-    value: float = attrs.field(converter=float)
+    #: where it crosses its axis: a y, or an x if `vertical` (with categories, an index;
+    #: on a time axis, a date or a time too)
+    value: float = attrs.field(converter=_chart_value)
     #: shown beside it, e.g. "Max: 40"; empty: none
     label: str = ""
     #: whether it stands at an x, across the y axis, rather than lying at a y
@@ -4258,10 +4286,13 @@ class Scale(enum.Enum):
     LINEAR = enum.auto()
     #: by their logarithm, e.g. a decay over decades; it shows only values over 0
     LOG = enum.auto()
+    #: as dates and times, e.g. measurements over a week: an x axis' only. Its values are
+    #: seconds since 1970 in UTC, given as `datetime.date` or `datetime.datetime` too
+    TIME = enum.auto()
 
 
-def _to_bound(value: Optional[float]) -> Optional[float]:
-    return None if value is None else float(value)
+def _to_bound(value: Optional[ChartValue]) -> Optional[float]:
+    return None if value is None else _chart_value(value)
 
 
 @attrs.frozen
@@ -4304,6 +4335,11 @@ class Axis:
             raise ValueError(msg)
 
     @property
+    def is_time(self) -> bool:
+        """Tell whether it shows dates and times (`Scale.TIME`)."""
+        return self.scale is Scale.TIME
+
+    @property
     def has_bounds(self) -> bool:
         """Tell whether the app bounds it, at one end or both."""
         return self.minimum is not None or self.maximum is not None
@@ -4342,6 +4378,21 @@ class Axis:
         return self if title is self.title else attrs.evolve(self, title=title)
 
 
+def _check_value_axis(view: View, attribute: attrs.Attribute[Any], axis: Axis) -> None:
+    if axis.is_time:
+        msg = f"Cannot show {type(view).__name__}.{attribute.name} as times: only x can."
+        raise ValueError(msg)
+
+
+#: a time axis' round steps between two ticks, in seconds, each with its labels' format
+_TIME_STEPS = (
+    *((seconds, "%H:%M:%S") for seconds in (1, 2, 5, 10, 15, 30)),
+    *((minutes * 60, "%m-%d %H:%M") for minutes in (1, 2, 5, 10, 15, 30)),
+    *((hours * 3600, "%m-%d %H:%M") for hours in (1, 2, 3, 6, 12)),
+    *((days * SECONDS_PER_DAY, "%Y-%m-%d") for days in (1, 2, 7, 14, 30, 91, 182)),
+)
+
+
 #: past it, a float's digits no longer tell the whole number it is (see `ChartView.is_whole`)
 _WHOLE_LIMIT = 1e15
 
@@ -4368,15 +4419,18 @@ class ChartView(View):
     at such an x isn't drawn, and such a y leaves a gap (see `drawn_points`). A reference
     line at such a value isn't drawn either (see `drawn_lines`). So a job's points never
     make the chart fail. An x axis that shows categories or bars is never a log axis.
+
+    A time x axis (`Scale.TIME`) shows its values, seconds since 1970, as dates and times
+    in UTC: as written, when given as naive `datetime.datetime` values.
     """
 
     _renderer_key = "chart"
 
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
     x: Axis = attrs.field(factory=Axis, metadata={UI_TEXT: True})
-    y: Axis = attrs.field(factory=Axis, metadata={UI_TEXT: True})
+    y: Axis = attrs.field(factory=Axis, validator=[_check_value_axis], metadata={UI_TEXT: True})
     #: the second y axis, at the right, of the series and reference lines with `on_y2`
-    y2: Axis = attrs.field(factory=Axis, metadata={UI_TEXT: True})
+    y2: Axis = attrs.field(factory=Axis, validator=[_check_value_axis], metadata={UI_TEXT: True})
     series: list[Series] = attrs.field(factory=list[Series])
     #: lines at values, e.g. a limit, drawn over the series
     reference_lines: list[ReferenceLine] = attrs.field(factory=list[ReferenceLine])
@@ -4405,6 +4459,59 @@ class ChartView(View):
             and len(categories) == 0
             and all(curve.kind is not ChartKind.BAR for curve in series)
         )
+
+    @staticmethod
+    def is_x_time(x: Axis, categories: list[str]) -> bool:
+        """Tell whether the x axis shows dates and times: not one of categories."""
+        return x.is_time and len(categories) == 0
+
+    @staticmethod
+    def time_format(values: Iterable[float]) -> str:
+        """Get the `strftime` format that shows these times: the date alone if all are dates.
+
+        Then with hours and minutes, and seconds only if some have them. NaN is no time.
+        """
+        seconds = [value for value in values if math.isfinite(value)]
+        if all(value % SECONDS_PER_DAY == 0 for value in seconds):
+            return "%Y-%m-%d"
+        if all(value % 60 == 0 for value in seconds):
+            return "%Y-%m-%d %H:%M"
+        return "%Y-%m-%d %H:%M:%S"
+
+    @staticmethod
+    def time_text(seconds: float, time_format: str) -> str:
+        """Get a time of a time axis, seconds since 1970, as text in UTC: as it was given."""
+        return (_EPOCH + datetime.timedelta(seconds=seconds)).strftime(time_format)
+
+    @staticmethod
+    def time_ticks(low: float, high: float, count: int) -> tuple[list[float], list[str]]:
+        """Get at most `count` (2 or more) ticks of a time axis from `low` to `high`, labeled.
+
+        At the smallest round step, a second up to half a year, that takes no more, else at
+        New Year every so many years. Each label is in UTC, with what changes at that step,
+        e.g. the day.
+        """
+        intervals = max(count, 2) - 1
+        span = max(high - low, 0)
+        for step, time_format in _TIME_STEPS:
+            if span / step <= intervals:
+                first, last = math.ceil(low / step), math.floor(high / step)
+                # within the range: a division can round, e.g. a tiny `low` down to 0
+                ticks = [
+                    float(tick * step)
+                    for tick in range(first, last + 1)
+                    if low <= tick * step <= high
+                ]
+                return ticks, [ChartView.time_text(tick, time_format) for tick in ticks]
+        first_year = (_EPOCH + datetime.timedelta(seconds=low)).year + 1
+        last_year = (_EPOCH + datetime.timedelta(seconds=high)).year
+        years = math.ceil((last_year - first_year + 1) / (intervals + 1))
+        ticks = [
+            _chart_value(datetime.date(year, 1, 1))
+            for year in range(first_year, last_year + 1)
+            if year % years == 0
+        ]
+        return ticks, [ChartView.time_text(tick, "%Y") for tick in ticks]
 
     @staticmethod
     def loadable_state(data: dict[str, Any]) -> dict[str, Any]:

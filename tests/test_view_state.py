@@ -471,6 +471,66 @@ def test_an_axis_shows_the_range_that_fits_the_data_at_its_bounds(
     assert axis.bounded(*fitted) == pytest.approx(shown)
 
 
+def test_a_chart_holds_dates_and_times_as_their_seconds_since_1970_in_utc() -> None:
+    noon = 1_794_916_800.0  # 2026-11-17 12:00 UTC
+    # as written, without a time zone: the chart shows it so
+    naive = datetime.datetime(2026, 11, 17, 12)  # noqa: DTZ001 (the case under test)
+    in_paris = datetime.datetime(
+        2026, 11, 17, 13, tzinfo=datetime.timezone(datetime.timedelta(hours=1))
+    )
+    series = Series.line("Load", [datetime.date(2026, 11, 17), naive, in_paris], [1, 2, 3])
+
+    assert series.x == [noon - 12 * 3600, noon, noon]
+    assert ReferenceLine(naive, vertical=True).value == noon
+    assert Axis(scale=Scale.TIME, minimum=datetime.date(2026, 11, 17)).minimum == noon - 12 * 3600
+    assert ChartView.time_text(noon, "%Y-%m-%d %H:%M") == "2026-11-17 12:00"
+
+
+def test_only_a_chart_s_x_axis_shows_times() -> None:
+    chart = ChartView(x=Axis(scale=Scale.TIME))
+    for name in ("y", "y2"):
+        with pytest.raises(ValueError, match="only x"):
+            setattr(chart, name, Axis(scale=Scale.TIME))
+    # one of categories shows them
+    assert ChartView.is_x_time(chart.x, [])
+    assert not ChartView.is_x_time(chart.x, ["Jan"])
+
+
+@pytest.mark.parametrize(
+    ("times", "time_format"),
+    [
+        ([0, 86400, math.nan], "%Y-%m-%d"),
+        ([0, 86400 + 60], "%Y-%m-%d %H:%M"),
+        ([0, 86400 + 1], "%Y-%m-%d %H:%M:%S"),
+    ],
+)
+def test_times_show_as_precisely_as_they_are_given(times: list[float], time_format: str) -> None:
+    assert ChartView.time_format(times) == time_format
+
+
+#: spans from a second to decades, each step of `time_ticks` reached
+_SPANS = st.sampled_from(
+    [0, 1, 7, 59, 600, 3600, 5 * 3600, 86400, 13 * 86400, 200 * 86400, 30 * 365 * 86400]
+)
+
+
+@given(
+    low=st.integers(0, 2_000_000_000), span=_SPANS, count=st.integers(0, 12), shift=st.floats(0, 1)
+)
+@example(low=0, span=30 * 365 * 86400, count=5, shift=0)  # years, on New Year
+@example(low=0, span=7, count=0, shift=5e-324)  # the first tick's division rounding to 0
+def test_a_time_axis_has_at_most_its_count_of_ticks_within_its_range(
+    low: int, span: int, count: int, shift: float
+) -> None:
+    start = low + shift
+    ticks, labels = ChartView.time_ticks(start, start + span, count)
+
+    assert len(ticks) <= max(count, 2)
+    assert all(start <= tick <= start + span for tick in ticks)
+    assert ticks == sorted(set(ticks))
+    assert len(labels) == len(ticks)
+
+
 def test_a_study_saves_its_charts_series(tmp_path: Path) -> None:
     view = PipeChartMainView()
     view.add_curve()

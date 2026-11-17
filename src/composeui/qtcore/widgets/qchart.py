@@ -151,8 +151,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         # pyqtgraph thins and clips what it draws itself: a million points stay fluid
         plot.setDownsampling(auto=True, mode="peak")
         plot.setClipToView(True)
-        plot.showGrid(x=True, y=True, alpha=0.15)
-        plot.getAxis("right").setGrid(False)  # the left axis' lines alone
+        self._show_grid()
         self._crosshair = pg.InfiniteLine(angle=90, movable=False)
         self._crosshair.setVisible(False)
         self._hover = pg.TextItem(anchor=(0, 1))
@@ -293,8 +292,30 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._reference_lines = lines
         self._draw()
 
+    def _show_grid(self) -> None:
+        plot = self.getPlotItem()
+        plot.showGrid(x=True, y=True, alpha=0.15)
+        # each axis, a new one too: `showGrid` changes only what its menu's boxes don't hold
+        plot.updateGrid()
+        plot.getAxis("right").setGrid(False)  # the left axis' lines alone
+
+    def _fit_bottom_axis(self) -> None:
+        """Give a time axis pyqtgraph's dates, in UTC as they were given; numbers else."""
+        plot = self.getPlotItem()
+        is_time = ChartView.is_x_time(self._x, self._categories)
+        if isinstance(plot.getAxis("bottom"), pg.DateAxisItem) == is_time:
+            return
+        plot.setAxisItems(
+            {"bottom": pg.DateAxisItem(utcOffset=0) if is_time else pg.AxisItem("bottom")}
+        )
+        # the new axis has none of the old one's settings
+        plot.setLabel("bottom", self._x.title or None, units=self._x.unit or None)
+        self._show_grid()
+        self._apply_palette()
+
     def _draw(self) -> None:
         """Draw each series as its kind, on its y axis, and their legend."""
+        self._fit_bottom_axis()
         plot = self.getPlotItem()
         plot.showAxis("right", ChartView.has_y2(self._series, self._reference_lines))
         for index, curve in enumerate(self._series):
@@ -545,6 +566,10 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
             if not 0 <= category < len(self._categories):
                 return []
             lines = [self._categories[category]]
+        elif ChartView.is_x_time(self._x, self._categories):
+            # as precise as the series' own times
+            time_format = ChartView.time_format(x for curve in self._series for x in curve.x)
+            lines = [ChartView.time_text(x, time_format)]
         else:
             lines = [_format(x, self._x.unit)]
         # a bar is hovered across its group's room

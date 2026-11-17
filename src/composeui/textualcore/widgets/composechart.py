@@ -28,6 +28,9 @@ SAVE_IMAGE_KEY = "s"
 _IMAGE_FILTERS = {"PDF": "pdf", "SVG": "svg", "PNG": "png"}
 
 
+#: the columns that a time axis' label takes, with room around it
+_TIME_LABEL_WIDTH = 18
+
 #: plotext's name of a y axis' side, by whether it is the second y axis
 _SIDES = {False: "left", True: "right"}
 
@@ -129,6 +132,13 @@ class ComposeChart(PlotextPlot):
         x_limits = self._limits(self.x, xs, is_log=x_log)
         if x_limits is not None:
             plt.xlim(*x_limits)
+        if ChartView.is_x_time(self.x, self.categories) and len(xs) > 0:
+            # plotext takes dates as text: the ticks at round times, as many as fit
+            shown = self._shown(self.x, xs)
+            ticks, labels = ChartView.time_ticks(
+                min(shown), max(shown), self.size.width // _TIME_LABEL_WIDTH
+            )
+            plt.xticks(ticks, labels)
         for on_y2 in (False, True):
             axis, ys = self._y_axis(on_y2=on_y2), self._y_values(lines, on_y2=on_y2)
             y_log = axis.is_log and len(ys) > 0

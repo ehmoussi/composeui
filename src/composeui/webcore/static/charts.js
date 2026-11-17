@@ -108,6 +108,14 @@
     });
     /** @type {uPlot.Series} */
     var x = { label: spec.x.label, value: chartValue(spec.x.unit) };
+    var time = spec.x.time;
+    if (time !== undefined) {
+      // in UTC, as the times were given (see `Scale.TIME`), as precise as they are
+      var format = uPlot.fmtDate(TIME_FORMATS[time]);
+      x.value = function (chart, value) {
+        return value === null || value === undefined ? "-" : format(utcDate(value));
+      };
+    }
     if (spec.x.label === "") {
       // no title: the value alone, rather than uPlot's "Value:" before it
       x.label = document.createElement("span");
@@ -116,7 +124,7 @@
     // a log scale: uPlot's distribution 3
     /** @type {ChartScales} */
     var scales = {
-      x: { time: false, distr: spec.x.log ? 3 : 1 }, y: { distr: spec.y.log ? 3 : 1 },
+      x: { time: time !== undefined, distr: spec.x.log ? 3 : 1 }, y: { distr: spec.y.log ? 3 : 1 },
     };
     /** @type {[uPlot.Axis, uPlot.Axis, ...uPlot.Axis[]]} */
     var axes = [axis(spec.x), axis(spec.y)];
@@ -202,6 +210,8 @@
     return {
       width: width,
       height: element.clientHeight,
+      // a time axis' ticks in UTC too
+      tzDate: utcDate,
       cursor: {
         dataIdx: heldIndex(spec),
         // a move within the slop is a click: no zoom (uPlot zooms from `dist` pixels)
@@ -224,6 +234,17 @@
   /** @param {{on_y2?: boolean}} item @returns {"y" | "y2"} */
   function yScale(item) {
     return item.on_y2 ? "y2" : "y";
+  }
+  /* a time axis' legend, by how precise its times are (uPlot's `fmtDate`) */
+  /** @type {Record<NonNullable<ChartAxisSpec["time"]>, string>} */
+  var TIME_FORMATS = {
+    day: "{YYYY}-{MM}-{DD}", minute: "{YYYY}-{MM}-{DD} {HH}:{mm}",
+    second: "{YYYY}-{MM}-{DD} {HH}:{mm}:{ss}",
+  };
+  /* a time of a time axis, seconds since 1970, as a date uPlot shows in UTC */
+  /** @param {number} seconds */
+  function utcDate(seconds) {
+    return uPlot.tzDate(new Date(seconds * 1e3), "Etc/UTC");
   }
   /* the x of a chart's points */
   /** @param {uPlot} chart @returns {number[]} */

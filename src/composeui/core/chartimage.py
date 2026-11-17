@@ -13,6 +13,7 @@ they raise an `ImportError` naming the extra, and `is_available` is False.
 from __future__ import annotations
 
 import contextlib
+import datetime
 import importlib.util
 import io
 import threading
@@ -20,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 
 import attrs
 
-from composeui.core.view import ChartKind, ChartView, LineStyle
+from composeui.core.view import SECONDS_PER_DAY, ChartKind, ChartView, LineStyle
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -172,6 +173,7 @@ def chart_figure(chart: ChartView, options: ImageOptions = DEFAULT_OPTIONS) -> F
     Save it in `image_style` for its text to stay text, or with `save_chart_image`.
     """
     _require()
+    from matplotlib.dates import AutoDateLocator, ConciseDateFormatter  # noqa: PLC0415
     from matplotlib.figure import Figure  # noqa: PLC0415
 
     with image_style(options):
@@ -195,17 +197,24 @@ def chart_figure(chart: ChartView, options: ImageOptions = DEFAULT_OPTIONS) -> F
         axes.set_ylabel(chart.y.label)
         # the app's bounds, then the user's zoom over them
         if len(chart.categories) == 0:
-            axes.set_xlim(*chart.x.bounded(*axes.get_xlim()))
+            scale = _x_scale(chart)
+            bounds = chart.x.bounded(*(value / scale for value in axes.get_xlim()))
+            axes.set_xlim(*(value * scale for value in bounds))
         axes.set_ylim(*chart.y.bounded(*axes.get_ylim()))
         if sides[True] is not axes:  # without a second y axis, its bounds bound nothing
             sides[True].set_ylim(*chart.y2.bounded(*sides[True].get_ylim()))
         if options.x_range is not None:
-            axes.set_xlim(*options.x_range)
+            axes.set_xlim(*(value * _x_scale(chart) for value in options.x_range))
         if options.y_range is not None:
             axes.set_ylim(*options.y_range)
         if options.y2_range is not None:
             sides[True].set_ylim(*options.y2_range)
-        _hide_labels_past(sides, labels)
+        _hide_labels_past(sides, labels, x_scale=_x_scale(chart))
+        if ChartView.is_x_time(chart.x, chart.categories):
+            # in UTC, as the times were given (see `Scale.TIME`)
+            locator = AutoDateLocator(tz=datetime.timezone.utc)
+            axes.xaxis.set_major_locator(locator)
+            axes.xaxis.set_major_formatter(ConciseDateFormatter(locator, tz=datetime.timezone.utc))
         _add_legend(figure, axes, handles, is_inside=sides[True] is axes)
     return figure
 
@@ -225,6 +234,7 @@ def _draw_series(sides: dict[bool, Axes], chart: ChartView) -> list[Artist | Con
     if chart.y2.is_log:
         sides[True].set_yscale("log")
     slots = ChartView.bar_slots(chart.series, chart.categories)
+    scale = _x_scale(chart)
     for index, series in enumerate(chart.series):
         axes = sides[series.on_y2]
         y_log = chart.y2.is_log if series.on_y2 else chart.y.is_log
@@ -233,9 +243,9 @@ def _draw_series(sides: dict[bool, Axes], chart: ChartView) -> list[Artist | Con
             xs, heights = ChartView.bars_of(series, chart.categories, y_log=y_log)
             offset, width = slots[index]
             bars = axes.bar(
-                [x + offset for x in xs],
+                [(x + offset) * scale for x in xs],
                 heights,
-                width=width,
+                width=width * scale,
                 color=color,
                 hatch=HATCHES[index % len(HATCHES)],
                 edgecolor="white",
@@ -245,6 +255,7 @@ def _draw_series(sides: dict[bool, Axes], chart: ChartView) -> list[Artist | Con
             handles.append(bars)
             continue
         x, y = ChartView.drawn_points(series, x_log=x_log, y_log=y_log)
+        x = [value * scale for value in x]
         if series.kind is ChartKind.SCATTER:
             handles += axes.plot(
                 x,
@@ -304,12 +315,13 @@ def _draw_reference_lines(
         style = REFERENCE_LINE_STYLES[line.style]
         # not in the legend, which names the series: its label is beside it
         if line.vertical:
-            axes.axvline(line.value, color=color, linestyle=style, linewidth=1)
+            x = line.value * _x_scale(chart)
+            axes.axvline(x, color=color, linestyle=style, linewidth=1)
             # at its top, left of it (now, after the data): the x in data, the y in the
             # axes' share
             label = axes.annotate(
                 line.label,
-                (line.value, 1),
+                (x, 1),
                 xycoords=axes.get_xaxis_transform(),
                 xytext=(-3, -3),
                 textcoords="offset points",
@@ -335,13 +347,19 @@ def _draw_reference_lines(
 
 
 def _hide_labels_past(
-    sides: dict[bool, Axes], labels: list[tuple[ReferenceLine, Annotation]]
+    sides: dict[bool, Axes], labels: list[tuple[ReferenceLine, Annotation]], *, x_scale: float
 ) -> None:
     """Hide the label of a reference line past the range shown, e.g. the axis' bounds."""
     for line, label in labels:
         axes = sides[line.is_on_y2]
         low, high = sorted(axes.get_xlim() if line.vertical else axes.get_ylim())
-        label.set_visible(low <= line.value <= high)
+        value = line.value * x_scale if line.vertical else line.value
+        label.set_visible(low <= value <= high)
+
+
+def _x_scale(chart: ChartView) -> float:
+    """Get matplotlib's x of the chart's 1: on a time axis, its days rather than seconds."""
+    return 1 / SECONDS_PER_DAY if ChartView.is_x_time(chart.x, chart.categories) else 1.0
 
 
 def _add_legend(

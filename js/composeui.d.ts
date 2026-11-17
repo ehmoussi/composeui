@@ -59,6 +59,8 @@ declare global {
     label: string;
     unit: string;
     log: boolean;
+    /* an x axis of times (`Scale.TIME`), in seconds: how precise they are */
+    time?: "day" | "minute" | "second";
     /* the app's bounds (`Axis.minimum`, `Axis.maximum`), sent only when given */
     minimum?: number;
     maximum?: number;

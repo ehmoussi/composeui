@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import datetime
 import math
 import struct
 import threading
@@ -175,6 +176,27 @@ def test_an_axis_shows_the_app_s_bounds_under_the_user_s_zoom() -> None:
     orders.x = Axis(minimum=1, maximum=2)
     (bounded,) = chart_figure(orders).axes
     assert bounded.get_xlim() == drawn.get_xlim()
+
+
+def test_a_time_axis_shows_dates_in_utc() -> None:
+    visits = ChartPagesMainView().router.chart.visits
+    first_day = (datetime.date(2026, 11, 1) - datetime.date(1970, 1, 1)).days
+
+    figure = chart_figure(visits)
+
+    (axes,) = figure.axes
+    # matplotlib's dates are days: each bar on its day, the release at noon
+    (bars,) = axes.containers
+    assert [bar.get_x() + bar.get_width() / 2 for bar in bars] == pytest.approx(
+        [first_day + day for day in range(7)]
+    )
+    trend, release = axes.get_lines()
+    assert list(np.asarray(trend.get_xdata())) == pytest.approx([first_day, first_day + 6])
+    assert list(np.asarray(release.get_xdata())) == pytest.approx([first_day + 3.5] * 2)
+    figure.canvas.draw()
+    labels = [label.get_text() for label in axes.get_xticklabels() if label.get_text()]
+    assert "Nov" in labels
+    assert axes.xaxis.get_major_formatter().get_offset() == "2026-Nov"
 
 
 def test_bars_without_categories_stand_at_their_x_on_a_linear_axis() -> None:

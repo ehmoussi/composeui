@@ -123,6 +123,37 @@ chart.y = Axis("Load", unit="kN", minimum=0)
   above 0, else `Axis` raises `ValueError`.
 - **Not on categories.** An x axis that shows categories keeps their range.
 
+### Dates and times
+
+`Scale.TIME` makes the x axis show dates and times, for example visits per day:
+
+```python
+import datetime
+
+from composeui.core.view import Axis, ChartView, Scale, Series
+
+days = [datetime.date(2026, 11, day) for day in range(1, 8)]
+visits = ChartView(
+    title="Visits",
+    x=Axis("Day", scale=Scale.TIME),
+    series=[Series.bars("Visits", [5, 8, 6, 9, 12, 4, 3], x=days)],
+)
+```
+
+- **Dates or times.** A series' x, a vertical reference line's value, and an axis' bounds take a
+  `datetime.date` (its midnight) or a `datetime.datetime`. The chart holds them as seconds
+  since 1970 in UTC, so `Series.x` and `clicked` give seconds.
+- **In UTC, as written.** A `datetime` without a time zone shows as it was written, on every
+  backend and in every browser. One with a time zone shows at its instant, in UTC.
+- **As precise as the data.** The values the user hovers show the date alone when every x is a
+  date, else with hours and minutes, and seconds when some have them.
+- **The x axis only.** `y` and `y2` cannot be time axes: `ChartView` raises `ValueError`. An x
+  axis that shows categories shows them, not times.
+
+Qt shows a time axis with pyqtgraph's `DateAxisItem`, the web with uPlot's time scale, and
+report images with matplotlib's dates. Textual places its ticks at round times, as many as fit
+the chart's width.
+
 ### A second y axis
 
 `y2` is a second y axis, at the right of the chart. It shows the values of another quantity

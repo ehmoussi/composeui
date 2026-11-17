@@ -4086,6 +4086,29 @@ def test_an_axis_shows_the_app_s_bounds_until_the_user_zooms(qtbot: QtBot) -> No
     assert orders_box.viewRange()[0] == drawn
 
 
+def test_a_time_axis_shows_dates_in_utc(qtbot: QtBot) -> None:
+    view, chart = _chart_page_chart(qtbot, "visits")
+    plot = _plot_item(chart)
+    view_box = _view_box(chart)
+    bottom = plot.getAxis("bottom")
+    assert isinstance(bottom, pg.DateAxisItem)
+    assert bottom.utcOffset == 0  # as the times were given, whatever the system's zone
+    assert (bottom.labelText, bottom.grid is not False) == ("Day", True)
+    fourth = (datetime.date(2026, 11, 4) - datetime.date(1970, 1, 1)).days * 86400
+
+    qtbot.waitUntil(lambda: view_box.viewRange()[0][1] > fourth)
+    chart.show_hover(view_box.mapViewToScene(QPointF(fourth, 1)))
+    assert chart.hover_text().splitlines()[:2] == ["2026-11-04", "Visits: 9"]
+
+    # numbers again: pyqtgraph's own axis, with the label and the grid of the old one
+    visits = view.router.chart.visits
+    visits.x = attrs.evolve(visits.x, scale=Scale.LINEAR)
+    numbers = plot.getAxis("bottom")
+    assert not isinstance(numbers, pg.DateAxisItem)
+    assert numbers.labelText == "Day"
+    assert numbers.grid is not False
+
+
 def test_bars_without_categories_stand_at_their_x_on_a_linear_axis(qtbot: QtBot) -> None:
     view, chart = _chart_page_chart(qtbot, "ages")
     plot = _plot_item(chart)
