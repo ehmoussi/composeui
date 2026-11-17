@@ -367,12 +367,12 @@ section covers what users see.
   HTML by hand (no Jinja2), with `markupsafe.Markup`, which escapes every value put in it.
 - **The renderers' modules.** `webrenderer.py` holds the base `WebRenderer` and most
   renderers. A family of renderers can move to its own module in `_renderers/`, as the charts
-  did (`_renderers/charts.py`). Such a module imports `webrenderer.py`. So `renderers.py`, not
-  `webrenderer.py`, maps each renderer key to its class, written out, not discovered.
-  `WebRenderer` stays in `webrenderer.py` while it names concrete renderers, such as
-  `WebDialogRenderer`. `changes.py` collects the renderers that a request changes
-  (`collect_dirty`), and `rendertarget.py` holds a session's view tree and its lock
-  (`RenderTarget`).
+  (`_renderers/charts.py`) and the tables (`_renderers/tables.py`) did. Such a module imports
+  `webrenderer.py`. So `renderers.py`, not `webrenderer.py`, maps each renderer key to its
+  class, written out, not discovered. `WebRenderer` stays in `webrenderer.py` while it names
+  concrete renderers, such as `WebDialogRenderer`. `changes.py` collects the renderers that a
+  request changes (`collect_dirty`), and `rendertarget.py` holds a session's view tree and its
+  lock (`RenderTarget`).
 - **No code in the markup.** The page's `Content-Security-Policy` (`headers.py`) runs script
   files only, and htmx runs without `allowEval`: no inline handler, `hx-on`, `js:` value, or
   trigger filter. A renderer marks its element (`data-post-event`, `data-close-dialog`, ...) or

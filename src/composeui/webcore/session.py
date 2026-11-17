@@ -36,6 +36,7 @@ from composeui.core.view import (
     dialogs_in,
 )
 from composeui.webcore._renderers.charts import WebChartRenderer
+from composeui.webcore._renderers.tables import WebSourceTableRenderer, WebTableRenderer
 from composeui.webcore.changes import collect_dirty
 from composeui.webcore.downloads import downloads_marker
 from composeui.webcore.order import PostOrder
@@ -50,8 +51,6 @@ from composeui.webcore.webrenderer import (
     WebFileUploadRenderer,
     WebImageRenderer,
     WebMainRenderer,
-    WebSourceTableRenderer,
-    WebTableRenderer,
     handle_event,
     page_path,
     render_dirty,
