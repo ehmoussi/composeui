@@ -63,6 +63,7 @@ src/composeui/
   core/          # toolkit-agnostic: views, signals, renderer base, application, registry
     _views/      # the views, a module per family (view.py exports them)
   qtcore/        # Qt backend via qtpy (QtApplication, qtrenderer.py, custom widgets/)
+    _renderers/  # its renderers, a module per family (renderers.py maps their keys)
   textualcore/   # Textual (TUI) backend
     _renderers/  # its renderers, a module per family (renderers.py maps their keys)
   webcore/       # Web backend (Starlette + htmx + daisyUI); static/app.css is built
@@ -89,8 +90,15 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - **Adding a widget:** define the view in the `core/_views/` module of its family (set
   `_renderer_key`) and export it in the `__all__` of `core/view.py`, then add a
   renderer + `RENDERERS` entry in each backend that should support it, plus tests per backend.
-  In Textual and on the web, the renderer goes in the backend's `_renderers/` module of its
+  In each backend, the renderer goes in the backend's `_renderers/` module of its
   family (a new module for a new family), and its entry in the backend's `renderers.py`.
+- **Qt renderer modules:** `qtrenderer.py` holds only `QtWidgetRenderer`, the shared
+  main-thread invoker, type variables and the widget-size constant. Each module of
+  `qtcore/_renderers/` holds one family, as on the web. `forms.py` owns `_widget_of` and the
+  form-row widget cache; `containers.py` owns shared layout and dialog-parent helpers.
+  `navigation.py` holds the main renderer, window, router and sidebar. Family modules import
+  each other directly, not through `renderers.py`, which only maps keys. `maprenderer.py`
+  stays lazy: `graphics.py` loads it only when a map is rendered, not with the backend.
 - **Textual renderer modules:** `textualrenderer.py` holds only `TextualWidgetRenderer` and
   shared thread and mount helpers. Each module of `textualcore/_renderers/` holds one family,
   as on the web. `forms.py` owns `_widget_of` and the form-row widget cache; `actions.py`

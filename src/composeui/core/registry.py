@@ -34,7 +34,7 @@ class RendererType(enum.Enum):
     """A renderer backend, identified by its modules."""
 
     QT = Backend(
-        "composeui.qtcore.qtrenderer",
+        "composeui.qtcore.renderers",
         "composeui.qtcore.qtapplication",
         "pyside6",
         ("PySide6", "pyqtgraph", "qtpy"),

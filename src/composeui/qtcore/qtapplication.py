@@ -23,7 +23,7 @@ from composeui.core.reload import (
     save_reloaded_state,
     take_changes,
 )
-from composeui.qtcore.qtrenderer import QtMainRenderer, QtMainWindow
+from composeui.qtcore._renderers.navigation import QtMainRenderer, QtMainWindow
 
 if TYPE_CHECKING:
     import argparse
