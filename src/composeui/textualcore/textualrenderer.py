@@ -2175,7 +2175,7 @@ class TextualMetricRenderer(TextualWidgetRenderer[MetricViewLike, ComposeMetric]
         if delta is None:
             rendered_object.set_delta("", 0)
         else:
-            sign = (delta > 0) - (delta < 0)
+            sign = int(delta > 0) - int(delta < 0)
             rendered_object.set_delta(MetricView.badge(delta, delta_text, delta_format), sign)
 
 
