@@ -199,6 +199,21 @@ def test_a_time_axis_shows_dates_in_utc() -> None:
     assert axes.xaxis.get_major_formatter().get_offset() == "2026-Nov"
 
 
+def test_stacked_bars_stand_on_the_values_before_them() -> None:
+    balance = ChartPagesMainView().router.chart.balance
+
+    left, right = chart_figure(balance).axes
+
+    heating, cooling, solar = left.containers
+    assert [bar.get_y() for bar in cooling] == [120, 95]  # on the heating
+    assert [(bar.get_y(), bar.get_height()) for bar in solar] == [(0, -40), (0, -20), (0, -60)]
+    # each axis' stack in its own slot, beside the other
+    (visits,) = right.containers
+    assert heating[0].get_x() + heating[0].get_width() == pytest.approx(visits[0].get_x())
+    bottom, top = left.get_ylim()
+    assert (bottom <= -60, top >= 150) == (True, True)  # the stacks' totals
+
+
 def test_bars_without_categories_stand_at_their_x_on_a_linear_axis() -> None:
     ages = ChartPagesMainView().router.chart.ages
 

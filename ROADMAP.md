@@ -154,7 +154,10 @@ The SQLite model is complete otherwise: do not rebuild it.
 
 - **Evaluate [`textual-plot`](https://github.com/davidfokkema/textual-plot)** (Now). Zoom and pan
   on Textual, if it matches `textual-plotext`'s charts and keeps Python 3.9 support.
-- **Stacked and horizontal bars** (Now).
+- **Horizontal bars** (Now). Bars along the y axis, the categories down its side, in a chart
+  of bars alone.
+- **A zoom inside the vertical reference lines** (Now). On the web, the x range takes the
+  vertical lines in at a zoom too, so a drag can't zoom inside a line's x.
 - **Histograms** (Now). Bins computed in the core, by count, percent or density.
 - **Range selection** (Now). Selecting an x range emits it, for example to filter a table. Not
   on Textual.

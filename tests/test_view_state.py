@@ -29,6 +29,7 @@ from composeui.core.view import (
     STATE_FORMAT,
     ActionView,
     Axis,
+    BarMode,
     ChartKind,
     ChartView,
     CheckBoxView,
@@ -331,6 +332,53 @@ def test_bars_without_categories_share_the_smallest_step_between_their_x() -> No
     assert ChartView.bar_step([Series.bars("One", [1], x=[7])], []) == 1  # no step to take
     assert ChartView.bar_step([wide, narrow], ["a", "b"]) == 1  # a category apart
     assert ChartView.bar_slots([wide, line, narrow], []) == {0: (-0.5, 1.0), 2: (0.5, 1.0)}
+
+
+def test_stacked_bars_stand_on_the_values_before_them_on_their_side_of_0() -> None:
+    series = [
+        Series.bars("Heating", [120, 80, 95]),
+        Series.bars("Cooling", [30, 45], x=[0, 2]),
+        Series.bars("Solar", [-40, -20, -60]),
+        Series.line("Target", [0, 1, 2], [140, 100, 130]),
+        Series.bars("Visits", [3, 5, math.nan], on_y2=True),
+        Series.bars("Rest", [10, 10, 10]),
+    ]
+
+    bases = ChartView.stack_bases(series, ["Kitchen", "Bedroom", "Office"])
+
+    assert bases == {
+        0: [0, 0, 0],
+        1: [120, 95],  # its bars alone: none in the bedroom
+        2: [0, 0, 0],  # under 0: down from it
+        4: [0, 0],  # its own axis' stack; a gap is no bar
+        5: [150, 80, 140],  # on the cooling where it has some
+    }
+
+
+def test_stacked_bars_share_a_slot_by_y_axis() -> None:
+    series = [
+        Series.bars("Heating", [1]),
+        Series.bars("Visits", [1], on_y2=True),
+        Series.bars("Cooling", [1]),
+    ]
+
+    slots = ChartView.bar_slots(series, ["Kitchen"], BarMode.STACKED)
+
+    assert slots == {
+        0: (pytest.approx(-0.2), 0.4),
+        1: (pytest.approx(0.2), 0.4),
+        2: (pytest.approx(-0.2), 0.4),
+    }
+
+
+def test_stacked_bars_refuse_a_log_axis_and_aren_t_a_study_s() -> None:
+    chart = ChartView(bar_mode=BarMode.STACKED)
+    with pytest.raises(ValueError, match="stack on 0"):
+        chart.y2 = Axis(scale=Scale.LOG)
+    log = ChartView(y=Axis(scale=Scale.LOG))
+    with pytest.raises(ValueError, match="stack on 0"):
+        log.bar_mode = BarMode.STACKED
+    assert "bar_mode" not in CONVERTER.unstructure(chart)  # the app's layout
 
 
 def test_an_x_axis_of_categories_or_bars_is_never_a_log_axis() -> None:

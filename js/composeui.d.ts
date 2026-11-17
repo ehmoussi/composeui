@@ -61,6 +61,8 @@ declare global {
     log: boolean;
     /* an x axis of times (`Scale.TIME`), in seconds: how precise they are */
     time?: "day" | "minute" | "second";
+    /* how far its stacks of bars reach, which its range takes in */
+    stack?: [number, number];
     /* the app's bounds (`Axis.minimum`, `Axis.maximum`), sent only when given */
     minimum?: number;
     maximum?: number;
@@ -75,6 +77,8 @@ declare global {
     whole: boolean;
     /* on the second y axis, `y2`: sent only when it is */
     on_y2?: boolean;
+    /* a stacked bar series': where each of its bars starts, by its points sent */
+    bases?: number[];
     /* a bar's, in the group at its x */
     offset: number;
     width: number;

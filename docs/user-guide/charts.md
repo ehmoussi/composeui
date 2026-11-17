@@ -62,6 +62,36 @@ orders: ChartView = child(
 - **Older studies.** Before, the chart held the kind. A study saved then opens with each
   series as the chart drew it.
 
+### Stacked bars
+
+`bar_mode` places the bars of the series at an x: `BarMode.GROUPED` (the default) beside each
+other, and `BarMode.STACKED` on top of each other, for example the parts of a total:
+
+```python
+from composeui.core.view import BarMode, ChartView, Series
+
+energy = ChartView(
+    categories=["Kitchen", "Bedroom", "Office"],
+    bar_mode=BarMode.STACKED,
+    series=[
+        Series.bars("Heating", [120, 80, 95]),
+        Series.bars("Cooling", [30, 45], x=[0, 2]),
+        Series.bars("Solar", [-40, -20, -60]),
+    ],
+)
+```
+
+- **Each side of 0.** A value over 0 stacks up on the values over 0 before it, and a value
+  under 0 stacks down. A gap adds nothing.
+- **Each y axis.** The bars on `y2` make a stack of their own, beside the bars on `y`.
+- **The values the user hovers** are each series' own, not the totals. The range of the axis
+  takes the totals in.
+- **Linear axes.** The bars stack on 0, which a log axis does not show: `ChartView` raises
+  `ValueError` for a stacked chart with a log y axis.
+- **Not saved.** `bar_mode` belongs to the code of the app, as the axes do.
+
+Textual's legend names the series of a stack from its top.
+
 `bar_chart`, from `composeui.core.dashboard`, gives a view field a chart of categories. It
 takes the chart's `title` and `categories`, and optionally its axes (`x`, `y`) and its
 `height`:

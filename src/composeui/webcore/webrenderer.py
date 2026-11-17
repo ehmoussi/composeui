@@ -60,6 +60,7 @@ from composeui.core.view import (
     ActionView,
     Align,
     ArrowShape,
+    BarMode,
     ButtonVariant,
     CellKind,
     ChartKind,
@@ -2385,6 +2386,7 @@ class ChartViewLike(ViewLike, Protocol):
     series: list[Series]
     reference_lines: list[ReferenceLine]
     categories: list[str]
+    bar_mode: BarMode
     save_image_text: str
     clicked: Signal[float, float]
     height: int | None
@@ -2442,6 +2444,40 @@ def _chart_points(
 
 #: how precise a time axis' times are, by the format they show in (`ChartView.time_format`)
 _TIME_PRECISIONS = {"%Y-%m-%d": "day", "%Y-%m-%d %H:%M": "minute", "%Y-%m-%d %H:%M:%S": "second"}
+
+
+def _add_y2(spec: dict[str, Any], view: ChartViewLike, lines: list[ReferenceLine]) -> None:
+    """Give the chart its second y axis, at the right, and flag `on_y2` what is on it.
+
+    Shown only with something on it.
+    """
+    spec["y2"] = _axis_spec(view.y2, is_log=view.y2.is_log)
+    for series, sent in zip(view.series, spec["series"]):
+        if series.on_y2:
+            sent["on_y2"] = True
+    for line, sent in zip(lines, spec["lines"]):
+        if line.is_on_y2:
+            sent["on_y2"] = True
+
+
+def _add_stacks(spec: dict[str, Any], view: ChartViewLike, xs: list[list[float]]) -> None:
+    """Give each stacked bar series its bars' bases, at the `xs` sent, and each y axis its reach.
+
+    How far the stacks of a y axis reach, which its range takes in: uPlot fits the
+    series' own values.
+    """
+    reach: dict[bool, list[float]] = {}
+    for index, bases in ChartView.stack_bases(view.series, view.categories).items():
+        series = view.series[index]
+        bar_xs, heights = ChartView.bars_of(series, view.categories)
+        base_at = dict(zip(bar_xs, bases))
+        spec["series"][index]["bases"] = [base_at[x] for x in xs[index]]
+        reach.setdefault(series.on_y2, []).extend(
+            end for base, height in zip(bases, heights) for end in (base, base + height)
+        )
+    for on_y2, ends in reach.items():
+        # no bar drawn: 0, which bars stand on anyway
+        spec["y2" if on_y2 else "y"]["stack"] = [min(ends, default=0), max(ends, default=0)]
 
 
 def _x_spec(view: ChartViewLike, *, is_log: bool) -> dict[str, Any]:
@@ -2507,6 +2543,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                     "series",
                     "reference_lines",
                     "categories",
+                    "bar_mode",
                     "save_image_text",
                     "height",
                 ),
@@ -2518,7 +2555,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         """Get what the page's script draws, as JSON."""
         view = self._view
         x_log = ChartView.is_x_log(view.x, view.categories, view.series)
-        slots = ChartView.bar_slots(view.series, view.categories)
+        slots = ChartView.bar_slots(view.series, view.categories, view.bar_mode)
         lines = ChartView.drawn_lines(
             view.reference_lines, x_log=x_log, y_log=view.y.is_log, y2_log=view.y2.is_log
         )
@@ -2554,14 +2591,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
             ],
         }
         if ChartView.has_y2(view.series, view.reference_lines):
-            # at the right: shown only with something on it, flagged `on_y2`
-            spec["y2"] = _axis_spec(view.y2, is_log=view.y2.is_log)
-            for series, sent in zip(view.series, spec["series"]):
-                if series.on_y2:
-                    sent["on_y2"] = True
-            for line, sent in zip(lines, spec["lines"]):
-                if line.is_on_y2:
-                    sent["on_y2"] = True
+            _add_y2(spec, view, lines)
         # a bar in its group, by its middle's offset from its x, and its width
         for index, (offset, width) in slots.items():
             spec["series"][index].update({"offset": offset, "width": width})
@@ -2579,6 +2609,8 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
             )
             for series in view.series
         ]
+        if view.bar_mode is BarMode.STACKED:
+            _add_stacks(spec, view, [x for x, _y in points])
         if len(points) > 0 and all(x == points[0][0] for x, _y in points):
             # uPlot's own columns: the x shared, then each series' y
             spec["data"] = [points[0][0], *([_json_number(v) for v in y] for _x, y in points)]

@@ -159,6 +159,7 @@ if TYPE_CHECKING:
     from composeui.core.signal import Signal, SignalNoArgs
     from composeui.core.view import (
         Axis,
+        BarMode,
         CellStyle,
         CellWidget,
         ChoicesShown,
@@ -1711,6 +1712,7 @@ class ChartViewLike(ViewLike, Protocol):
     series: list[Series]
     reference_lines: list[ReferenceLine]
     categories: list[str]
+    bar_mode: BarMode
     save_image_text: str
     clicked: Signal[float, float]
     height: int | None
@@ -1734,6 +1736,7 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
                 "series": self._refresh_series,
                 "reference_lines": self._refresh_reference_lines,
                 "categories": self._refresh_categories,
+                "bar_mode": self._refresh_bar_mode,
                 "save_image_text": self._refresh_save_image_text,
                 "height": self._refresh_height,
             }
@@ -1777,6 +1780,10 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
         _view: ChartViewLike, rendered_object: QChart, value: list[str]
     ) -> None:
         rendered_object.set_categories(value)
+
+    @staticmethod
+    def _refresh_bar_mode(_view: ChartViewLike, rendered_object: QChart, value: BarMode) -> None:
+        rendered_object.set_bar_mode(value)
 
     @staticmethod
     def _refresh_save_image_text(_view: ChartViewLike, rendered_object: QChart, value: str) -> None:

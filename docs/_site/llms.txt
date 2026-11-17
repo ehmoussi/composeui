@@ -19,7 +19,7 @@
 - [Widgets](https://ehmoussi.github.io/composeui/user-guide/widgets.html): labels, buttons, inputs, date ranges, choices of several values, downloads, sliders, range sliders, progress bars, metrics, expanders, trees, Markdown, images, drawings, and the File menu
 - [Organizing the window](https://ehmoussi.github.io/composeui/user-guide/organizing-the-window.html): pages, tabs, resizable panes, a list of views, menus, toolbars, a sidebar, and dialogs
 - [Tables](https://ehmoussi.github.io/composeui/user-guide/tables.html): a table of records with sorting, filtering, and widgets in cells; a large table read from a list, SQLite, or a dataframe
-- [Charts](https://ehmoussi.github.io/composeui/user-guide/charts.html): lines, dots, and bars in one chart, steps, categories, axes, their bounds, log scales and dates, a second y axis, reference lines, clicks, and report images
+- [Charts](https://ehmoussi.github.io/composeui/user-guide/charts.html): lines, dots, and bars in one chart, stacked bars, steps, categories, axes, their bounds, log scales and dates, a second y axis, reference lines, clicks, and report images
 - [Maps](https://ehmoussi.github.io/composeui/user-guide/maps.html): geographic points on Qt Location and deck.gl maps, tile usage, viewport signals, and saved state
 - [Running work in threads](https://ehmoussi.github.io/composeui/user-guide/threads.html): jobs, their progress and failures, reusable loading tasks, runs that follow the latest input, and data loaded once and shared by the sessions
 - [A SQLite model](https://ehmoussi.github.io/composeui/user-guide/sqlite-model.html): keep the app's data in SQLite with `SqliteModel`

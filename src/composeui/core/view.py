@@ -110,6 +110,7 @@ __all__ = [
     "Align",
     "ArrowShape",
     "Axis",
+    "BarMode",
     "ButtonVariant",
     "ButtonView",
     "CellKind",
@@ -4002,6 +4003,16 @@ class ChartKind(enum.Enum):
     BAR = enum.auto()
 
 
+class BarMode(enum.Enum):
+    """How a `ChartView` places the bars of its series at an x."""
+
+    #: beside each other, in a group
+    GROUPED = enum.auto()
+    #: on top of each other, e.g. the parts of a total: the values over 0 up from it, those
+    #: under 0 down. Each y axis has its own stack
+    STACKED = enum.auto()
+
+
 #: the share of the room between two x that a group of bars takes
 BAR_GROUP_WIDTH = 0.8
 
@@ -4382,6 +4393,16 @@ def _check_value_axis(view: View, attribute: attrs.Attribute[Any], axis: Axis) -
     if axis.is_time:
         msg = f"Cannot show {type(view).__name__}.{attribute.name} as times: only x can."
         raise ValueError(msg)
+    if axis.is_log and getattr(view, "bar_mode", BarMode.GROUPED) is BarMode.STACKED:
+        msg = f"Cannot make {type(view).__name__}.{attribute.name} a log axis: bars stack on 0."
+        raise ValueError(msg)
+
+
+def _check_bar_mode(view: View, _attribute: attrs.Attribute[Any], mode: BarMode) -> None:
+    axes = [getattr(view, name) for name in ("y", "y2")]
+    if mode is BarMode.STACKED and any(axis.is_log for axis in axes):
+        msg = f"Cannot stack the bars of {type(view).__name__} on a log axis: they stack on 0."
+        raise ValueError(msg)
 
 
 #: a time axis' round steps between two ticks, in seconds, each with its labels' format
@@ -4408,7 +4429,8 @@ class ChartView(View):
 
     Its series are layers over the same axes, each drawn as its own kind: a line, dots
     or bars. With `categories`, the x axis shows them, and a series' x is the index of a
-    category. The bars at an x stand beside each other, in a group.
+    category. The bars at an x stand beside each other, in a group, or stacked
+    (`bar_mode`).
 
     Its axes, `x` and `y`, hold their titles, units and scales (see `Axis`). They are the
     app's, as a title is: a study doesn't save them. A series or a reference line with
@@ -4436,6 +4458,11 @@ class ChartView(View):
     reference_lines: list[ReferenceLine] = attrs.field(factory=list[ReferenceLine])
     #: what the x axis shows instead of numbers, by the index each series' x names
     categories: list[str] = attrs.field(factory=list[str])
+    #: how the bars at an x stand: beside each other, or stacked, on linear y axes. The
+    #: app's layout, not a study's
+    bar_mode: BarMode = attrs.field(
+        default=BarMode.GROUPED, validator=[_check_bar_mode], metadata={OMIT: True}
+    )
     #: the action saving the chart as a report's image (see `composeui.core.chartimage`),
     #: where the backend has one: with the `report` extra installed
     save_image_text: str = attrs.field(default=T("Save Image"), metadata={UI_TEXT: True})
@@ -4665,20 +4692,48 @@ class ChartView(View):
         return min((high - low for low, high in zip(xs, xs[1:])), default=1.0)
 
     @staticmethod
-    def bar_slots(series: list[Series], categories: list[str]) -> dict[int, tuple[float, float]]:
+    def bar_slots(
+        series: list[Series], categories: list[str], mode: BarMode = BarMode.GROUPED
+    ) -> dict[int, tuple[float, float]]:
         """Get each bar series' slot in a group of bars, by its index in `series`.
 
-        A slot is the offset of the bar's middle from its x, and its width: the bar series
-        share `BAR_GROUP_WIDTH` of the room between two x, their group centered on the x.
+        A slot is the offset of the bar's middle from its x, and its width: the slots share
+        `BAR_GROUP_WIDTH` of the room between two x, their group centered on the x. A bar
+        series has a slot of its own; stacked, the bar series of a y axis share one.
         """
         bars = [index for index, curve in enumerate(series) if curve.kind is ChartKind.BAR]
         if len(bars) == 0:
             return {}
-        width = BAR_GROUP_WIDTH * ChartView.bar_step(series, categories) / len(bars)
+        if mode is BarMode.STACKED:
+            # a slot by y axis, in the order of their first bars
+            units = list(dict.fromkeys(series[index].on_y2 for index in bars))
+            places = {index: units.index(series[index].on_y2) for index in bars}
+        else:
+            places = {index: position for position, index in enumerate(bars)}
+        count = len(set(places.values()))
+        width = BAR_GROUP_WIDTH * ChartView.bar_step(series, categories) / count
         return {
-            index: ((position - (len(bars) - 1) / 2) * width, width)
-            for position, index in enumerate(bars)
+            index: ((place - (count - 1) / 2) * width, width) for index, place in places.items()
         }
+
+    @staticmethod
+    def stack_bases(series: list[Series], categories: list[str]) -> dict[int, list[float]]:
+        """Get where each bar of a stack starts, by bar series, in the order `bars_of` gives.
+
+        On the sum of the values before it at its x, on its y axis and on its side of 0: a
+        value over 0 stacks up, one under 0 down. A gap adds nothing.
+        """
+        totals: dict[tuple[bool, float, bool], float] = {}
+        bases: dict[int, list[float]] = {}
+        for index, curve in enumerate(series):
+            if curve.kind is not ChartKind.BAR:
+                continue
+            bases[index] = []
+            for x, height in zip(*ChartView.bars_of(curve, categories)):
+                key = (curve.on_y2, x, height >= 0)
+                bases[index].append(totals.get(key, 0.0))
+                totals[key] = totals.get(key, 0.0) + height
+        return bases
 
 
 def _to_point(value: Iterable[float]) -> tuple[float, float]:

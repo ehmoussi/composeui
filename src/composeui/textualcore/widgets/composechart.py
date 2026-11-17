@@ -12,7 +12,7 @@ from textual_plotext import PlotextPlot
 from composeui.core import chartimage
 from composeui.core.chartcolors import series_color
 from composeui.core.signal import Signal
-from composeui.core.view import Axis, ChartKind, ChartView
+from composeui.core.view import Axis, BarMode, ChartKind, ChartView
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -64,6 +64,7 @@ class ComposeChart(PlotextPlot):
         self.series: list[Series] = []
         self.reference_lines: list[ReferenceLine] = []
         self.categories: list[str] = []
+        self.bar_mode = BarMode.GROUPED
         self.image_name = "chart.pdf"
         self.image_path_chosen: Signal[Path] = Signal()
         self.set_save_image_text("Save Image")
@@ -242,9 +243,17 @@ class ComposeChart(PlotextPlot):
             )
 
     def _bars(self, curve: Series) -> tuple[list[float], list[float]]:
-        """Get the bars of `curve` that are drawn, as its own y axis shows them."""
+        """Get the bars of `curve` that are drawn, as its own y axis shows them.
+
+        Stacked, where each ends, past the values before it (see `_plot_bars`).
+        """
         y_log = self._y_axis(on_y2=curve.on_y2).is_log
-        return ChartView.bars_of(curve, self.categories, y_log=y_log)
+        xs, heights = ChartView.bars_of(curve, self.categories, y_log=y_log)
+        if self.bar_mode is BarMode.STACKED:
+            index = next(index for index, other in enumerate(self.series) if other is curve)
+            bases = ChartView.stack_bases(self.series, self.categories)[index]
+            heights = [base + height for base, height in zip(bases, heights)]
+        return xs, heights
 
     def _extent(self, *, on_y2: bool) -> tuple[list[float], list[float]]:
         """Get the x the series reach, and the y of those of a y axis, in plotext's values."""
@@ -329,8 +338,14 @@ class ComposeChart(PlotextPlot):
             return
         # plotext takes a bar's width as a share of the average room between the x
         spread = (xs[-1] - xs[0]) / (len(xs) - 1) if len(xs) > 1 else 1.0
-        slots = ChartView.bar_slots(self.series, self.categories)
-        for index, (bar_xs, bar_heights) in bars.items():
+        slots = ChartView.bar_slots(self.series, self.categories, self.bar_mode)
+        # plotext has no bar's base: stacked, each bar from 0 to where it ends, the stack's
+        # last first, which the others then cover down to their own ends
+        order = list(bars)
+        if self.bar_mode is BarMode.STACKED:
+            order.reverse()
+        for index in order:
+            bar_xs, bar_heights = bars[index]
             curve = self.series[index]
             base = 0.0
             if self._y_axis(on_y2=curve.on_y2).is_log:

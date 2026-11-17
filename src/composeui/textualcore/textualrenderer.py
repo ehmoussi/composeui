@@ -134,6 +134,7 @@ if TYPE_CHECKING:
     from composeui.core.signal import Signal, SignalNoArgs
     from composeui.core.view import (
         Axis,
+        BarMode,
         CellStyle,
         CellWidget,
         ChoicesShown,
@@ -1955,6 +1956,7 @@ class ChartViewLike(ViewLike, Protocol):
     series: list[Series]
     reference_lines: list[ReferenceLine]
     categories: list[str]
+    bar_mode: BarMode
     save_image_text: str
     height: int | None
 
@@ -1977,6 +1979,7 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
                 "series": self._refresh_series,
                 "reference_lines": self._refresh_reference_lines,
                 "categories": self._refresh_categories,
+                "bar_mode": self._refresh_bar_mode,
                 "save_image_text": self._refresh_save_image_text,
                 "height": self._refresh_height,
             }
@@ -2027,6 +2030,13 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
         _view: ChartViewLike, rendered_object: ComposeChart, value: list[str]
     ) -> None:
         rendered_object.categories = value
+        rendered_object.refresh()
+
+    @staticmethod
+    def _refresh_bar_mode(
+        _view: ChartViewLike, rendered_object: ComposeChart, value: BarMode
+    ) -> None:
+        rendered_object.bar_mode = value
         rendered_object.refresh()
 
     @staticmethod
