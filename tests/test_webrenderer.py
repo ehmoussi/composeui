@@ -8131,6 +8131,7 @@ def test_a_dialog_keeps_its_container_once_its_page_rendered_again_is_shown() ->
 def test_clicking_the_button_changes_a_page_not_shown_once_it_shows(
     pages_views: list[PagesMainView], pages_client: TestClient
 ) -> None:
+    pages_client.get("/results")  # built, then left: its label changes outside the page
     page = pages_client.get("/inputs").text
     (main_view,) = pages_views
     inputs = main_view.router.inputs

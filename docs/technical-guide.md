@@ -370,10 +370,11 @@ section covers what users see.
   (labels, images, Markdown, consoles, logs, metrics), `charts.py`, `graphics.py` (maps, drawings),
   `tables.py` and `files.py` (path fields, uploads, the server's files). Such a module imports
   `webrenderer.py`. So `renderers.py`, not `webrenderer.py`, maps each renderer key to its class,
-  written out, not discovered. `webrenderer.py` keeps the base `WebRenderer`, and the renderers that
-  it names, such as `WebDialogRenderer`, with those tied to them: forms, actions and menus, dialogs,
-  containers, tabs, the router and the main view. They can move once the base asks each renderer
-  through a method instead. `changes.py` collects the renderers that a request changes
+  written out, not discovered. `webrenderer.py` keeps the base `WebRenderer`, and the forms, actions
+  and menus, dialogs, containers, tabs, the router and the main view. The base names no renderer at
+  run time: it asks each one, through `is_drawn_apart` (a dialog, drawn at the end of the page) and
+  `shows` (a router's or a tab's page shown). A form row's label is always a `WebFormLabelRenderer`,
+  which the base only casts to. `changes.py` collects the renderers that a request changes
   (`collect_dirty`), and `rendertarget.py` holds a session's view tree and its lock
   (`RenderTarget`).
 - **No code in the markup.** The page's `Content-Security-Policy` (`headers.py`) runs script

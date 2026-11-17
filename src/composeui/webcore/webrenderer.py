@@ -24,6 +24,7 @@ from typing import (
     ClassVar,
     Final,
     TypeVar,
+    cast,
 )
 
 from markupsafe import Markup
@@ -144,6 +145,8 @@ class WebRenderer(Renderer[TView, str]):
     _role: ClassVar[str]
     #: whether a `<label for=...>` can point at the root element (a `<div>` can't)
     is_labelable: ClassVar[bool] = True
+    #: whether the page draws it at its end, whatever holds it, as a dialog
+    is_drawn_apart: ClassVar[bool] = False
 
     def __init__(self, view: TView) -> None:
         super().__init__(view)
@@ -197,13 +200,15 @@ class WebRenderer(Renderer[TView, str]):
         """Whether the browser's page holds this view's fragment: not on a page or tab not shown."""
         renderer: WebRenderer[Any] = self
         # a dialog is drawn at the end of the page, with its content, whatever holds it
-        while renderer.parent is not None and not isinstance(renderer, WebDialogRenderer):
+        while renderer.parent is not None and not renderer.is_drawn_apart:
             parent = renderer.parent
-            if (isinstance(parent, WebRouterRenderer) and not parent.is_current(renderer)) or (
-                isinstance(parent, WebTabPageRenderer) and not parent.is_current
-            ):
+            if not parent.shows(renderer):
                 return False
             renderer = parent
+        return True
+
+    def shows(self, _child: WebRenderer[Any]) -> bool:
+        """Tell whether the page holds `_child`'s fragment, e.g. a router's page shown."""
         return True
 
     def _adopt(self, views: Iterable[View]) -> None:
@@ -252,17 +257,19 @@ class WebRenderer(Renderer[TView, str]):
         Nothing outside a row.
         """
         attributes: list[Markup] = []
-        log, label = self._row_renderer("log"), self._row_renderer("label")
+        log = self._row_renderer("log")
+        # a row's label is a form label's: a cast, so the base names no renderer at run time
+        label = cast("WebFormLabelRenderer | None", self._row_renderer("label"))
         if log is not None:
             described_by = (
                 f"{label.help_id} {log.widget_id}"
-                if isinstance(label, WebFormLabelRenderer) and label.has_help()
+                if label is not None and label.has_help()
                 else log.widget_id
             )
             attributes.append(Markup('aria-describedby="{}"').format(described_by))
             if isinstance(self._view, FormRowView) and self._view.is_invalid:
                 attributes.append(Markup('aria-invalid="true"'))
-        if not self.is_labelable and isinstance(label, WebFormLabelRenderer):
+        if not self.is_labelable and label is not None:
             attributes.append(Markup('aria-labelledby="{}"').format(label.text_id))
         return Markup("").join(Markup(" {}").format(attribute) for attribute in attributes)
 
@@ -286,7 +293,7 @@ class WebRenderer(Renderer[TView, str]):
         while dirty is not None and len(descendants) > 0:
             descendant = descendants.pop()
             descendants.extend(descendant.children)
-            if isinstance(descendant, WebDialogRenderer):
+            if descendant.is_drawn_apart:
                 dirty[descendant.widget_id] = descendant
 
     def _mark_dirty(self, _view: TView, _rendered_object: str, _value: Any) -> None:
@@ -1076,6 +1083,7 @@ class WebDialogRenderer(WebRenderer[DialogView]):
         return True
 
     _role = "dialog"
+    is_drawn_apart = True
 
     def __init__(self, view: DialogView) -> None:
         super().__init__(view)
@@ -1985,6 +1993,9 @@ class WebTabPageRenderer(_BuiltWhenShown[TabPage]):
         """Whether this is the page of the tab shown, whose views are sent."""
         return not isinstance(self.parent, WebTabsRenderer) or self.parent.is_current(self)
 
+    def shows(self, _child: WebRenderer[Any]) -> bool:
+        return self.is_current
+
     def to_html(self, *, oob: bool = False) -> Markup:
         content = Markup("").join(
             _view_html(view)
@@ -2213,6 +2224,9 @@ class WebRouterRenderer(WebRenderer[Router]):
             assert isinstance(page.renderer, WebPageRenderer)  # rendered with the router
             page.renderer.build()
         self._mark_dirty(view, rendered_object, value)
+
+    def shows(self, child: WebRenderer[Any]) -> bool:
+        return self.is_current(child)
 
     def is_current(self, page: WebRenderer[Any]) -> bool:
         """Whether `page` is the renderer of the page shown."""
