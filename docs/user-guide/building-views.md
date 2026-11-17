@@ -215,7 +215,7 @@ checks of several rows.
 ## Compose views from mixins
 
 You can compose a view by mixing traits. For example, `LabelRowFloatInputView` combines
-`FormLabelRowView` and `FloatInputMixin`. The mixins in `composeui/core/view.py` are the available
+`FormLabelRowView` and `FloatInputMixin`. The mixins of `composeui.core.view` are the available
 building blocks: `InputMixin`, `FloatInputMixin`, `IntInputMixin`, `DateInputMixin`,
 `DateRangeInputMixin`, `FilePathInputMixin`, `SliderMixin`, `FloatSliderMixin`, `RangeSliderMixin`,
 `FloatRangeSliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `MultiValuesMixin`, `TableMixin`,

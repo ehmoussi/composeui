@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING, Any, ClassVar, Final
 from markupsafe import Markup
 from typing_extensions import Protocol
 
+from composeui.core._views.controls import RANGE_DASH
 from composeui.core.renderer import ViewLike
 from composeui.core.view import (
     DRAG_REPORT_DELAY_MS,
-    RANGE_DASH,
     ButtonVariant,
     DialogButtonView,
     FloatRangeSliderMixin,

@@ -42,13 +42,15 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from typing_extensions import override
 
+from composeui.core._views.base import made_signals, view_fields
+from composeui.core._views.tables import FILTER_PATTERNS_VARIABLE
 from composeui.core.application import Application, _add_reference_to_signals
 from composeui.core.jobs import starting_study
 from composeui.core.reactivity import start_reactions
 from composeui.core.registry import RendererType
 from composeui.core.reload import has_change_events
 from composeui.core.study import open_study
-from composeui.core.view import FILTER_PATTERNS_VARIABLE, View, made_signals, view_fields
+from composeui.core.view import View
 from composeui.webcore._renderers.navigation import check_routes
 from composeui.webcore.headers import SecurityHeadersMiddleware
 from composeui.webcore.limits import BodySizeLimitMiddleware

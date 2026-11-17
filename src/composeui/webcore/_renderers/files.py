@@ -9,8 +9,9 @@ from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, NamedTuple, Typ
 from markupsafe import Markup
 from typing_extensions import Protocol
 
+from composeui.core._views.files import is_within_roots, with_extension
 from composeui.core.renderer import ViewLike
-from composeui.core.view import CellKind, is_within_roots, with_extension
+from composeui.core.view import CellKind
 from composeui.webcore._renderers.inputs import InputViewLike, _WebTextFieldRenderer
 from composeui.webcore.serverfiles import (
     has_extension,

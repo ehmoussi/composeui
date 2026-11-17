@@ -19,14 +19,14 @@ from attrs import Factory, evolve
 from hypothesis import example, given, reject
 from hypothesis import strategies as st
 
+from composeui.core._views.controls import MAX_SLIDER_STEPS
+from composeui.core._views.main import STATE_FORMAT, _is_omitted_type
 from composeui.core.application import ModelApplication, _add_reference_to_signals
-from composeui.core.model import Model
+from composeui.core.model import InvalidStateError, Model
 from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.signal import Signal
 from composeui.core.view import (
     CONVERTER,
-    MAX_SLIDER_STEPS,
-    STATE_FORMAT,
     ActionView,
     Axis,
     BarMode,
@@ -41,7 +41,6 @@ from composeui.core.view import (
     FloatSliderView,
     ImageView,
     InputView,
-    InvalidStateError,
     LabelView,
     ListSource,
     MainView,
@@ -60,7 +59,6 @@ from composeui.core.view import (
     TreeNode,
     TreeView,
     UploadedFile,
-    _is_omitted_type,
     child,
     define_view,
     format_date,
@@ -188,13 +186,13 @@ def test_a_failed_save_keeps_the_previous_file_and_a_retry_works(
         msg = "not serializable"
         raise TypeError(msg)
 
-    monkeypatch.setattr("composeui.core.view.json.dump", failing)
+    monkeypatch.setattr("composeui.core._views.main.json.dump", failing)
     with pytest.raises((OSError, TypeError)):
         view.save_state(filepath)
     assert filepath.read_bytes() == previous
     assert [file.name for file in tmp_path.iterdir()] == ["study.json"]
 
-    monkeypatch.setattr("composeui.core.view.json.dump", real_dump)
+    monkeypatch.setattr("composeui.core._views.main.json.dump", real_dump)
     view.save_state(filepath)
     assert filepath.read_bytes() == previous
 

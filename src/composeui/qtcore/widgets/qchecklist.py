@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from qtpy.QtCore import QPoint
     from qtpy.QtGui import QMouseEvent
 
-    from composeui.core.view import ChoicesShown
+    from composeui.core._views.choices import ChoicesShown
 
 #: the rows a check list shows before it scrolls
 _MAX_ROWS = 10

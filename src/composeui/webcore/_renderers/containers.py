@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from markupsafe import Markup
 
+from composeui.core._views.dialogs import dialogs_in
 from composeui.core.registry import RendererType
 from composeui.core.renderer import RendererContainer
 from composeui.core.view import (
@@ -25,7 +26,6 @@ from composeui.core.view import (
     TabView,
     VerticalView,
     View,
-    dialogs_in,
 )
 from composeui.webcore.changes import _DIRTY
 

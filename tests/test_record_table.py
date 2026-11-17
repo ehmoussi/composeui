@@ -14,17 +14,8 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from composeui.core.application import Application
-from composeui.core.model import RefusedError
-from composeui.core.view import (
-    CellWidget,
-    Column,
-    InvalidStateError,
-    MainView,
-    RecordTableView,
-    T,
-    child,
-    define_view,
-)
+from composeui.core.model import InvalidStateError, RefusedError
+from composeui.core.view import CellWidget, Column, MainView, RecordTableView, T, child, define_view
 from tests.tables import COLUMNS, Room, RoomsMainView
 
 if TYPE_CHECKING:

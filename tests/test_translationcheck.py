@@ -25,7 +25,7 @@ from tests.translated import TranslatedMainView
 
 
 def test_composeui_s_catalogs_translate_all_its_text() -> None:
-    texts = find_texts((CATALOGS_DIR.parent / "core").glob("*.py"))
+    texts = find_texts((CATALOGS_DIR.parent / "core").rglob("*.py"))
     assert {"File", "OK", "Can't open {name}: {error}."} <= texts
 
     for path in CATALOGS_DIR.glob("*.json"):

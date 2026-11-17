@@ -14,6 +14,7 @@ from composeui.core.application import (
     check_writable,
     logs_in_file,
 )
+from composeui.core.registry import RendererType
 from composeui.core.reload import (
     is_reloaded,
     load_reloaded_state,
@@ -21,7 +22,6 @@ from composeui.core.reload import (
     save_reloaded_state,
     take_changes,
 )
-from composeui.core.view import RendererType
 from composeui.textualcore.textualrenderer import TextualMainRenderer
 
 if TYPE_CHECKING:

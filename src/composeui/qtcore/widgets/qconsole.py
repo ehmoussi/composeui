@@ -17,7 +17,8 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from composeui.core.view import find_in_lines, follow_match
+from composeui.core._views.content import follow_match
+from composeui.core.view import find_in_lines
 from composeui.qtcore.widgets.qplaintext import plain_label
 
 if TYPE_CHECKING:

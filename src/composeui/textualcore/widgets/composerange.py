@@ -9,8 +9,9 @@ from textual.binding import Binding, BindingType
 from textual.containers import Horizontal
 from textual.widgets import Label
 
+from composeui.core._views.controls import RANGE_DASH
 from composeui.core.signal import Signal
-from composeui.core.view import RANGE_DASH, SliderMixin
+from composeui.core.view import SliderMixin
 from composeui.textualcore.widgets.composedateinput import ComposeDateInput
 from composeui.textualcore.widgets.composeslider import DragReportMixin
 

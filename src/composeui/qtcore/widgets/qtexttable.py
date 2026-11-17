@@ -35,9 +35,9 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from composeui.core._views.tables import PLAIN_CELL
 from composeui.core.view import (
     CHECKED_TEXTS,
-    PLAIN_CELL,
     CellKind,
     CellStyle,
     CellWidget,

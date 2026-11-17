@@ -214,8 +214,13 @@ ignore = [
 extend-immutable-calls = ["composeui.core.sqlitemodel.csv_field"]
 
 [tool.ruff.lint.flake8-type-checking]
-# CSV schemas resolve attrs field annotations at runtime.
-runtime-evaluated-decorators = ["attrs.define", "composeui.core.sqlitemodel.define_csv_row"]
+# Views and CSV schemas resolve attrs field annotations at runtime.
+runtime-evaluated-decorators = [
+    "attrs.define",
+    "attrs.frozen",
+    "composeui.core._views.base.define_view",
+    "composeui.core.sqlitemodel.define_csv_row",
+]
 
 [tool.ruff.lint.isort]
 # Every module postpones annotation evaluation (enforced by I002, added by `make lint`).

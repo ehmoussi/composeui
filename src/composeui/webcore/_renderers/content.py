@@ -18,16 +18,8 @@ from typing import TYPE_CHECKING
 from markdown_it import MarkdownIt
 from typing_extensions import Protocol
 
-from composeui.core.view import (
-    ConsoleView,
-    LogType,
-    MetricView,
-    TextRole,
-    TextStyle,
-    image_content,
-    line_styles_after,
-    lines_after,
-)
+from composeui.core._views.content import image_content, line_styles_after, lines_after
+from composeui.core.view import ConsoleView, LogType, MetricView, TextRole, TextStyle
 from composeui.webcore.webrenderer import WebRenderer
 
 if TYPE_CHECKING:

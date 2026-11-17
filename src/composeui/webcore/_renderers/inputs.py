@@ -11,8 +11,10 @@ from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar, cast
 from markupsafe import Markup
 from typing_extensions import Protocol
 
+from composeui.core._views.controls import RANGE_DASH
+from composeui.core._views.inputs import date_hint
 from composeui.core.renderer import ViewLike
-from composeui.core.view import RANGE_DASH, DateRangeInputMixin, date_hint, parse_date
+from composeui.core.view import DateRangeInputMixin, parse_date
 from composeui.webcore.changes import _DIRTY
 from composeui.webcore.webrenderer import WebRenderer, _icon
 

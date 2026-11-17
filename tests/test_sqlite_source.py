@@ -18,20 +18,12 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from composeui.core import sqlitemodel
+from composeui.core._views.tables import parse_filter
 from composeui.core.sqlitemodel import SqliteModel, SqliteSource, SqliteTable, as_parameters
-from composeui.core.view import (
-    FilterError,
-    ListSource,
-    Sort,
-    SourceColumn,
-    SourceTableView,
-    parse_filter,
-)
+from composeui.core.view import Filter, FilterError, ListSource, Sort, SourceColumn, SourceTableView
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Hashable, Iterator, Sequence
-
-    from composeui.core.view import Filter
 
 
 class Kind(enum.Enum):

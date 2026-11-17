@@ -16,16 +16,18 @@ from attrs import Factory
 from hypothesis import given
 from hypothesis import strategies as st
 
-from composeui.core.application import Application
-from composeui.core.view import (
+from composeui.core._views.tables import (
     SOURCE_TABLE_CACHE,
     SOURCE_TABLE_WINDOW,
+    SourceTableByPosition,
+)
+from composeui.core.application import Application
+from composeui.core.view import (
     FilterError,
     ListSource,
     MainView,
     SelectionMode,
     SourceColumn,
-    SourceTableByPosition,
     SourceTableView,
     child,
     define_view,

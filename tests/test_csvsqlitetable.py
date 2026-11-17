@@ -21,6 +21,7 @@ import pytest
 from hypothesis import example, given, reject
 from hypothesis import strategies as st
 
+from composeui.core._views.tables import parse_filter
 from composeui.core.model import RefusedError
 from composeui.core.sqlitemodel import (
     CSVSqliteTable,
@@ -30,7 +31,7 @@ from composeui.core.sqlitemodel import (
     define_csv_row,
     table,
 )
-from composeui.core.view import MainView, Sort, SourceColumn, parse_filter
+from composeui.core.view import MainView, Sort, SourceColumn
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

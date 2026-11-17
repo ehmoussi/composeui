@@ -15,10 +15,11 @@ from attrs import Factory
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from composeui.core._views.content import follow_match, line_styles_after
+from composeui.core._views.files import DOWNLOAD_CHUNK_SIZE, save_download
 from composeui.core.application import Application
 from composeui.core.model import RefusedError
 from composeui.core.view import (
-    DOWNLOAD_CHUNK_SIZE,
     CellKind,
     CellWidget,
     ConsoleView,
@@ -41,10 +42,7 @@ from composeui.core.view import (
     UploadedFile,
     define_view,
     find_in_lines,
-    follow_match,
-    line_styles_after,
     parse_date,
-    save_download,
 )
 from examples.studyinputs import INPUT_FILE, OUTPUT_FOLDER, PATH, StudyInputsMainView
 from tests.buildings import SITE

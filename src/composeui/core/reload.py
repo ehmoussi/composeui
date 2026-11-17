@@ -27,9 +27,9 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from composeui.core._views.main import _RELOADED_STATE, load_session_data, session_data
 from composeui.core.model import InvalidStateError
 from composeui.core.study import open_study, save_study
-from composeui.core.view import _RELOADED_STATE, load_session_data, session_data
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator, Sequence

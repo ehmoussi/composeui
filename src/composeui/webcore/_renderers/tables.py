@@ -13,20 +13,18 @@ import attrs
 from markupsafe import Markup, escape
 from typing_extensions import Protocol
 
+from composeui.core._views.files import is_within_roots
+from composeui.core._views.tables import PLAIN_CELL, SourceTableByPosition, split_pattern
 from composeui.core.model import RefusedError
 from composeui.core.renderer import ViewLike
 from composeui.core.view import (
     CHECKED_TEXTS,
-    PLAIN_CELL,
     SEARCH_DELAY_MS,
     CellKind,
     NodeMark,
     SelectionMode,
-    SourceTableByPosition,
     as_pattern,
-    is_within_roots,
     replace_cell,
-    split_pattern,
 )
 from composeui.webcore._renderers.files import _PATH_KINDS, _FilesTexts, _ServerFiles
 from composeui.webcore.changes import _DIRTY

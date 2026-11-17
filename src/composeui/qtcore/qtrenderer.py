@@ -56,6 +56,12 @@ from qtpy.QtWidgets import (
 from typing_extensions import Protocol, TypeVarTuple, Unpack
 
 from composeui.core import chartimage
+from composeui.core._views.choices import walk_tree
+from composeui.core._views.content import image_content, line_styles_after, lines_after
+from composeui.core._views.dialogs import dialogs_in
+from composeui.core._views.files import save_download, with_extension
+from composeui.core._views.inputs import date_hint
+from composeui.core._views.tables import SourceTableByPosition
 from composeui.core.registry import RendererType
 from composeui.core.renderer import (
     MainRenderer,
@@ -101,7 +107,6 @@ from composeui.core.view import (
     SeparatorAction,
     SidebarView,
     SliderMixin,
-    SourceTableByPosition,
     SplitterView,
     StatusBar,
     TabPage,
@@ -112,15 +117,7 @@ from composeui.core.view import (
     UploadedFile,
     VerticalView,
     View,
-    date_hint,
-    dialogs_in,
-    image_content,
-    line_styles_after,
-    lines_after,
     replace_cell,
-    save_download,
-    walk_tree,
-    with_extension,
 )
 from composeui.qtcore.qtslot import connect_slot
 from composeui.qtcore.widgets.qchart import QChart
@@ -156,13 +153,13 @@ if TYPE_CHECKING:
     from qtpy.QtCore import QModelIndex, SignalInstance
     from qtpy.QtGui import QCloseEvent
 
+    from composeui.core._views.choices import ChoicesShown
     from composeui.core.signal import Signal, SignalNoArgs
     from composeui.core.view import (
         Axis,
         BarMode,
         CellStyle,
         CellWidget,
-        ChoicesShown,
         DownloadedFile,
         HeaderGroup,
         ReferenceLine,

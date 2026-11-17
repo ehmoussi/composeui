@@ -23,7 +23,8 @@ import pytest
 qtpy = pytest.importorskip("qtpy")
 from qtpy.QtWidgets import QApplication  # noqa: E402
 
-from composeui.core.view import RendererType, StatusBar  # noqa: E402
+from composeui.core.registry import RendererType  # noqa: E402
+from composeui.core.view import StatusBar  # noqa: E402
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -88,7 +89,7 @@ def test_an_old_timer_already_firing_leaves_a_newer_message(
     monkeypatch: pytest.MonkeyPatch, new_timeout: float
 ) -> None:
     monkeypatch.setattr(_HeldTimer, "created", [])
-    monkeypatch.setattr("composeui.core.view.threading.Timer", _HeldTimer)
+    monkeypatch.setattr("composeui.core._views.content.threading.Timer", _HeldTimer)
     bar = StatusBar(timeout=5.0)
     bar.show_message("old")
     bar.timeout = new_timeout

@@ -16,6 +16,7 @@ import attrs
 import narwhals.stable.v2 as nw
 from typing_extensions import ParamSpec
 
+from composeui.core._views.base import view_fields
 from composeui.core.dataframesource import (
     DataFrameSource,
     _collected,
@@ -37,7 +38,6 @@ from composeui.core.view import (
     View,
     child,
     define_view,
-    view_fields,
 )
 
 if TYPE_CHECKING:

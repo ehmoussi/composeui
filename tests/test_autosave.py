@@ -959,7 +959,7 @@ def test_the_folder_of_the_autosaves_is_the_user_s_data_directory(
 @pytest.mark.asyncio
 async def test_textual_doesn_t_tick_while_a_file_action_may_be_replacing_the_study() -> None:
     pytest.importorskip("textual_fspicker")
-    from composeui.core.view import RendererType  # noqa: PLC0415
+    from composeui.core.registry import RendererType  # noqa: PLC0415
     from composeui.textualcore.textualrenderer import TextualMainRenderer  # noqa: PLC0415
 
     application = _AutosavingViewsApplication(build_main_view=NotesMainView)
