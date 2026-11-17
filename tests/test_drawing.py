@@ -1204,7 +1204,7 @@ class _Elements(HTMLParser):
 
 def _web(view: DrawingView) -> _Elements:
     pytest.importorskip("starlette")
-    from composeui.webcore.webrenderer import WebDrawingRenderer  # noqa: PLC0415 (optional)
+    from composeui.webcore._renderers.graphics import WebDrawingRenderer  # noqa: PLC0415 (optional)
 
     view.render(RendererType.WEB)
     assert isinstance(view.renderer, WebDrawingRenderer)
