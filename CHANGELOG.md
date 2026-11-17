@@ -188,6 +188,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- On the web, a page keeps its session when the server's clock steps back, e.g. at a time sync.
+  The session cookie was refused until the clock caught up: the page reloaded into a new
+  session, without the unsaved work.
 - The documentation sitemaps omit the search pages, which tell search engines not to index them.
 - The stable documentation includes the GitHub link's stylesheet, which keeps its icon small.
 - On Qt and Textual, Save writes into the study's file, and asks for one only when the study
