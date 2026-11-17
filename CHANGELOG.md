@@ -188,6 +188,7 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- The stable documentation includes the GitHub link's stylesheet, which keeps its icon small.
 - On Qt and Textual, Save writes into the study's file, and asks for one only when the study
   has none; Save As asks. Save asked for a file each time. Save asks before it replaces a file
   that changed on disk since it was opened or saved.
