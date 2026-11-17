@@ -10,6 +10,11 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
+pytestmark = pytest.mark.skipif(
+    not environ.get("COMPOSEUI_DOCS_SITE"),
+    reason="Set COMPOSEUI_DOCS_SITE to the built main and stable documentation.",
+)
+
 
 class _PageMetadata(HTMLParser):
     def __init__(self) -> None:
@@ -32,10 +37,7 @@ class _PageMetadata(HTMLParser):
 
 @pytest.fixture
 def site_root() -> Path:
-    site = environ.get("COMPOSEUI_DOCS_SITE")
-    if not site:
-        pytest.skip("Set COMPOSEUI_DOCS_SITE to the built main and stable documentation.")
-    return Path(__file__).parent.parent / site
+    return Path(__file__).parent.parent / environ["COMPOSEUI_DOCS_SITE"]
 
 
 @pytest.mark.parametrize("version", ["", "stable"])
