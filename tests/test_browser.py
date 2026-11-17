@@ -2986,6 +2986,40 @@ def test_a_series_on_the_second_y_axis_is_drawn_against_an_axis_at_the_right(
     )
 
 
+def test_an_axis_shows_the_app_s_bounds_until_the_user_zooms(chart_pages_page: Page) -> None:
+    chart_pages_page.goto("/chart")
+    load = chart_pages_page.locator("figure").filter(has_text="Load")
+    expect(load.locator("canvas")).to_have_count(1)
+    plot = load.locator("[data-chart]")
+    scales = (
+        "element => { const scales = ComposeUI.charts.drawn.get(element).scales;"
+        " return [scales.x.min, scales.x.max, scales.y.min, scales.y.max]; }"
+    )
+    link = load.get_by_role("link", name="Save Image")
+
+    # from 0 to 10, and from 0 up to the maximum's line
+    x_min, x_max, y_min, y_max = plot.evaluate(scales)
+    assert (x_min, x_max, y_min) == (0, 10, 0)
+    assert y_max >= 20
+    expect(link).to_have_attribute("href", re.compile(r"\?format=pdf$"))  # no zoom
+
+    load.scroll_into_view_if_needed()  # the mouse reaches only what the window shows
+    box = load.locator(".u-over").bounding_box()
+    assert box is not None
+    middle = box["y"] + box["height"] / 2
+    chart_pages_page.mouse.move(box["x"] + box["width"] * 0.3, middle)
+    chart_pages_page.mouse.down()
+    chart_pages_page.mouse.move(box["x"] + box["width"] * 0.6, middle, steps=5)
+    chart_pages_page.mouse.up()
+    # the user's zoom, not the bounds
+    assert plot.evaluate(scales)[0] == pytest.approx(3, abs=0.2)
+    expect(link).to_have_attribute("href", re.compile(r"&x_min="))
+
+    chart_pages_page.mouse.dblclick(box["x"] + box["width"] / 2, middle)
+    assert plot.evaluate(scales)[:3] == [0, 10, 0]
+    expect(link).to_have_attribute("href", re.compile(r"\?format=pdf$"))
+
+
 def test_bars_without_categories_show_whole_and_a_zoom_stays_as_it_is(
     chart_pages_page: Page,
 ) -> None:

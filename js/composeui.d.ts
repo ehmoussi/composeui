@@ -59,6 +59,9 @@ declare global {
     label: string;
     unit: string;
     log: boolean;
+    /* the app's bounds (`Axis.minimum`, `Axis.maximum`), sent only when given */
+    minimum?: number;
+    maximum?: number;
   }
   interface ChartSeriesSpec {
     name: string;

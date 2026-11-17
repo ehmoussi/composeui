@@ -4260,6 +4260,10 @@ class Scale(enum.Enum):
     LOG = enum.auto()
 
 
+def _to_bound(value: Optional[float]) -> Optional[float]:
+    return None if value is None else float(value)
+
+
 @attrs.frozen
 class Axis:
     """An axis of a `ChartView`: its title, its unit and how it places its values.
@@ -4267,12 +4271,58 @@ class Axis:
     E.g. ``Axis("Time", unit="s")``, labeled "Time (s)". The chart shows the unit with
     the values the user hovers too. Assign a new one to change it:
     ``chart.y = attrs.evolve(chart.y, scale=Scale.LOG)``.
+
+    Its range fits the chart's data, unless the app gives a bound: ``minimum=0`` starts
+    it at 0, its top still fitting the data. A bound wins over what else widens the
+    range, e.g. a reference line or bars standing on 0. The user's zoom still moves past
+    it, and back out to it. An x axis of categories has no bounds.
     """
 
     title: str = ""
     #: shown after the title, as "Time (s)", and with the values the user hovers
     unit: str = attrs.field(default="", kw_only=True)
     scale: Scale = attrs.field(default=Scale.LINEAR, kw_only=True)
+    #: where it starts, e.g. 0 for a load that is never negative; None: it fits the data
+    minimum: Optional[float] = attrs.field(default=None, kw_only=True, converter=_to_bound)
+    #: where it ends, e.g. 100 for a percentage; None: it fits the data
+    maximum: Optional[float] = attrs.field(default=None, kw_only=True, converter=_to_bound)
+
+    def __attrs_post_init__(self) -> None:
+        bounds = [bound for bound in (self.minimum, self.maximum) if bound is not None]
+        if not all(math.isfinite(bound) for bound in bounds):
+            msg = f"Cannot bound the axis {self.title!r} at {bounds}: give finite numbers."
+            raise ValueError(msg)
+        if self.is_log and not all(bound > 0 for bound in bounds):
+            msg = f"Cannot bound the log axis {self.title!r} at {bounds}: it shows only > 0."
+            raise ValueError(msg)
+        if (
+            self.minimum is not None
+            and self.maximum is not None
+            and not self.minimum < self.maximum
+        ):
+            msg = f"Cannot bound the axis {self.title!r} from {self.minimum} to {self.maximum}."
+            raise ValueError(msg)
+
+    @property
+    def has_bounds(self) -> bool:
+        """Tell whether the app bounds it, at one end or both."""
+        return self.minimum is not None or self.maximum is not None
+
+    def bounded(self, low: float, high: float) -> tuple[float, float]:
+        """Get the range from `low` to `high`, which fit the data, at the axis' bounds.
+
+        A bound past the data's other end leaves the axis a unit (a power of 10 on a log
+        axis) on its side, rather than no range.
+        """
+        if self.minimum is not None:
+            low = self.minimum
+        if self.maximum is not None:
+            high = self.maximum
+        if low < high:
+            return low, high
+        if self.maximum is None:
+            return low, low * 10 if self.is_log else low + 1
+        return (high / 10 if self.is_log else high - 1), high
 
     @property
     def is_log(self) -> bool:

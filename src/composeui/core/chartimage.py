@@ -30,6 +30,9 @@ if TYPE_CHECKING:
     from matplotlib.axes import Axes
     from matplotlib.container import Container
     from matplotlib.figure import Figure
+    from matplotlib.text import Annotation
+
+    from composeui.core.view import ReferenceLine
 
 __all__ = ["ImageOptions", "chart_figure", "save_chart_image"]
 
@@ -185,17 +188,24 @@ def chart_figure(chart: ChartView, options: ImageOptions = DEFAULT_OPTIONS) -> F
             right.set_ylabel(chart.y2.label)
             right.grid(visible=False)  # the first axis' lines alone
         handles = _draw_series(sides, chart)
-        _draw_reference_lines(sides, chart)
+        labels = _draw_reference_lines(sides, chart)
         if options.show_title and chart.title:
             axes.set_title(chart.title)
         axes.set_xlabel(chart.x.label)
         axes.set_ylabel(chart.y.label)
+        # the app's bounds, then the user's zoom over them
+        if len(chart.categories) == 0:
+            axes.set_xlim(*chart.x.bounded(*axes.get_xlim()))
+        axes.set_ylim(*chart.y.bounded(*axes.get_ylim()))
+        if sides[True] is not axes:  # without a second y axis, its bounds bound nothing
+            sides[True].set_ylim(*chart.y2.bounded(*sides[True].get_ylim()))
         if options.x_range is not None:
             axes.set_xlim(*options.x_range)
         if options.y_range is not None:
             axes.set_ylim(*options.y_range)
         if options.y2_range is not None:
             sides[True].set_ylim(*options.y2_range)
+        _hide_labels_past(sides, labels)
         _add_legend(figure, axes, handles, is_inside=sides[True] is axes)
     return figure
 
@@ -275,8 +285,15 @@ def _draw_series(sides: dict[bool, Axes], chart: ChartView) -> list[Artist | Con
     return handles
 
 
-def _draw_reference_lines(sides: dict[bool, Axes], chart: ChartView) -> None:
-    """Draw the chart's reference lines, labeled inside the axes, at their ends."""
+def _draw_reference_lines(
+    sides: dict[bool, Axes], chart: ChartView
+) -> list[tuple[ReferenceLine, Annotation]]:
+    """Draw the chart's reference lines, labeled inside the axes, at their ends.
+
+    Returns each line with its label, which `_hide_labels_past` hides once the range is
+    set: matplotlib doesn't clip it.
+    """
+    labels: list[tuple[ReferenceLine, Annotation]] = []
     x_log = ChartView.is_x_log(chart.x, chart.categories, chart.series)
     lines = ChartView.drawn_lines(
         chart.reference_lines, x_log=x_log, y_log=chart.y.is_log, y2_log=chart.y2.is_log
@@ -290,7 +307,7 @@ def _draw_reference_lines(sides: dict[bool, Axes], chart: ChartView) -> None:
             axes.axvline(line.value, color=color, linestyle=style, linewidth=1)
             # at its top, left of it (now, after the data): the x in data, the y in the
             # axes' share
-            axes.annotate(
+            label = axes.annotate(
                 line.label,
                 (line.value, 1),
                 xycoords=axes.get_xaxis_transform(),
@@ -303,7 +320,7 @@ def _draw_reference_lines(sides: dict[bool, Axes], chart: ChartView) -> None:
         else:
             axes.axhline(line.value, color=color, linestyle=style, linewidth=1)
             # at its right end, over it
-            axes.annotate(
+            label = axes.annotate(
                 line.label,
                 (1, line.value),
                 xycoords=axes.get_yaxis_transform(),
@@ -313,6 +330,18 @@ def _draw_reference_lines(sides: dict[bool, Axes], chart: ChartView) -> None:
                 va="bottom",
                 color=color,
             )
+        labels.append((line, label))
+    return labels
+
+
+def _hide_labels_past(
+    sides: dict[bool, Axes], labels: list[tuple[ReferenceLine, Annotation]]
+) -> None:
+    """Hide the label of a reference line past the range shown, e.g. the axis' bounds."""
+    for line, label in labels:
+        axes = sides[line.is_on_y2]
+        low, high = sorted(axes.get_xlim() if line.vertical else axes.get_ylim())
+        label.set_visible(low <= line.value <= high)
 
 
 def _add_legend(

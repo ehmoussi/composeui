@@ -146,6 +146,37 @@ def test_a_series_on_the_second_y_axis_is_drawn_against_an_axis_at_the_right() -
     assert [text.get_text() for text in figure.legends[0].get_texts()] == ["Units", "Revenue"]
 
 
+def test_an_axis_shows_the_app_s_bounds_under_the_user_s_zoom() -> None:
+    page = ChartPagesMainView().router.chart
+    load = page.load
+
+    (axes,) = chart_figure(load).axes
+
+    assert axes.get_xlim() == (0, 10)
+    bottom, top = axes.get_ylim()
+    assert (bottom, top >= 20) == (0, True)  # from 0; up to the maximum's line
+    # the line past the x bounds isn't drawn there, nor its label
+    shown = [text.get_text() for text in axes.texts if text.get_visible()]
+    assert shown == ["Max: 20"]
+    # the user's zoom, past the bounds
+    (zoomed,) = chart_figure(load, ImageOptions(x_range=(-5, 20))).axes
+    assert zoomed.get_xlim() == (-5, 20)
+    assert [text.get_text() for text in zoomed.texts if text.get_visible()] == ["Max: 20", "Late"]
+    # the right axis' bounds, only with a right axis: not the left one's then
+    page.sales.y2 = attrs.evolve(page.sales.y2, maximum=100)
+    _left, right = chart_figure(page.sales).axes
+    assert right.get_ylim()[1] == pytest.approx(100)
+    load.y2 = Axis(maximum=1)
+    (unchanged,) = chart_figure(load).axes
+    assert unchanged.get_ylim() == (bottom, top)
+    # an x axis of categories: its own range, whatever the bounds
+    orders = page.orders
+    (drawn,) = chart_figure(orders).axes
+    orders.x = Axis(minimum=1, maximum=2)
+    (bounded,) = chart_figure(orders).axes
+    assert bounded.get_xlim() == drawn.get_xlim()
+
+
 def test_bars_without_categories_stand_at_their_x_on_a_linear_axis() -> None:
     ages = ChartPagesMainView().router.chart.ages
 

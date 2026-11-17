@@ -11,6 +11,9 @@ The notable changes of each release of ComposeUI. The format follows
 - Layers in a chart: a `ChartView` draws lines, dots and bars over the same axes, for example
   a line over bars. The bars of several series stand side by side at each x, and the lines
   and dots are over them, on Qt, Textual, the web and in report images.
+- Axis bounds: `Axis(minimum=..., maximum=...)` sets the ends of a chart's axis, one or both,
+  for example `Axis("Load", unit="kN", minimum=0)`. The other end fits the data. The user can
+  still zoom past them on Qt and the web. On Qt, Textual, the web and in report images.
 - A second y axis in a chart: `ChartView.y2` is an `Axis` at the right, with its own unit and
   scale. A series or a horizontal reference line with `on_y2=True` is on it, for example a
   revenue over the units sold. It shows only when something is on it, on Qt, Textual, the web

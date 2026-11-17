@@ -4044,6 +4044,48 @@ def test_a_series_on_the_second_y_axis_is_drawn_against_an_axis_at_the_right(
     assert not any(isinstance(item, pg.PlotDataItem) for item in view2.addedItems)
 
 
+def test_an_axis_shows_the_app_s_bounds_until_the_user_zooms(qtbot: QtBot) -> None:
+    view, chart = _chart_page_chart(qtbot, "load")
+    view_box = _view_box(chart)
+    load = view.router.chart.load
+
+    def shown() -> list[list[float]]:
+        return [[float(bound) for bound in axis] for axis in view_box.viewRange()]
+
+    # from 0 to 10, and from 0 up to the maximum's line, once pyqtgraph fitted the data
+    qtbot.waitUntil(lambda: shown()[0] == [0, 10] and shown()[1][1] >= 20)
+    assert shown()[1][0] == 0
+    # the user's zoom, past the bounds, stays; back out, the bounds again
+    view_box.setRange(xRange=(-5, 20), yRange=(-1, 5), padding=0)
+    assert shown() == [[-5, 20], [-1, 5]]
+    view_box.enableAutoRange()
+    qtbot.waitUntil(lambda: shown()[0] == [0, 10])
+    # the app's new bounds, over the user's zoom
+    view_box.setRange(yRange=(-1, 5), padding=0)
+    load.y = attrs.evolve(load.y, minimum=None, maximum=4)
+    qtbot.waitUntil(lambda: shown()[1][1] == 4)
+    assert shown()[1][0] < 0  # its bottom fits the data again: the crane's -2
+
+    # a log axis: bounded as its logs, here the right one's
+    sales = view.router.chart.sales
+    assert isinstance(sales.renderer, QtWidgetRenderer)
+    sales_chart = sales.renderer.qt_object
+    assert isinstance(sales_chart, QChart)
+    view2 = _plot_item(sales_chart).getAxis("right").linkedView()
+    assert isinstance(view2, pg.ViewBox)
+    sales.y2 = attrs.evolve(sales.y2, maximum=100)
+    qtbot.waitUntil(lambda: view2.viewRange()[1][1] == pytest.approx(2))
+    # an x axis of categories: its own range, whatever the bounds
+    orders = view.router.chart.orders
+    assert isinstance(orders.renderer, QtWidgetRenderer)
+    orders_chart = orders.renderer.qt_object
+    assert isinstance(orders_chart, QChart)
+    orders_box = _view_box(orders_chart)
+    drawn = orders_box.viewRange()[0]
+    orders.x = attrs.evolve(orders.x, minimum=1, maximum=2)
+    assert orders_box.viewRange()[0] == drawn
+
+
 def test_bars_without_categories_stand_at_their_x_on_a_linear_axis(qtbot: QtBot) -> None:
     view, chart = _chart_page_chart(qtbot, "ages")
     plot = _plot_item(chart)

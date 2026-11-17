@@ -191,6 +191,14 @@
     if (scales.y2 !== undefined && y2 !== undefined) {
       scales.y2.range = rangeWith(rangeFunction(scales.y2), lineY2s, y2.log, true);
     }
+    // the app's bounds, over all that: the x's not over the user's zoom
+    if (categories === undefined) {
+      scales.x.range = rangeBounded(rangeFunction(scales.x), spec.x, false, true);
+    }
+    scales.y.range = rangeBounded(rangeFunction(scales.y), spec.y, true, false);
+    if (scales.y2 !== undefined && y2 !== undefined) {
+      scales.y2.range = rangeBounded(rangeFunction(scales.y2), y2, true, false);
+    }
     return {
       width: width,
       height: element.clientHeight,
@@ -234,11 +242,7 @@
    */
   function rangeWith(range, values, log, padded) {
     if (values.length === 0) return range;
-    /** @type {uPlot.Range.Function} */
-    var given = range !== undefined ? range : function (chart, min, max) {
-        if (log) return uPlot.rangeLog(min, max, 10, padded);
-        return padded || min === max ? uPlot.rangeNum(min, max, 0.1, true) : [min, max];
-      };
+    var given = range !== undefined ? range : fittedRange(log, padded);
     var low = Math.min.apply(null, values);
     var high = Math.max.apply(null, values);
     return function (chart, min, max, key) {
@@ -250,6 +254,44 @@
         key
       );
     };
+  }
+  /* uPlot's own range of a scale, fitting its values */
+  /** @param {boolean} log @param {boolean} padded @returns {uPlot.Range.Function} */
+  function fittedRange(log, padded) {
+    return function (chart, min, max) {
+      if (log) return uPlot.rangeLog(min, max, 10, padded);
+      return padded || min === max ? uPlot.rangeNum(min, max, 0.1, true) : [min, max];
+    };
+  }
+  /* a scale's range at its axis' bounds (see `Axis.bounded`); as given without any. A
+     bound past the other end leaves a unit on its side, a power of 10 on a log axis.
+     `keepsZoom`: the x's, which uPlot asks at a zoom too, left as the user put it */
+  /**
+   * @param {uPlot.Range.Function | undefined} range @param {ChartAxisSpec} side
+   * @param {boolean} padded @param {boolean} keepsZoom
+   * @returns {uPlot.Range.Function | undefined}
+   */
+  function rangeBounded(range, side, padded, keepsZoom) {
+    var minimum = side.minimum;
+    var maximum = side.maximum;
+    if (minimum === undefined && maximum === undefined) return range;
+    var given = range !== undefined ? range : fittedRange(side.log, padded);
+    return function (chart, min, max, key) {
+      var fitted = given(chart, min, max, key);
+      if (keepsZoom && isZoom(chart, min, max)) return fitted;
+      var low = minimum !== undefined ? minimum : /** @type {number} */ (fitted[0]);
+      var high = maximum !== undefined ? maximum : /** @type {number} */ (fitted[1]);
+      if (low < high) return [low, high];
+      if (maximum === undefined) return [low, side.log ? low * 10 : low + 1];
+      return [side.log ? high / 10 : high - 1, high];
+    };
+  }
+  /* whether uPlot asks the x range at the user's zoom, rather than at all the data */
+  /** @param {uPlot} chart @param {number | null} min @param {number | null} max */
+  function isZoom(chart, min, max) {
+    var values = xs(chart);
+    if (min === null || max === null || values.length === 0) return false;
+    return min !== values[0] || max !== values[values.length - 1];
   }
   /* a reference line's dash pattern, by its style, in CSS pixels */
   /** @type {Record<ChartLineSpec["style"], number[]>} */
@@ -553,6 +595,10 @@
     var first = /** @type {number} */ (xs[0]);
     var last = /** @type {number} */ (xs[xs.length - 1]);
     if (min <= first && max >= last) return undefined;
+    // all the data at the axis' bounds, narrower than the data: no zoom either
+    var range = rangeFunction(chartScales(chart).x);
+    var full = range !== undefined ? range(chart, first, last, "x") : [first, last];
+    if (min === full[0] && max === full[1]) return undefined;
     return { min: min, max: max };
   }
   /* a chart's scales: the x and the y, which every chart has, and the second y */
