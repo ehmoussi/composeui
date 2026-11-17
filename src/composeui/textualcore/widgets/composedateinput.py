@@ -13,8 +13,9 @@ from textual.validation import ValidationResult, Validator
 from textual.widget import Widget
 from textual.widgets import Button
 
+from composeui.core._views.inputs import ISO_DATE_FORMAT
 from composeui.core.signal import Signal
-from composeui.core.view import ISO_DATE_FORMAT, format_date, parse_date
+from composeui.core.view import format_date, parse_date
 from composeui.textualcore.widgets.composeinput import ComposeInput
 
 if TYPE_CHECKING:

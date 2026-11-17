@@ -78,15 +78,15 @@ from qtpy.QtWidgets import (
 )
 
 from composeui.core import chartimage
+from composeui.core._views.controls import MAX_SLIDER_STEPS
+from composeui.core._views.tables import SOURCE_TABLE_WINDOW
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.chartcolors import SERIES_COLORS
-from composeui.core.registry import create_renderer
+from composeui.core.registry import RendererType, create_renderer
 from composeui.core.renderer import MainRenderer, NoRenderedObjectError, RendererContainer
 from composeui.core.view import (
-    MAX_SLIDER_STEPS,
     SEARCH_DELAY_MS,
     SOURCE_TABLE_JOB_ROWS,
-    SOURCE_TABLE_WINDOW,
     ActionView,
     BarMode,
     ButtonVariant,
@@ -108,7 +108,6 @@ from composeui.core.view import (
     MapPoint,
     MapView,
     ReferenceLine,
-    RendererType,
     Router,
     Scale,
     SelectionMode,

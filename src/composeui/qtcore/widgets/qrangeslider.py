@@ -9,7 +9,8 @@ from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import QPainter
 from qtpy.QtWidgets import QSlider, QStyle, QStyleOptionSlider
 
-from composeui.core.view import RANGE_DASH, SliderMixin
+from composeui.core._views.controls import RANGE_DASH
+from composeui.core.view import SliderMixin
 from composeui.qtcore.widgets.qvalueslider import report_timer
 
 if TYPE_CHECKING:

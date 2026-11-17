@@ -11,7 +11,6 @@ from composeui.core.view import (
     ArrowShape,
     CircleShape,
     DimensionShape,
-    DrawingPlacement,
     DrawingView,
     LineShape,
     LineStyle,
@@ -27,6 +26,7 @@ from composeui.qtcore.widgets.qtextrole import role_color, role_font, role_palet
 if TYPE_CHECKING:
     from qtpy.QtGui import QPaintEvent
 
+    from composeui.core._views.graphics import DrawingPlacement
     from composeui.core.view import Shape
 
 #: a line's width and an arrow head's length, in pixels at any scale

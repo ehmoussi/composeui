@@ -11,8 +11,9 @@ from textual.geometry import Size
 from textual.widgets import Input, Label, Log
 from textual_fspicker import FileSave
 
+from composeui.core._views.content import follow_match
 from composeui.core.signal import Signal
-from composeui.core.view import find_in_lines, follow_match
+from composeui.core.view import find_in_lines
 
 if TYPE_CHECKING:
     from collections.abc import Sequence

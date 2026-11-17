@@ -33,8 +33,8 @@ from starlette.responses import HTMLResponse
 from starlette.routing import Route as StarletteRoute
 
 from composeui.core import chartimage
+from composeui.core._views.files import DOWNLOAD_CHUNK_SIZE
 from composeui.core.view import (
-    DOWNLOAD_CHUNK_SIZE,
     ButtonView,
     ChartView,
     DateInputView,

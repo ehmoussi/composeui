@@ -22,19 +22,13 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
+from composeui.core._views.dialogs import dialogs_in
 from composeui.core.model import InvalidStateError
 from composeui.core.reactivity import batch, stop_reactions
 from composeui.core.registry import RendererType
 from composeui.core.reload import load_reloaded_state, save_reloaded_state
 from composeui.core.study import has_data, open_study, save_study
-from composeui.core.view import (
-    ConsoleView,
-    FileUploadMixin,
-    SourceTableView,
-    UploadedFile,
-    View,
-    dialogs_in,
-)
+from composeui.core.view import ConsoleView, FileUploadMixin, SourceTableView, UploadedFile, View
 from composeui.webcore._renderers.actions import WebActionRenderer
 from composeui.webcore._renderers.charts import WebChartRenderer
 from composeui.webcore._renderers.content import WebConsoleRenderer, WebImageRenderer

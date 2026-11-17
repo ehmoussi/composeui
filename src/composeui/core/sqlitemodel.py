@@ -48,18 +48,11 @@ from urllib.request import HTTPRedirectHandler, build_opener, urlopen
 import attrs
 from typing_extensions import dataclass_transform
 
+from composeui.core._views.tables import ColumnKind, column_kind
 from composeui.core.jobs import current_job
 from composeui.core.model import InvalidStateError, Model, RefusedError
 from composeui.core.signal import Signal, SignalNoArgs
-from composeui.core.view import (
-    CONVERTER,
-    ColumnKind,
-    Filter,
-    FilterOperator,
-    Sort,
-    SourceColumn,
-    column_kind,
-)
+from composeui.core.view import CONVERTER, Filter, FilterOperator, Sort, SourceColumn
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable, Mapping, Sequence

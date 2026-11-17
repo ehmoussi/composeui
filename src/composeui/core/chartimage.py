@@ -21,7 +21,8 @@ from typing import TYPE_CHECKING, Any
 
 import attrs
 
-from composeui.core.view import SECONDS_PER_DAY, BarMode, ChartKind, ChartView, LineStyle
+from composeui.core._views.charts import SECONDS_PER_DAY
+from composeui.core.view import BarMode, ChartKind, ChartView, LineStyle
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

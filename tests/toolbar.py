@@ -4,14 +4,8 @@ from __future__ import annotations
 
 from attrs import Factory
 
-from composeui.core.view import (
-    ActionView,
-    MainView,
-    OpenFileAction,
-    SeparatorAction,
-    ToolBar,
-    define_view,
-)
+from composeui.core._views.actions import OpenFileAction
+from composeui.core.view import ActionView, MainView, SeparatorAction, ToolBar, define_view
 from tests.pages import PagesRouter
 
 

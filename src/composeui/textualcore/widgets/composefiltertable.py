@@ -7,8 +7,9 @@ from textual.containers import Horizontal, HorizontalScroll, Vertical
 from textual.content import Content
 from textual.widgets import Button, Input, Select, Static
 
+from composeui.core._views.tables import split_pattern
 from composeui.core.signal import Signal, SignalNoArgs
-from composeui.core.view import SEARCH_DELAY_MS, as_pattern, split_pattern
+from composeui.core.view import SEARCH_DELAY_MS, as_pattern
 from composeui.textualcore.widgets.composetable import ComposeTable
 
 if TYPE_CHECKING:

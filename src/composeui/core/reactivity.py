@@ -398,7 +398,7 @@ def _enable() -> None:
 
 
 def _track_fields(cls: type[Any]) -> None:
-    from composeui.core.view import view_fields  # noqa: PLC0415 (it imports this module)
+    from composeui.core._views.base import view_fields  # noqa: PLC0415 (it imports this module)
 
     # not its signals: made on their first read, they're no input (see `define_view`)
     for field in view_fields(cls):

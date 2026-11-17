@@ -26,6 +26,8 @@ import pandas as pd
 import polars as pl
 
 from composeui.core import dashboard
+from composeui.core._views.controls import MAX_SLIDER_STEPS
+from composeui.core._views.files import DownloadSink
 from composeui.core.application import Application
 from composeui.core.dashboard import (
     column_filter,
@@ -38,11 +40,9 @@ from composeui.core.dashboard import (
 )
 from composeui.core.reactivity import reactive, reactive_inputs
 from composeui.core.view import (
-    MAX_SLIDER_STEPS,
     CheckListView,
     ComboBoxView,
     DateRangeInputView,
-    DownloadSink,
     FloatRangeSliderView,
     LabelRowMultiComboBoxView,
     MainView,

@@ -14,7 +14,9 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
-from composeui.core.view import ISO_DATE_FORMAT, RANGE_DASH, format_date, parse_date
+from composeui.core._views.controls import RANGE_DASH
+from composeui.core._views.inputs import ISO_DATE_FORMAT
+from composeui.core.view import format_date, parse_date
 
 #: a calendar's own range, Qt's default, for a limit the view leaves out
 _CALENDAR_FIRST, _CALENDAR_LAST = QDate(-4714, 11, 25), QDate(9999, 12, 31)

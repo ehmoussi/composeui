@@ -17,6 +17,10 @@ from typing import TYPE_CHECKING, ClassVar, Generic, Protocol, TextIO, TypeVar, 
 
 from typing_extensions import TypedDict, TypeVarTuple, Unpack, overload, override
 
+from composeui.core._views.base import _STREAM_HANDLER as VIEW_STREAM_HANDLER
+from composeui.core._views.base import LOGGER as VIEW_LOGGER
+from composeui.core._views.base import set_references
+from composeui.core._views.tables import take_filter_patterns
 from composeui.core.autosave import Autosave
 from composeui.core.jobs import starting_study
 from composeui.core.reactivity import start_reactions
@@ -26,9 +30,6 @@ from composeui.core.signal import _STREAM_HANDLER as SIGNAL_STREAM_HANDLER
 from composeui.core.signal import LOGGER as SIGNAL_LOGGER
 from composeui.core.signal import Signal
 from composeui.core.study import open_study
-from composeui.core.view import _STREAM_HANDLER as VIEW_STREAM_HANDLER
-from composeui.core.view import LOGGER as VIEW_LOGGER
-from composeui.core.view import set_references, take_filter_patterns
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Sequence

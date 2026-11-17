@@ -35,8 +35,9 @@ import uvicorn
 from playwright.sync_api import sync_playwright
 from qtpy.QtWidgets import QApplication
 
+from composeui.core.model import Model
 from composeui.core.registry import RendererType
-from composeui.core.view import UploadedFile
+from composeui.core.view import MainView, UploadedFile
 from composeui.qtcore.qtapplication import QtApplication, QtModelApplication
 from composeui.textualcore.textualapplication import TextualApplication, TextualModelApplication
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
@@ -66,8 +67,6 @@ if TYPE_CHECKING:
     from starlette.applications import Starlette
 
     from composeui.core.application import Application
-    from composeui.core.model import Model
-    from composeui.core.view import MainView
 
 ROOT = Path(__file__).resolve().parent.parent
 IMAGES = ROOT / "docs" / "images"

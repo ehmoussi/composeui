@@ -12,8 +12,8 @@ from textual_fspicker import FileOpen, FileSave, SelectDirectory
 from textual_fspicker.parts import DirectoryNavigation
 from textual_fspicker.path_filters import Filter, Filters
 
+from composeui.core._views.files import path_of_text, text_of_path, with_extension
 from composeui.core.signal import Signal, SignalNoArgs
-from composeui.core.view import path_of_text, text_of_path, with_extension
 from composeui.textualcore.widgets.composeinput import ComposeInput
 
 if TYPE_CHECKING:

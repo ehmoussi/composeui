@@ -6,13 +6,13 @@ from typing import TYPE_CHECKING, Any, Callable, Final
 
 from markupsafe import Markup
 
+from composeui.core._views.actions import OpenFileAction
 from composeui.core.renderer import MainRenderer
 from composeui.core.view import (
     DialogView,
     FormRowView,
     MainView,
     Menu,
-    OpenFileAction,
     PageWidth,
     Router,
     SidebarView,

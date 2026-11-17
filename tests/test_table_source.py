@@ -8,7 +8,8 @@ from typing import TYPE_CHECKING, Any, Optional, cast
 import attrs
 import pytest
 
-from composeui.core.view import ListSource, Sort, parse_filter
+from composeui.core._views.tables import parse_filter
+from composeui.core.view import ListSource, Sort
 from tests.tables import Room
 
 if TYPE_CHECKING:

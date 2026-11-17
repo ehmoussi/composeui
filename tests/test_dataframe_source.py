@@ -20,6 +20,7 @@ import narwhals.stable.v2 as nw
 import pandas as pd
 import polars as pl
 
+from composeui.core._views.tables import parse_filter
 from composeui.core.dataframesource import (
     DataFrameSource,
     _frame_rows,
@@ -44,7 +45,6 @@ from composeui.core.view import (
     SourceTableView,
     child,
     define_view,
-    parse_filter,
 )
 
 if TYPE_CHECKING:

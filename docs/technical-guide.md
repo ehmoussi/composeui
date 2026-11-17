@@ -50,6 +50,7 @@ backend, and run the checks. To build an app with ComposeUI, read the
 src/composeui/
   cli.py         # the `composeui` command (`composeui run app.py`)
   core/          # toolkit-agnostic: views, signals, renderer base, application, registry
+    _views/      # the views, a module per family (view.py exports them)
   qtcore/        # Qt backend via qtpy (QtApplication, qtrenderer.py, custom widgets/)
   textualcore/   # Textual (TUI) backend
   webcore/       # Web backend (Starlette + htmx + daisyUI); static/app.css is built
@@ -108,6 +109,18 @@ A view is an `attrs` class. `@define_view` adds the `notify_renderer` hook to th
 `on_setattr` of its fields. When code sets a public attribute to a new value, the hook calls
 `refresh_attribute(name, value)` on the renderer of the view. Do not add manual `update()`
 or `refresh()` calls.
+
+`composeui.core.view` is the public module of the views: it imports them and lists them in
+`__all__`, and its last line sets up the `Shape` union, once every class it needs exists. Each
+family of views has its module in `core/_views/`, as the web's renderers do: `inputs.py`,
+`controls.py`, `choices.py`, `content.py`, `charts.py`, `graphics.py`, `tables.py`, `files.py`,
+`forms.py`, `actions.py`, `dialogs.py`, `containers.py` and `navigation.py`. `base.py` holds
+`View`, `define_view`, the lazy signals, the converter `CONVERTER` and the helpers that several
+families share. `main.py` holds `MainView` and the state code, which treats some views apart
+(choices, record tables, charts): it imports any family, and no family imports it at run time.
+The base names no concrete view: a walk of the views calls a method that `View` defines, such
+as `_check_again` (a check run again in a new language) and `_keep_model` (a list's model).
+`View._main_view` names `MainView`, which `attrs` resolves in `base.py`: `main.py` puts it there.
 
 A renderer (`composeui.core.renderer.Renderer`) binds a view to a toolkit object, its
 rendered object. It syncs them in both directions:
@@ -837,8 +850,10 @@ another process answers with `HX-Refresh`.
 
 ## Add a widget
 
-1. Define the view in `core/view.py`. Set its `_renderer_key`, and give it a class docstring:
-   the [widget catalog](#documentation-site) shows its first paragraph.
+1. Define the view in the module of its family in `core/_views/`, and add it to the imports
+   and the `__all__` of `core/view.py` (see [Views and renderers](#views-and-renderers)). Set its
+   `_renderer_key`, and give it a class docstring: the [widget catalog](#documentation-site)
+   shows its first paragraph.
 
    ```python
    @define_view
@@ -904,7 +919,7 @@ another process answers with `HX-Refresh`.
    [user guide](user-guide/running-the-app.md#backends). In each feature section of the user guide,
    say what the new backend shows, as the section does for Qt, Textual, and the web.
 
-`core/view.py` should not need changes. `run` reads the `--backend` choices from
+The views (`core/view.py` and `core/_views/`) should not need changes. `run` reads the `--backend` choices from
 `RendererType`, so the new backend is one of them.
 
 ## Development
@@ -1062,6 +1077,11 @@ files, and delete `js/vendor/`.
   - Give a `cattrs` hook its type explicitly, with
     `CONVERTER.register_structure_hook(cls, func)`, not as a bare decorator, which reads
     the annotation.
+  - Import the type of a view field at run time, not under `TYPE_CHECKING`, in the module
+    that defines the view: `attrs` resolves it there. Ruff checks it:
+    `runtime-evaluated-decorators` lists `define_view` and `attrs.frozen`. A module of
+    `core/_views/` that `main.py` imports cannot name `MainView` in a field. Only `base.py`
+    has it, which `main.py` gives it (see [Views and renderers](#views-and-renderers)).
 - Stay compatible with Python 3.9. In the annotations that `attrs` and `cattrs` evaluate at
   runtime, such as view fields, use `Optional[...]` and `Union[...]`, not `X | Y`.
 - In `qtcore`, import Qt from `qtpy`, never from `PySide6` or `PyQt*`.
@@ -1117,8 +1137,8 @@ uv sync --group dev --group docs --all-extras
   docstring, single backticks link to the name they hold. When you add a module to
   `composeui.core`, add its page and its entry in `docs/api/index.md`.
 - **The widget catalog is built from the views.** The `widget-catalog` directive
-  (`docs/_ext/widgetcatalog.py`) lists each view of `composeui.core.view` that has a
-  `_renderer_key`, with the first paragraph of its docstring. A column per backend says
+  (`docs/_ext/widgetcatalog.py`) lists each view of the modules of `core/_views/` that has a
+  `_renderer_key`, by module, with the first paragraph of its docstring. A column per backend says
   whether its `RENDERERS` has the key. A new widget, or a new backend, is in the catalog
   without a change to `docs/widgets.md`.
 - **A warning fails the build**, as a broken link or a docstring that autodoc cannot read.

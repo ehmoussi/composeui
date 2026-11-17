@@ -17,7 +17,8 @@ from qtpy.QtWidgets import (
     QWidgetItem,
 )
 
-from composeui.core.view import SEARCH_DELAY_MS, as_pattern, split_pattern
+from composeui.core._views.tables import split_pattern
+from composeui.core.view import SEARCH_DELAY_MS, as_pattern
 from composeui.qtcore.widgets.qplaintext import plain_label, plain_tool_tip
 from composeui.qtcore.widgets.qtexttable import QTextTableView
 

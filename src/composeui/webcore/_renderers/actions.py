@@ -8,19 +8,14 @@ from typing import TYPE_CHECKING, Any
 
 from markupsafe import Markup
 
-from composeui.core.view import (
-    ActionView,
+from composeui.core._views.actions import (
     ExitAppAction,
-    Menu,
     NewAction,
     OpenFileAction,
-    PickFileAction,
     SaveAction,
     SaveAsAction,
-    SeparatorAction,
-    ToolBar,
-    View,
 )
+from composeui.core.view import ActionView, Menu, PickFileAction, SeparatorAction, ToolBar, View
 from composeui.webcore.page import SAVE_FORM_ID
 
 if TYPE_CHECKING:

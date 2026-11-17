@@ -11,6 +11,7 @@ from qtpy.QtCore import QThread, QTimer
 from qtpy.QtWidgets import QApplication, QMainWindow, QWidget
 
 from composeui.core.application import Application, ModelApplication
+from composeui.core.registry import RendererType
 from composeui.core.reload import (
     acknowledge_changes,
     can_reload_in_place,
@@ -22,7 +23,6 @@ from composeui.core.reload import (
     save_reloaded_state,
     take_changes,
 )
-from composeui.core.view import RendererType
 from composeui.qtcore.qtrenderer import QtMainRenderer, QtMainWindow
 
 if TYPE_CHECKING:

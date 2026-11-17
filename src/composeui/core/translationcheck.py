@@ -29,8 +29,8 @@ from typing import TYPE_CHECKING
 
 import attrs
 
+from composeui.core._views.base import _retranslate
 from composeui.core.translation import CATALOGS_DIR, load_catalog
-from composeui.core.view import _retranslate
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Sequence

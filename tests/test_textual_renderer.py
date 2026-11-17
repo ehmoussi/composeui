@@ -60,12 +60,12 @@ from textual_fspicker.parts import DirectoryNavigation
 from textual_fspicker.parts.directory_navigation import DirectoryEntryStyling
 
 from composeui.core import chartimage
+from composeui.core._views.tables import SOURCE_TABLE_WINDOW
 from composeui.core.application import ModelApplication, _add_reference_to_signals
-from composeui.core.registry import create_renderer
+from composeui.core.registry import RendererType, create_renderer
 from composeui.core.renderer import NoRenderedObjectError, Renderer, RendererContainer
 from composeui.core.view import (
     SEARCH_DELAY_MS,
-    SOURCE_TABLE_WINDOW,
     ActionView,
     ButtonVariant,
     CellStyle,
@@ -81,7 +81,6 @@ from composeui.core.view import (
     LogType,
     MainView,
     ReferenceLine,
-    RendererType,
     Scale,
     SelectionMode,
     Series,

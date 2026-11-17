@@ -1,6 +1,6 @@
 # Widget catalog
 
-This catalog lists each view that a backend renders, in the order of `composeui.core.view`.
+This catalog lists each view that a backend renders, grouped by family.
 Each name links to its [API reference](api/view.md). The
 [user guide](user-guide/widgets.md) shows how to use them. A column per backend says whether
 the backend renders the view (✓) or not (—).

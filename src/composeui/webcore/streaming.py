@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING, BinaryIO, cast
 import anyio
 from starlette.responses import PlainTextResponse, Response, StreamingResponse
 
-from composeui.core.view import DOWNLOAD_CHUNK_SIZE, DownloadCanceledError, DownloadSink
+from composeui.core._views.files import DOWNLOAD_CHUNK_SIZE, DownloadCanceledError, DownloadSink
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping

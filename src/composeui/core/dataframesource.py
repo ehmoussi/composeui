@@ -15,17 +15,11 @@ from typing import TYPE_CHECKING, Any, NamedTuple, Optional, Union
 import attrs
 import narwhals.stable.v2 as nw
 
+from composeui.core._views.graphics import MAP_LATITUDE_LIMIT
+from composeui.core._views.tables import ColumnKind, column_kind
 from composeui.core.model import RefusedError
 from composeui.core.signal import SignalNoArgs
-from composeui.core.view import (
-    MAP_LATITUDE_LIMIT,
-    ColumnKind,
-    FilterOperator,
-    MapPoint,
-    Series,
-    SourceColumn,
-    column_kind,
-)
+from composeui.core.view import FilterOperator, MapPoint, Series, SourceColumn
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Generator, Hashable, Iterator, Mapping, Sequence

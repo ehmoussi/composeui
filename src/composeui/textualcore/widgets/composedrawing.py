@@ -14,7 +14,6 @@ from composeui.core.view import (
     ArrowShape,
     CircleShape,
     DimensionShape,
-    DrawingPlacement,
     DrawingView,
     LineShape,
     LineWeight,
@@ -26,6 +25,7 @@ from composeui.core.view import (
 )
 
 if TYPE_CHECKING:
+    from composeui.core._views.graphics import DrawingPlacement
     from composeui.core.view import Shape
 
 #: a braille cell's dots, across and down: a terminal's cell is about twice as tall as wide,

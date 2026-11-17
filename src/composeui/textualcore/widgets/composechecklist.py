@@ -15,7 +15,7 @@ from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 if TYPE_CHECKING:
     from textual.app import ComposeResult
 
-    from composeui.core.view import ChoicesShown
+    from composeui.core._views.choices import ChoicesShown
 
 
 class ComposeCheckAll(Checkbox):

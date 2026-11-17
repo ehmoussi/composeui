@@ -61,6 +61,7 @@ agents). Run the examples with `uv run python -m examples.pipeform --backend qt`
 src/composeui/
   cli.py         # the `composeui` command (`composeui run app.py`)
   core/          # toolkit-agnostic: views, signals, renderer base, application, registry
+    _views/      # the views, a module per family (view.py exports them)
   qtcore/        # Qt backend via qtpy (QtApplication, qtrenderer.py, custom widgets/)
   textualcore/   # Textual (TUI) backend
   webcore/       # Web backend (Starlette + htmx + daisyUI); static/app.css is built
@@ -84,7 +85,8 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   the extra when one is missing). A view picks its renderer by its `_renderer_key` class variable. A
   backend that doesn't register a key simply doesn't render that view (returns `None`), so partial
   backends are fine.
-- **Adding a widget:** define the view in `core/view.py` (set `_renderer_key`), then add a
+- **Adding a widget:** define the view in the `core/_views/` module of its family (set
+  `_renderer_key`) and export it in the `__all__` of `core/view.py`, then add a
   renderer + `RENDERERS` entry in each backend that should support it, plus tests per backend.
   On the web, the renderer goes in the `webcore/_renderers/` module of its family (a new
   module for a new family), and its entry in `webcore/renderers.py`.
@@ -93,11 +95,18 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   starts to mix two, whatever its length. The base names no concrete renderer: when it must
   treat one apart, add a hook with a default, as `is_drawn_apart` and `shows` do, not an
   `isinstance` check, which would tie that renderer to the base's module.
+- **View modules:** `core/view.py` only exports the views (`__all__`) and sets up the `Shape`
+  union last. `core/_views/base.py` holds `View`, `define_view`, the converter and the helpers
+  that several families share; `_views/main.py` holds `MainView` and the state code, which may
+  name any view. A module of `_views/` holds one family, as on the web. The base names no
+  concrete view: add a method with a default to `View`, as `_check_again` and `_keep_model` do.
+  A module of `_views/` imports the modules that define what it uses, never `core/view.py`.
 - **Adding a backend:** add one `RendererType` member in `core/registry.py` (with its extra
   in `pyproject.toml`), one
   `RENDERERS` mapping in the new backend's renderers module, and its application classes
   (built from `build_main_view=`, plus `build_model=`/`setup_model=` for the model one) as
-  `APPLICATION`/`MODEL_APPLICATION`. `core/view.py` should not need changes.
+  `APPLICATION`/`MODEL_APPLICATION`. The views (`core/view.py`, `core/_views/`) should not
+  need changes.
 - **Renderer contract:** implement `render`, `refresh_attribute` and the
   `_refresh_dispatcher` (one handler per view attribute the renderer cares about; a missing
   handler raises `MissingRefreshAttributeFunctionError`). The user's changes reach the view
@@ -125,6 +134,10 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   types resolve from the module globals; and give `cattrs` hooks their type explicitly
   (`CONVERTER.register_structure_hook(cls, func)`) rather than as a bare decorator, which
   reads the annotation.
+- Import a view field's type at run time in the module that defines the view, not under
+  `TYPE_CHECKING`: `attrs` resolves it there. Ruff knows (`runtime-evaluated-decorators` lists
+  `define_view` and `attrs.frozen`). A module of `core/_views/` that `main.py` imports can't
+  name `MainView` in a field: only `base.py` gets it, from `main.py`.
 - Stay compatible with Python 3.9: use `Optional[...]`/`Union[...]`, not `X | Y`, in
   annotations that `attrs`/`cattrs` evaluate at runtime (view fields), since `X | Y` fails
   there on 3.9 (ruff's `keep-runtime-typing` stops pyupgrade from rewriting them).

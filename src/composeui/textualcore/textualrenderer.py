@@ -20,6 +20,11 @@ from textual_fspicker.path_filters import Filter, Filters
 from typing_extensions import Protocol
 
 from composeui.core import chartimage
+from composeui.core._views.actions import OpenFileAction, SaveAction, SaveAsAction
+from composeui.core._views.content import image_content, line_styles_after, lines_after
+from composeui.core._views.files import save_download
+from composeui.core._views.inputs import date_hint
+from composeui.core._views.tables import SourceTableByPosition
 from composeui.core.registry import RendererType
 from composeui.core.renderer import (
     MainRenderer,
@@ -54,20 +59,16 @@ from composeui.core.view import (
     Menu,
     MetricView,
     OkCancelDialogView,
-    OpenFileAction,
     Orientation,
     PageView,
     PickFileAction,
     ProgressBarView,
     RangeSliderMixin,
     Router,
-    SaveAction,
-    SaveAsAction,
     SelectionMode,
     SeparatorAction,
     SidebarView,
     SliderMixin,
-    SourceTableByPosition,
     SplitterView,
     StatusBar,
     TabPage,
@@ -77,12 +78,7 @@ from composeui.core.view import (
     UploadedFile,
     VerticalView,
     View,
-    date_hint,
-    image_content,
-    line_styles_after,
-    lines_after,
     replace_cell,
-    save_download,
 )
 from composeui.textualcore.widgets.composebutton import ComposeButton
 from composeui.textualcore.widgets.composechart import ComposeChart
@@ -131,13 +127,13 @@ if TYPE_CHECKING:
     from textual.widget import AwaitMount, Widget
     from textual.widgets.button import ButtonVariant as ButtonVariantName
 
+    from composeui.core._views.choices import ChoicesShown
     from composeui.core.signal import Signal, SignalNoArgs
     from composeui.core.view import (
         Axis,
         BarMode,
         CellStyle,
         CellWidget,
-        ChoicesShown,
         DownloadedFile,
         HeaderGroup,
         NodeMark,

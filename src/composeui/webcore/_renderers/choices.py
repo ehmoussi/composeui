@@ -7,8 +7,9 @@ from typing import TYPE_CHECKING, Any, Callable, TypeVar, cast
 
 from markupsafe import Markup
 
+from composeui.core._views.choices import walk_tree
 from composeui.core.renderer import ViewLike
-from composeui.core.view import TreeView, walk_tree
+from composeui.core.view import TreeView
 from composeui.webcore.changes import _DIRTY
 
 if TYPE_CHECKING:
@@ -26,8 +27,8 @@ from composeui.webcore.webrenderer import _MARK_ICONS, WebRenderer, _file_icon, 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from composeui.core._views.choices import ChoicesShown
     from composeui.core.signal import Signal
-    from composeui.core.view import ChoicesShown
 
 
 TValue = TypeVar("TValue")

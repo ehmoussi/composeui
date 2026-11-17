@@ -20,10 +20,10 @@ from hypothesis import strategies as st
 
 from composeui.core.application import ModelApplication
 from composeui.core.jobs import Job
-from composeui.core.model import RefusedError
+from composeui.core.model import InvalidStateError, RefusedError
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable, table, unique_name
 from composeui.core.study import new_study, open_study
-from composeui.core.view import ButtonView, InvalidStateError, MainView, TableView, define_view
+from composeui.core.view import ButtonView, MainView, TableView, define_view
 from examples.webhello import HelloMainView
 
 if TYPE_CHECKING:

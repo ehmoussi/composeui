@@ -13,6 +13,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from composeui.core._views.tables import parse_filter
 from composeui.core.application import Application
 from composeui.core.view import (
     CellStyle,
@@ -23,7 +24,6 @@ from composeui.core.view import (
     SelectionMode,
     T,
     TableView,
-    parse_filter,
 )
 from tests.tables import Room, SortedRoomsMainView
 

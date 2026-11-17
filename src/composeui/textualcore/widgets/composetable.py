@@ -9,16 +9,16 @@ from textual.coordinate import Coordinate
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Input, Label, OptionList
 
+from composeui.core._views.files import with_extension
+from composeui.core._views.tables import PLAIN_CELL
 from composeui.core.signal import Signal
 from composeui.core.view import (
     CHECKED_TEXTS,
-    PLAIN_CELL,
     CellKind,
     CellStyle,
     CellWidget,
     HeaderGroup,
     replace_cell,
-    with_extension,
 )
 from composeui.textualcore.widgets.composefilepathinput import (
     ReplaceFileScreen,

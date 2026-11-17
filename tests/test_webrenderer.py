@@ -66,6 +66,10 @@ from starlette.testclient import TestClient
 from uvicorn.importer import import_from_string
 
 from composeui.core import chartimage
+from composeui.core._views.actions import SaveAsAction
+from composeui.core._views.base import made_signals
+from composeui.core._views.files import DOWNLOAD_CHUNK_SIZE, DownloadCanceledError
+from composeui.core._views.tables import SOURCE_TABLE_WINDOW
 from composeui.core.application import ModelApplication
 from composeui.core.model import Model, RefusedError
 from composeui.core.registry import RendererType
@@ -73,8 +77,6 @@ from composeui.core.renderer import NoRenderedObjectError, RendererContainer
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable
 from composeui.core.study import save_study
 from composeui.core.view import (
-    DOWNLOAD_CHUNK_SIZE,
-    SOURCE_TABLE_WINDOW,
     ActionView,
     BarMode,
     ButtonVariant,
@@ -88,7 +90,6 @@ from composeui.core.view import (
     ConsoleView,
     DateRangeInputView,
     DialogView,
-    DownloadCanceledError,
     DownloadedFile,
     EditRefusedError,
     FilePathInputMixin,
@@ -112,7 +113,6 @@ from composeui.core.view import (
     PageWidth,
     RangeSliderView,
     Router,
-    SaveAsAction,
     SavePathInputMixin,
     Scale,
     SelectionMode,
@@ -133,7 +133,6 @@ from composeui.core.view import (
     View,
     child,
     define_view,
-    made_signals,
     replace_cell,
 )
 from composeui.webcore import downloads as downloads_module

@@ -16,9 +16,10 @@ pytest.importorskip("starlette")
 import polars as pl
 from starlette.testclient import TestClient
 
+from composeui.core._views.files import DownloadSink
 from composeui.core.application import Application
 from composeui.core.renderer import RendererContainer
-from composeui.core.view import DownloadSink, MapPoint, StreamContent
+from composeui.core.view import MapPoint, StreamContent
 from composeui.webcore.webapplication import WebApplication
 from composeui.webcore.webrenderer import WebRenderer
 from examples import uberdashboard
