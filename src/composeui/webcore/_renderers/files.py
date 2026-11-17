@@ -11,6 +11,7 @@ from typing_extensions import Protocol
 
 from composeui.core.renderer import ViewLike
 from composeui.core.view import CellKind, is_within_roots, with_extension
+from composeui.webcore._renderers.inputs import InputViewLike, _WebTextFieldRenderer
 from composeui.webcore.serverfiles import (
     has_extension,
     is_item_name,
@@ -19,14 +20,7 @@ from composeui.webcore.serverfiles import (
     list_folder,
     resolve_roots,
 )
-from composeui.webcore.webrenderer import (
-    InputViewLike,
-    UnsupportedEventError,
-    WebRenderer,
-    _file_types,
-    _icon,
-    _WebTextFieldRenderer,
-)
+from composeui.webcore.webrenderer import UnsupportedEventError, WebRenderer, _file_types, _icon
 
 if TYPE_CHECKING:
     from collections.abc import Mapping

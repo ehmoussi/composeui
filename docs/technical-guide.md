@@ -365,14 +365,17 @@ section covers what users see.
 - **htmx requests and responses.** The page and the server talk through htmx requests and
   responses, with Starlette (not FastAPI) and no JavaScript framework. Each renderer writes its
   HTML by hand (no Jinja2), with `markupsafe.Markup`, which escapes every value put in it.
-- **The renderers' modules.** `webrenderer.py` holds the base `WebRenderer` and most renderers. A
-  family of renderers can move to its own module in `_renderers/`, as the charts
-  (`_renderers/charts.py`), the tables (`_renderers/tables.py`) and the files
-  (`_renderers/files.py`) did. Such a module imports `webrenderer.py`. So `renderers.py`, not
-  `webrenderer.py`, maps each renderer key to its class, written out, not discovered. `WebRenderer`
-  stays in `webrenderer.py` while it names concrete renderers, such as `WebDialogRenderer`.
-  `changes.py` collects the renderers that a request changes (`collect_dirty`), and
-  `rendertarget.py` holds a session's view tree and its lock (`RenderTarget`).
+- **The renderers' modules.** Most families of renderers have a module in `_renderers/`: `inputs.py`
+  (text, numbers, dates), `controls.py` (check boxes, buttons, sliders), `choices.py`, `content.py`
+  (labels, images, Markdown, consoles, logs, metrics), `charts.py`, `graphics.py` (maps, drawings),
+  `tables.py` and `files.py` (path fields, uploads, the server's files). Such a module imports
+  `webrenderer.py`. So `renderers.py`, not `webrenderer.py`, maps each renderer key to its class,
+  written out, not discovered. `webrenderer.py` keeps the base `WebRenderer`, and the renderers that
+  it names, such as `WebDialogRenderer`, with those tied to them: forms, actions and menus, dialogs,
+  containers, tabs, the router and the main view. They can move once the base asks each renderer
+  through a method instead. `changes.py` collects the renderers that a request changes
+  (`collect_dirty`), and `rendertarget.py` holds a session's view tree and its lock
+  (`RenderTarget`).
 - **No code in the markup.** The page's `Content-Security-Policy` (`headers.py`) runs script
   files only, and htmx runs without `allowEval`: no inline handler, `hx-on`, `js:` value, or
   trigger filter. A renderer marks its element (`data-post-event`, `data-close-dialog`, ...) or
