@@ -210,6 +210,10 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- Textual draws a chart whose axis has no value to show, instead of failing: an empty chart
+  with a log axis, a log y axis with only vertical lines or with all its series on `y2`, and a
+  series of gaps alone, such as one whose values a log axis can't show. Such a series isn't
+  drawn, nor named in the legend.
 - On the web, a page keeps its session when the server's clock steps back, e.g. at a time sync.
   The session cookie was refused until the clock caught up: the page reloaded into a new
   session, without the unsaved work.

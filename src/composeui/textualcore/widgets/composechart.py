@@ -117,13 +117,15 @@ class ComposeChart(PlotextPlot):
             Color.parse(curve.color or series_color(index, is_dark=is_dark)).rgb
             for index, curve in enumerate(self.series)
         ]
-        if self._x_log:
+        # a log scale only on an axis with values: plotext fails to draw the ticks of one
+        # without any, e.g. an empty chart's
+        lines = self._drawn_lines()
+        xs, _ys = self._extent(on_y2=False)
+        if self._x_log and (len(xs) > 0 or any(line.vertical for line in lines)):
             plt.xscale("log")
-        if self.y.is_log:
-            plt.yscale("log")
-        # not a side without data: plotext would fail to draw its log ticks
-        if has_y2 and self.y2.is_log:
-            plt.yscale("log", yside="right")
+        for on_y2 in (False, True):
+            if self._y_axis(on_y2=on_y2).is_log and self._has_y(lines, on_y2=on_y2):
+                plt.yscale("log", yside=_SIDES[on_y2])
         self._plot_bars(colors)
         self._plot_curves(colors)
         self._plot_reference_lines()
@@ -140,18 +142,42 @@ class ComposeChart(PlotextPlot):
         """Get where plotext draws the first category: it counts them from 1."""
         return 1 if len(self.categories) > 0 else 0
 
+    def _drawn_lines(self) -> list[ReferenceLine]:
+        return ChartView.drawn_lines(
+            self.reference_lines,
+            x_log=self._x_log,
+            y_log=self.y.is_log,
+            y2_log=self.y2.is_log,
+        )
+
+    def _has_y(self, lines: list[ReferenceLine], *, on_y2: bool) -> bool:
+        """Tell whether plotext gets a value of a y axis: a series' or a line's across it."""
+        _xs, ys = self._extent(on_y2=on_y2)
+        return len(ys) > 0 or any(not line.vertical and line.is_on_y2 == on_y2 for line in lines)
+
+    def _points(self, curve: Series) -> tuple[list[float], list[float]]:
+        """Get the points of a line or of dots as plotext draws them, in its values.
+
+        No points when none has both an x and a y to draw: plotext fails to draw a series of
+        gaps alone, and to name one without points in its legend.
+        """
+        y_log = self._y_axis(on_y2=curve.on_y2).is_log
+        x, y = ChartView.drawn_points(curve, x_log=self._x_log, y_log=y_log)
+        if not any(math.isfinite(a) and math.isfinite(b) for a, b in zip(x, y)):
+            return [], []
+        if curve.step and curve.kind is ChartKind.LINE:
+            x, y = ChartView.step_points(x, y)
+        return [value + self._offset for value in x], y
+
     def _plot_curves(self, colors: list[tuple[int, int, int]]) -> None:
         plt = self.plt
         for index, curve in enumerate(self.series):
             if curve.kind is ChartKind.BAR:
                 continue
-            is_dots = curve.kind is ChartKind.SCATTER
-            draw = plt.scatter if is_dots else plt.plot
-            y_log = self._y_axis(on_y2=curve.on_y2).is_log
-            x, y = ChartView.drawn_points(curve, x_log=self._x_log, y_log=y_log)
-            if curve.step and not is_dots:
-                x, y = ChartView.step_points(x, y)
-            x = [value + self._offset for value in x]
+            draw = plt.scatter if curve.kind is ChartKind.SCATTER else plt.plot
+            x, y = self._points(curve)
+            if len(x) == 0:
+                continue  # not drawn, nor named (see `_points`)
             side = _SIDES[curve.on_y2]
             # plotext fills in the color of the line: an area of its own, under the line
             if curve.fill and curve.fill_color is not None:
@@ -188,22 +214,17 @@ class ComposeChart(PlotextPlot):
         for curve in self.series:
             if curve.kind is ChartKind.BAR:
                 x, y = self._bars(curve)
+                x = [value + self._offset for value in x]
             else:
-                y_log = self._y_axis(on_y2=curve.on_y2).is_log
-                x, y = ChartView.drawn_points(curve, x_log=self._x_log, y_log=y_log)
-            xs.extend(value + self._offset for value in x if math.isfinite(value))
+                x, y = self._points(curve)
+            xs.extend(value for value in x if math.isfinite(value))
             if curve.on_y2 == on_y2:
                 ys.extend(value for value in y if math.isfinite(value))
         return xs, ys
 
     def _plot_reference_lines(self) -> None:
         """Draw the reference lines, each labeled at its end, solid: a terminal has no dashes."""
-        lines = ChartView.drawn_lines(
-            self.reference_lines,
-            x_log=self._x_log,
-            y_log=self.y.is_log,
-            y2_log=self.y2.is_log,
-        )
+        lines = self._drawn_lines()
         if len(lines) == 0:
             return
         offset = self._offset

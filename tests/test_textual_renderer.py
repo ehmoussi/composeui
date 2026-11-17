@@ -3353,6 +3353,50 @@ async def test_a_log_axis_plots_what_it_can_show() -> None:
         assert _plot_monitor(energy).yscale[0] == "log"
 
 
+@pytest.mark.parametrize(
+    ("series", "lines", "named"),
+    [
+        pytest.param([], [], [], id="empty"),
+        pytest.param([], [ReferenceLine(10, "Now", vertical=True)], [], id="a vertical line"),
+        pytest.param(
+            [Series.line("Rate", [1, 10], [1, 2], on_y2=True)], [], ["Rate"], id="all on y2"
+        ),
+        # one of nothing but values the log axis can't show, beside one it draws
+        pytest.param(
+            [Series.line("Activity", [1, 10], [0, -1]), Series.line("Rate", [1, 10], [1, 2])],
+            [],
+            ["Rate"],
+            id="a series of gaps",
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_a_chart_with_an_axis_without_values_is_plotted(
+    series: list[Series], lines: list[ReferenceLine], named: list[str]
+) -> None:
+    view = ChartPagesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    decay = view.router.chart.decay  # log x and y axes
+    assert isinstance(decay.renderer, TextualWidgetRenderer)
+    chart = decay.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 200)) as pilot:
+        view.router.current_route = "chart"
+        decay.series = series
+        decay.reference_lines = lines
+        await pilot.pause()
+
+        text = chart.render().plain  # type: ignore[union-attr]
+        assert "Decay" in text
+        for name in named:
+            assert name in text
+        assert "Activity" not in text  # no point to draw, nor to name
+
+
 @pytest.mark.asyncio
 async def test_reference_lines_are_plotted_labeled() -> None:
     view = ChartPagesMainView()
