@@ -159,6 +159,7 @@ if TYPE_CHECKING:
 
     from composeui.core.signal import Signal, SignalNoArgs
     from composeui.core.view import (
+        Axis,
         CellStyle,
         CellWidget,
         ChoicesShown,
@@ -1706,15 +1707,11 @@ def _map_renderer(view: Any) -> Renderer[Any, Any]:
 class ChartViewLike(ViewLike, Protocol):
     kind: ChartKind
     title: str
-    x_title: str
-    y_title: str
-    x_unit: str
-    y_unit: str
+    x: Axis
+    y: Axis
     series: list[Series]
     reference_lines: list[ReferenceLine]
     categories: list[str]
-    x_log: bool
-    y_log: bool
     save_image_text: str
     clicked: Signal[float, float]
     height: int | None
@@ -1733,15 +1730,11 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
             {
                 "kind": self._refresh_kind,
                 "title": self._refresh_title,
-                "x_title": self._refresh_x_title,
-                "x_unit": self._refresh_x_unit,
-                "y_title": self._refresh_y_title,
-                "y_unit": self._refresh_y_unit,
+                "x": self._refresh_x,
+                "y": self._refresh_y,
                 "series": self._refresh_series,
                 "reference_lines": self._refresh_reference_lines,
                 "categories": self._refresh_categories,
-                "x_log": self._refresh_x_log,
-                "y_log": self._refresh_y_log,
                 "save_image_text": self._refresh_save_image_text,
                 "height": self._refresh_height,
             }
@@ -1762,22 +1755,13 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
     def _refresh_title(_view: ChartViewLike, rendered_object: QChart, value: str) -> None:
         rendered_object.set_title(value)
 
-    # each refreshed with its new value, the view still holding the old one
     @staticmethod
-    def _refresh_x_title(view: ChartViewLike, rendered_object: QChart, value: str) -> None:
-        rendered_object.set_axis("bottom", value, view.x_unit)
+    def _refresh_x(_view: ChartViewLike, rendered_object: QChart, value: Axis) -> None:
+        rendered_object.set_axis("bottom", value)
 
     @staticmethod
-    def _refresh_x_unit(view: ChartViewLike, rendered_object: QChart, value: str) -> None:
-        rendered_object.set_axis("bottom", view.x_title, value)
-
-    @staticmethod
-    def _refresh_y_title(view: ChartViewLike, rendered_object: QChart, value: str) -> None:
-        rendered_object.set_axis("left", value, view.y_unit)
-
-    @staticmethod
-    def _refresh_y_unit(view: ChartViewLike, rendered_object: QChart, value: str) -> None:
-        rendered_object.set_axis("left", view.y_title, value)
+    def _refresh_y(_view: ChartViewLike, rendered_object: QChart, value: Axis) -> None:
+        rendered_object.set_axis("left", value)
 
     @staticmethod
     def _refresh_series(_view: ChartViewLike, rendered_object: QChart, value: list[Series]) -> None:
@@ -1794,14 +1778,6 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
         _view: ChartViewLike, rendered_object: QChart, value: list[str]
     ) -> None:
         rendered_object.set_categories(value)
-
-    @staticmethod
-    def _refresh_x_log(view: ChartViewLike, rendered_object: QChart, value: bool) -> None:
-        rendered_object.set_log(x_log=value, y_log=view.y_log)
-
-    @staticmethod
-    def _refresh_y_log(view: ChartViewLike, rendered_object: QChart, value: bool) -> None:
-        rendered_object.set_log(x_log=view.x_log, y_log=value)
 
     @staticmethod
     def _refresh_save_image_text(_view: ChartViewLike, rendered_object: QChart, value: str) -> None:

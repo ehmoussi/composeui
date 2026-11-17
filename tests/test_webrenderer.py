@@ -113,6 +113,7 @@ from composeui.core.view import (
     Router,
     SaveAsAction,
     SavePathInputMixin,
+    Scale,
     SelectionMode,
     SeparatorAction,
     Series,
@@ -9313,9 +9314,11 @@ def test_a_log_axis_sends_only_what_it_can_show() -> None:
     assert isinstance(chart.renderer, WebChartRenderer)
     assert isinstance(energy.renderer, WebChartRenderer)
     chart.series = [Series(name="Decay", x=[0, 1, 10, 100], y=[5, -1, 10, 100])]
-    chart.x_log = chart.y_log = True
+    chart.x = attrs.evolve(chart.x, scale=Scale.LOG)
+    chart.y = attrs.evolve(chart.y, scale=Scale.LOG)
     energy.series = [Series(name="Heating", x=[0, 1, 2], y=[1000, 0, 50])]
-    energy.x_log = energy.y_log = True
+    energy.x = attrs.evolve(energy.x, scale=Scale.LOG)
+    energy.y = attrs.evolve(energy.y, scale=Scale.LOG)
 
     spec = json.loads(chart.renderer.chart_json())
     assert (spec["x"]["log"], spec["y"]["log"]) == (True, True)

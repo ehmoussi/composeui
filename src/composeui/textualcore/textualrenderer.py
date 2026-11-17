@@ -134,6 +134,7 @@ if TYPE_CHECKING:
 
     from composeui.core.signal import Signal, SignalNoArgs
     from composeui.core.view import (
+        Axis,
         CellStyle,
         CellWidget,
         ChoicesShown,
@@ -1950,15 +1951,11 @@ class TextualProgressBarRenderer(TextualWidgetRenderer[ProgressBarViewLike, Prog
 class ChartViewLike(ViewLike, Protocol):
     kind: ChartKind
     title: str
-    x_title: str
-    y_title: str
-    x_unit: str
-    y_unit: str
+    x: Axis
+    y: Axis
     series: list[Series]
     reference_lines: list[ReferenceLine]
     categories: list[str]
-    x_log: bool
-    y_log: bool
     save_image_text: str
     height: int | None
 
@@ -1976,15 +1973,11 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
             {
                 "kind": self._refresh_kind,
                 "title": self._refresh_title,
-                "x_title": self._refresh_x_title,
-                "x_unit": self._refresh_x_unit,
-                "y_title": self._refresh_y_title,
-                "y_unit": self._refresh_y_unit,
+                "x": self._refresh_x,
+                "y": self._refresh_y,
                 "series": self._refresh_series,
                 "reference_lines": self._refresh_reference_lines,
                 "categories": self._refresh_categories,
-                "x_log": self._refresh_x_log,
-                "y_log": self._refresh_y_log,
                 "save_image_text": self._refresh_save_image_text,
                 "height": self._refresh_height,
             }
@@ -2002,7 +1995,6 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
         rendered_object.kind = value
         rendered_object.refresh()
 
-    # each refreshed with its new value, the view still holding the old one
     @staticmethod
     def _refresh_title(_view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
         rendered_object.chart_title = value
@@ -2010,23 +2002,13 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
         rendered_object.refresh()
 
     @staticmethod
-    def _refresh_x_title(view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
-        rendered_object.x_label = ChartView.axis_label(value, view.x_unit)
+    def _refresh_x(_view: ChartViewLike, rendered_object: ComposeChart, value: Axis) -> None:
+        rendered_object.x = value
         rendered_object.refresh()
 
     @staticmethod
-    def _refresh_x_unit(view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
-        rendered_object.x_label = ChartView.axis_label(view.x_title, value)
-        rendered_object.refresh()
-
-    @staticmethod
-    def _refresh_y_title(view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
-        rendered_object.y_label = ChartView.axis_label(value, view.y_unit)
-        rendered_object.refresh()
-
-    @staticmethod
-    def _refresh_y_unit(view: ChartViewLike, rendered_object: ComposeChart, value: str) -> None:
-        rendered_object.y_label = ChartView.axis_label(view.y_title, value)
+    def _refresh_y(_view: ChartViewLike, rendered_object: ComposeChart, value: Axis) -> None:
+        rendered_object.y = value
         rendered_object.refresh()
 
     @staticmethod
@@ -2048,16 +2030,6 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
         _view: ChartViewLike, rendered_object: ComposeChart, value: list[str]
     ) -> None:
         rendered_object.categories = value
-        rendered_object.refresh()
-
-    @staticmethod
-    def _refresh_x_log(_view: ChartViewLike, rendered_object: ComposeChart, value: bool) -> None:
-        rendered_object.x_log = value
-        rendered_object.refresh()
-
-    @staticmethod
-    def _refresh_y_log(_view: ChartViewLike, rendered_object: ComposeChart, value: bool) -> None:
-        rendered_object.y_log = value
         rendered_object.refresh()
 
     @staticmethod

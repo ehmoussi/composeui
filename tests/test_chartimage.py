@@ -8,6 +8,7 @@ import struct
 import threading
 from typing import TYPE_CHECKING
 
+import attrs
 import pytest
 
 pytest.importorskip("matplotlib")
@@ -25,7 +26,7 @@ from composeui.core.chartimage import (
     image_style,
     save_chart_image,
 )
-from composeui.core.view import ChartKind, ChartView, ReferenceLine, Series
+from composeui.core.view import Axis, ChartKind, ChartView, ReferenceLine, Scale, Series
 from examples.pipechart import PipeChartMainView
 from tests.charts import ChartPagesMainView
 
@@ -71,8 +72,8 @@ def test_the_figure_draws_the_chart_s_series_and_labels() -> None:
 def test_the_title_and_log_axes_are_drawn_when_asked() -> None:
     chart = ChartView(
         title="Decay",
-        x_log=True,
-        y_log=True,
+        x=Axis(scale=Scale.LOG),
+        y=Axis(scale=Scale.LOG),
         series=[Series(name="Activity", x=[0, 1, 10, 100], y=[1, 1000, -1, 10])],
     )
 
@@ -219,7 +220,7 @@ def test_a_series_fill_color_paints_its_area_under_a_line_of_its_own_color() -> 
 
 def test_reference_lines_are_styled_labeled_and_in_range() -> None:
     chart = ChartPagesMainView().router.chart.chart  # its lines past its data
-    chart.y_log = True
+    chart.y = attrs.evolve(chart.y, scale=Scale.LOG)
     chart.reference_lines = [*chart.reference_lines, ReferenceLine(-1, "Never")]
 
     (axes,) = chart_figure(chart).axes
@@ -256,7 +257,7 @@ def test_a_step_series_is_drawn_in_steps_its_fill_a_step_area() -> None:
 
 def test_a_log_bar_chart_draws_its_bars_on_a_log_axis() -> None:
     energy = ChartPagesMainView().router.chart.energy
-    energy.y_log = True
+    energy.y = attrs.evolve(energy.y, scale=Scale.LOG)
 
     (axes,) = chart_figure(energy).axes
 

@@ -21,6 +21,7 @@ import weakref
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
+import attrs
 import numpy as np
 import pyqtgraph as pg
 import pytest
@@ -108,6 +109,7 @@ from composeui.core.view import (
     ReferenceLine,
     RendererType,
     Router,
+    Scale,
     SelectionMode,
     Series,
     SourceTableView,
@@ -3789,8 +3791,8 @@ def test_the_chart_shows_its_titles_units_and_series(qtbot: QtBot) -> None:
     assert plot.getAxis("bottom").labelText == "Flow Rate"
     assert plot.getAxis("bottom").labelUnits == "L/s"
     assert plot.getAxis("left").labelUnits == "kPa"
-    view.chart.x_unit = "m3/h"
-    view.chart.y_title = "Drop"
+    view.chart.x = attrs.evolve(view.chart.x, unit="m3/h")
+    view.chart.y = attrs.evolve(view.chart.y, title="Drop")
     assert plot.getAxis("bottom").labelUnits == "m3/h"
     assert plot.getAxis("bottom").labelText == "Flow Rate"
     assert plot.getAxis("left").labelText == "Drop"
@@ -3953,8 +3955,8 @@ def test_a_log_axis_leaves_out_what_it_cannot_show(qtbot: QtBot) -> None:
     plot = _plot_item(chart)
     view.chart.series = [Series(name="Decay", x=[0, 1, 10, 100], y=[5, -1, 10, 100])]
 
-    view.chart.x_log = True
-    view.chart.y_log = True
+    view.chart.x = attrs.evolve(view.chart.x, scale=Scale.LOG)
+    view.chart.y = attrs.evolve(view.chart.y, scale=Scale.LOG)
 
     assert plot.getAxis("bottom").logMode
     assert plot.getAxis("left").logMode
@@ -3965,7 +3967,7 @@ def test_a_log_axis_leaves_out_what_it_cannot_show(qtbot: QtBot) -> None:
     assert list(curve.xData) == [1, 10, 100]
     assert math.isnan(curve.yData[0])
     assert list(curve.yData[1:]) == [10, 100]
-    view.chart.x_log = False
+    view.chart.x = attrs.evolve(view.chart.x, scale=Scale.LINEAR)
     assert not plot.getAxis("bottom").logMode
     assert list(curve.xData) == [0, 1, 10, 100]
 
@@ -3973,7 +3975,7 @@ def test_a_log_axis_leaves_out_what_it_cannot_show(qtbot: QtBot) -> None:
 def test_a_log_axis_shows_the_hovered_value_not_its_log(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     view.chart.series = [Series(name="Decay", x=[1, 10, 100], y=[3, 2, 1])]
-    view.chart.x_log = True
+    view.chart.x = attrs.evolve(view.chart.x, scale=Scale.LOG)
     view_box = _view_box(chart)
     # the log range, 0 to 2: the linear one, 1 to 100, reaches 2 too
     qtbot.waitUntil(lambda: 2 <= view_box.viewRange()[0][1] < 3)
@@ -3990,7 +3992,7 @@ def test_log_bars_rise_from_the_power_of_10_under_the_lowest(qtbot: QtBot) -> No
     energy = view.router.chart.energy
     energy.series = [Series(name="Heating", x=[0, 1, 2], y=[1000, 0, 50])]
 
-    energy.y_log = True
+    energy.y = attrs.evolve(energy.y, scale=Scale.LOG)
 
     (bars,) = (item for item in _plot_item(chart).items if isinstance(item, pg.BarGraphItem))
     # none of 0 in the bedroom
@@ -4073,7 +4075,7 @@ def test_a_click_on_the_plot_emits_its_point(qtbot: QtBot) -> None:
     view.chart.clicked.connect(lambda x, y: clicks.append((x, y)))
 
     chart.click(view_box.mapViewToScene(QPointF(10, 2)))
-    view.chart.x_log = True
+    view.chart.x = attrs.evolve(view.chart.x, scale=Scale.LOG)
     chart.click(view_box.mapViewToScene(QPointF(1, 2)))  # the log of 10
     chart.click(QPointF(-10, -10))  # off the plot
 
@@ -4139,7 +4141,9 @@ def test_reference_lines_are_styled_labeled_and_in_range(qtbot: QtBot) -> None:
     assert now.pen.color().name() == "#f0f0f0"
     assert now.label.color.name() == "#f0f0f0"
 
-    view.chart.x_log = True  # at its log, as pyqtgraph draws the series
+    view.chart.x = attrs.evolve(
+        view.chart.x, scale=Scale.LOG
+    )  # at its log, as pyqtgraph draws the series
     view.chart.reference_lines = [
         *view.chart.reference_lines,
         ReferenceLine(0, "Start", vertical=True),
@@ -5227,7 +5231,7 @@ def test_a_click_with_the_left_button_alone_emits_its_point(qtbot: QtBot) -> Non
     qtbot.waitExposed(chart.window())
     view.chart.series = [Series(name="Decay", x=[1, 10, 100], y=[1, 10, 100])]
     view_box = _view_box(chart)
-    view.chart.y_log = True
+    view.chart.y = attrs.evolve(view.chart.y, scale=Scale.LOG)
     qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 100 and view_box.viewRange()[1][1] < 3)
     clicks: list[tuple[float, float]] = []
     view.chart.clicked.connect(lambda x, y: clicks.append((x, y)))
@@ -5245,8 +5249,8 @@ def test_a_click_with_the_left_button_alone_emits_its_point(qtbot: QtBot) -> Non
 def test_a_log_chart_s_shown_range_is_its_values_not_their_logs(qtbot: QtBot) -> None:
     view, chart = _rendered_chart(qtbot)
     view.chart.series = [Series(name="Decay", x=[1, 10, 100], y=[1, 10, 100])]
-    view.chart.x_log = True
-    view.chart.y_log = True
+    view.chart.x = attrs.evolve(view.chart.x, scale=Scale.LOG)
+    view.chart.y = attrs.evolve(view.chart.y, scale=Scale.LOG)
 
     _view_box(chart).setRange(xRange=(0, 2), yRange=(1, 3), padding=0)
 

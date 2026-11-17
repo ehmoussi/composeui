@@ -141,6 +141,12 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Changed
 
+- **Breaking:** the axes of a `ChartView` are `Axis` objects. `x=Axis("Time", unit="s")` and
+  `y=Axis(scale=Scale.LOG)` replace `x_title`, `x_unit`, `x_log`, `y_title`, `y_unit` and
+  `y_log`, and `Axis.label` replaces `ChartView.axis_label`. To change an axis, set a new one:
+  `chart.y = attrs.evolve(chart.y, scale=Scale.LOG)`. `bar_chart` takes `x=` and `y=` axes
+  instead of `x_title=` and `y_title=`. A study no longer saves an axis' unit and scale: they
+  belong to the app's code, as its title does.
 - A signal's callback with a parameter named `view` gets the view that owns the signal, as one
   named `main_view` or `model` gets the app's. Before, it got one of the signal's arguments.
   Without an owning view, the call raises `ValueError` unless the parameter has a default.

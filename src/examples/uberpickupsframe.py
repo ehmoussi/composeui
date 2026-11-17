@@ -13,6 +13,7 @@ from composeui.core.model import Model
 from composeui.core.reactivity import reactive
 from composeui.core.shared import shared_data
 from composeui.core.view import (
+    Axis,
     ChartView,
     CheckBoxView,
     LabelRowSliderView,
@@ -80,8 +81,8 @@ class UberPickupsMainView(DashboardView):
     pickups_chart: ChartView = bar_chart(
         "Number of pickups by hour",
         HOURS,
-        x_title="Hour of day",
-        y_title="Number of pickups",
+        x=Axis("Hour of day"),
+        y=Axis("Number of pickups"),
         height=400,
     )
     pickups_map: MapView = child(MapView, title="Pickup locations (up to 10,000 sampled pickups)")

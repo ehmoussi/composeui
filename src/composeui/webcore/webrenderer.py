@@ -153,6 +153,7 @@ if TYPE_CHECKING:
 
     from composeui.core.signal import Signal, SignalNoArgs
     from composeui.core.view import (
+        Axis,
         CellStyle,
         CellWidget,
         ChoicesShown,
@@ -2379,15 +2380,11 @@ class WebMapRenderer(WebRenderer[MapViewLike]):
 class ChartViewLike(ViewLike, Protocol):
     kind: ChartKind
     title: str
-    x_title: str
-    y_title: str
-    x_unit: str
-    y_unit: str
+    x: Axis
+    y: Axis
     series: list[Series]
     reference_lines: list[ReferenceLine]
     categories: list[str]
-    x_log: bool
-    y_log: bool
     save_image_text: str
     clicked: Signal[float, float]
     height: int | None
@@ -2472,15 +2469,11 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                 (
                     "kind",
                     "title",
-                    "x_title",
-                    "y_title",
-                    "x_unit",
-                    "y_unit",
+                    "x",
+                    "y",
                     "series",
                     "reference_lines",
                     "categories",
-                    "x_log",
-                    "y_log",
                     "save_image_text",
                     "height",
                 ),
@@ -2491,20 +2484,13 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
     def chart_json(self) -> str:
         """Get what the page's script draws, as JSON."""
         view = self._view
-        x_unit, y_unit = view.x_unit, view.y_unit
+        # a bar chart's x is its categories, never a log axis
+        x_log = view.x.is_log and view.kind is not ChartKind.BAR
+        y_log = view.y.is_log
         spec: dict[str, Any] = {
             "title": view.title,
-            "x": {
-                "label": ChartView.axis_label(view.x_title, x_unit),
-                "unit": x_unit,
-                # a bar chart's x is its categories, never a log axis
-                "log": view.x_log and view.kind is not ChartKind.BAR,
-            },
-            "y": {
-                "label": ChartView.axis_label(view.y_title, y_unit),
-                "unit": y_unit,
-                "log": view.y_log,
-            },
+            "x": {"label": view.x.label, "unit": view.x.unit, "log": x_log},
+            "y": {"label": view.y.label, "unit": view.y.unit, "log": y_log},
             "series": [
                 {
                     "name": series.name,
@@ -2531,17 +2517,15 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                 }
                 for line in ChartView.drawn_lines(
                     view.reference_lines,
-                    x_log=view.x_log and view.kind is not ChartKind.BAR,
-                    y_log=view.y_log,
+                    x_log=x_log,
+                    y_log=y_log,
                 )
             ],
         }
         if view.kind is ChartKind.BAR:
             self._add_bars(spec)
             return json.dumps(spec, allow_nan=False, separators=(",", ":"))
-        points = [
-            _chart_points(series, x_log=view.x_log, y_log=view.y_log) for series in view.series
-        ]
+        points = [_chart_points(series, x_log=x_log, y_log=y_log) for series in view.series]
         if len(points) > 0 and all(x == points[0][0] for x, _y in points):
             # uPlot's own columns: the x shared, then each series' y
             spec["data"] = [points[0][0], *([_json_number(v) for v in y] for _x, y in points)]
@@ -2561,7 +2545,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
             *(
                 [
                     _json_number(height)
-                    for height in ChartView.bar_heights(series, count, y_log=view.y_log)
+                    for height in ChartView.bar_heights(series, count, y_log=view.y.is_log)
                 ]
                 for series in view.series
             ),
@@ -2577,7 +2561,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         if view.kind is ChartKind.BAR:
             x_label, link = ", ".join(view.categories), "for"
         else:
-            x_label, link = ChartView.axis_label(view.x_title, view.x_unit), "against"
+            x_label, link = view.x.label, "against"
         description = f"{names} {link} {x_label}" if names and x_label else names or x_label
         labels = ", ".join(line.label for line in view.reference_lines if line.label)
         description = (

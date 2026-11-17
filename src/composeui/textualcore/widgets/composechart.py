@@ -12,7 +12,7 @@ from textual_plotext import PlotextPlot
 from composeui.core import chartimage
 from composeui.core.chartcolors import series_color
 from composeui.core.signal import Signal
-from composeui.core.view import ChartKind, ChartView
+from composeui.core.view import Axis, ChartKind, ChartView
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -51,14 +51,12 @@ class ComposeChart(PlotextPlot):
     def __init__(self) -> None:
         super().__init__()
         self.chart_title = ""
-        self.x_label = ""
-        self.y_label = ""
+        self.x = Axis()
+        self.y = Axis()
         self.series: list[Series] = []
         self.reference_lines: list[ReferenceLine] = []
         self.kind = ChartKind.LINE
         self.categories: list[str] = []
-        self.x_log = False
-        self.y_log = False
         self.image_name = "chart.pdf"
         self.image_path_chosen: Signal[Path] = Signal()
         self.set_save_image_text("Save Image")
@@ -104,8 +102,8 @@ class ComposeChart(PlotextPlot):
         plt = self.plt
         plt.clear_figure()
         plt.title(self.chart_title)
-        plt.xlabel(self.x_label)
-        plt.ylabel(self.y_label)
+        plt.xlabel(self.x.label)
+        plt.ylabel(self.y.label)
         is_dark = self.app.current_theme.dark if self.is_mounted else False
         colors = [
             Color.parse(curve.color or series_color(index, is_dark=is_dark)).rgb
@@ -119,14 +117,14 @@ class ComposeChart(PlotextPlot):
 
     def _plot_curves(self, colors: list[tuple[int, int, int]]) -> None:
         plt = self.plt
-        if self.x_log:
+        if self.x.is_log:
             plt.xscale("log")
-        if self.y_log:
+        if self.y.is_log:
             plt.yscale("log")
         for index, curve in enumerate(self.series):
             is_dots = ChartView.kind_of(curve, self.kind) is ChartKind.SCATTER
             draw = plt.scatter if is_dots else plt.plot
-            x, y = ChartView.drawn_points(curve, x_log=self.x_log, y_log=self.y_log)
+            x, y = ChartView.drawn_points(curve, x_log=self.x.is_log, y_log=self.y.is_log)
             if curve.step and not is_dots:
                 x, y = ChartView.step_points(x, y)
             # plotext fills in the color of the line: an area of its own, under the line
@@ -149,14 +147,16 @@ class ComposeChart(PlotextPlot):
             heights = [
                 height
                 for curve in self.series
-                for height in ChartView.bar_heights(curve, len(self.categories), y_log=self.y_log)
+                for height in ChartView.bar_heights(
+                    curve, len(self.categories), y_log=self.y.is_log
+                )
                 if math.isfinite(height)
             ]
             return [0.5, len(self.categories) + 0.5], heights
         xs: list[float] = []
         ys: list[float] = []
         for curve in self.series:
-            x, y = ChartView.drawn_points(curve, x_log=self.x_log, y_log=self.y_log)
+            x, y = ChartView.drawn_points(curve, x_log=self.x.is_log, y_log=self.y.is_log)
             xs.extend(value for value in x if math.isfinite(value))
             ys.extend(value for value in y if math.isfinite(value))
         return xs, ys
@@ -165,7 +165,7 @@ class ComposeChart(PlotextPlot):
         """Draw the reference lines, each labeled at its end, solid: a terminal has no dashes."""
         is_bar = self.kind is ChartKind.BAR
         lines = ChartView.drawn_lines(
-            self.reference_lines, x_log=self.x_log and not is_bar, y_log=self.y_log
+            self.reference_lines, x_log=self.x.is_log and not is_bar, y_log=self.y.is_log
         )
         if len(lines) == 0:
             return
@@ -194,12 +194,12 @@ class ComposeChart(PlotextPlot):
         if len(self.series) == 0 or len(self.categories) == 0:
             return
         heights = [
-            ChartView.bar_heights(curve, len(self.categories), y_log=self.y_log)
+            ChartView.bar_heights(curve, len(self.categories), y_log=self.y.is_log)
             for curve in self.series
         ]
         drawn = [height for bars in heights for height in bars if math.isfinite(height)]
         base = 0.0
-        if self.y_log:
+        if self.y.is_log:
             self.plt.yscale("log")
             # from the power of 10 under the lowest bar: a log axis has no 0
             base = 10.0 ** math.floor(math.log10(min(drawn))) if len(drawn) > 0 else 1.0

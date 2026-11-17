@@ -28,6 +28,7 @@ from composeui.core.view import (
     MAX_SLIDER_STEPS,
     STATE_FORMAT,
     ActionView,
+    Axis,
     ChartKind,
     ChartView,
     CheckBoxView,
@@ -49,6 +50,7 @@ from composeui.core.view import (
     RadioGroupView,
     RangeSliderView,
     ReferenceLine,
+    Scale,
     SelectionMode,
     Series,
     SliderView,
@@ -376,10 +378,16 @@ def test_a_chart_s_height_is_positive_and_not_a_study_s() -> None:
     assert "height" not in CONVERTER.unstructure(chart)  # the app's layout
 
 
+def test_a_chart_s_axes_are_the_app_s_and_not_a_study_s() -> None:
+    saved = CONVERTER.unstructure(ChartView(x=Axis("Time", unit="s"), y=Axis(scale=Scale.LOG)))
+    assert "x" not in saved
+    assert "y" not in saved
+
+
 def test_an_axis_label_shows_its_unit() -> None:
-    assert ChartView.axis_label("Time", "s") == "Time (s)"
-    assert ChartView.axis_label("Time", "") == "Time"
-    assert ChartView.axis_label("", "s") == "(s)"
+    assert Axis("Time", unit="s").label == "Time (s)"
+    assert Axis("Time").label == "Time"
+    assert Axis(unit="s").label == "(s)"
 
 
 def test_a_study_saves_its_charts_series(tmp_path: Path) -> None:

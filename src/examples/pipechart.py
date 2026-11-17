@@ -24,6 +24,7 @@ from composeui.core.registry import RendererType
 from composeui.core.view import (
     CHECKED_TEXTS,
     Align,
+    Axis,
     ButtonVariant,
     ButtonView,
     CellStyle,
@@ -198,10 +199,8 @@ class ChartTab(TabPage):
     chart: ChartView = child(
         ChartView,
         title="Pressure Drop",
-        x_title="Flow Rate",
-        x_unit="L/s",
-        y_title="Pressure Drop",
-        y_unit="kPa",
+        x=Axis("Flow Rate", unit="L/s"),
+        y=Axis("Pressure Drop", unit="kPa"),
         reference_lines=[ReferenceLine(PUMP_PRESSURE, f"Pump: {PUMP_PRESSURE:g} kPa")],
     )
 

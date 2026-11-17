@@ -8,6 +8,7 @@ unrelated GUI toolkit.
 
 from __future__ import annotations
 
+import attrs
 import pytest
 
 pytest.importorskip("textual")
@@ -79,6 +80,7 @@ from composeui.core.view import (
     MainView,
     ReferenceLine,
     RendererType,
+    Scale,
     SelectionMode,
     Series,
     SourceTableView,
@@ -3088,7 +3090,7 @@ async def test_the_chart_draws_its_titles_and_series() -> None:
         assert "Pressure Drop (kPa)" in text
         assert "D = 50 mm" in text
         assert "Measured" in text
-        view.chart.x_unit = "m3/h"
+        view.chart.x = attrs.evolve(view.chart.x, unit="m3/h")
         view.chart.series = []
         await pilot.pause()
         text = chart.render().plain  # type: ignore[union-attr]
@@ -3210,9 +3212,10 @@ async def test_a_log_axis_plots_what_it_can_show() -> None:
     async with app.run_test(size=(120, 60)) as pilot:
         view.router.current_route = "chart"
         page.chart.series = [Series(name="Decay", x=[0, 1, 10, 100], y=[5, -1, 10, 100])]
-        page.chart.x_log = page.chart.y_log = True
+        page.chart.x = attrs.evolve(page.chart.x, scale=Scale.LOG)
+        page.chart.y = attrs.evolve(page.chart.y, scale=Scale.LOG)
         page.energy.series = [Series(name="Heating", x=[0, 1, 2], y=[1000, 0, 50])]
-        page.energy.y_log = True
+        page.energy.y = attrs.evolve(page.energy.y, scale=Scale.LOG)
         await pilot.pause()
         plotted = _plot_monitor(chart)
         # the scales of the axes at the bottom and left, those drawn

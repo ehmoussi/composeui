@@ -21,6 +21,7 @@ from composeui.core.dataframesource import points_of
 from composeui.core.reactivity import reactive
 from composeui.core.shared import shared_data
 from composeui.core.view import (
+    Axis,
     ChartView,
     DownloadView,
     HorizontalView,
@@ -78,7 +79,7 @@ class UberDashboardMainView(DashboardView):
     filters: Filters = child(Filters, title="Filters")
     status: LabelView = child(LabelView)
     summary: Summary = child(Summary)
-    by_hour: ChartView = bar_chart("Pickups by hour", HOURS, y_title="Pickups", height=300)
+    by_hour: ChartView = bar_chart("Pickups by hour", HOURS, y=Axis("Pickups"), height=300)
     pickups_map: MapView = child(MapView, title="Pickups (up to 10,000)")
     table: SourceTableView = child(SourceTableView)
     download_rows: DownloadView = child(

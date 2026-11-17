@@ -190,4 +190,6 @@ def test_a_sweep_shows_in_french(app: App) -> None:
     assert main_view.runs.headers == ["Rayon extérieur (mm)", "Contrainte circonférentielle (MPa)"]
     assert main_view.buttons.cancel.text == "Annuler"
     assert [series.name for series in main_view.chart.series] == ["Contrainte circonférentielle"]
+    # an axis translates its title, and keeps its unit
+    assert main_view.chart.x.label == "Rayon extérieur (mm)"
     assert main_view.status_bar.message == "3 rayons balayés sur 3"
