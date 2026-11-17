@@ -209,9 +209,13 @@ jobs:
           release="$GITHUB_WORKSPACE/docs/_build/release"
           cp docs/conf.py "$release/docs/conf.py"
           cp -R docs/_templates "$release/docs/_templates"
-          cp docs/_static/versions.{css,js} "$release/docs/_static/"
+          cp -R docs/_static/. "$release/docs/_static/"
           uv run --project "$release" --group docs --all-extras --with sphinx-sitemap \
             sphinx-build -W --keep-going -b html "$release/docs" docs/_build/html/stable
+      - name: Check both documentation versions for missing stylesheets and scripts
+        run: uv run pytest tests/test_docs_site.py
+        env:
+          COMPOSEUI_DOCS_SITE: docs/_build/html
       - name: Include the release pages in the root sitemap
         run: |
           python - <<'PY'
