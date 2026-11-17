@@ -18,8 +18,8 @@ from composeui.core.registry import RendererType, create_renderer
 from composeui.core.view import LabelRowInputView, StatusBar
 from composeui.qtcore.qtrenderer import RENDERERS as QT_RENDERERS
 from composeui.qtcore.qtrenderer import QtStatusBarRenderer
-from composeui.textualcore.textualrenderer import RENDERERS as TEXTUAL_RENDERERS
-from composeui.textualcore.textualrenderer import TextualStatusBarRenderer
+from composeui.textualcore._renderers.content import TextualStatusBarRenderer
+from composeui.textualcore.renderers import RENDERERS as TEXTUAL_RENDERERS
 from composeui.webcore.renderers import RENDERERS as WEB_RENDERERS
 
 if TYPE_CHECKING:

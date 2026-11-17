@@ -96,11 +96,8 @@ from composeui.core.view import (
     define_view,
     replace_cell,
 )
-from composeui.textualcore.textualrenderer import (
-    ROW_INVALID_CLASS,
-    TextualMainRenderer,
-    TextualWidgetRenderer,
-)
+from composeui.textualcore._renderers.navigation import TextualMainRenderer
+from composeui.textualcore.textualrenderer import ROW_INVALID_CLASS, TextualWidgetRenderer
 from composeui.textualcore.widgets import composeimage, composeslider
 from composeui.textualcore.widgets.composechart import ComposeChart
 from composeui.textualcore.widgets.composechecklist import ComposeCheckList, ComposeMultiComboBox

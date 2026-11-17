@@ -22,7 +22,7 @@ from composeui.core.reload import (
     save_reloaded_state,
     take_changes,
 )
-from composeui.textualcore.textualrenderer import TextualMainRenderer
+from composeui.textualcore._renderers.navigation import TextualMainRenderer
 
 if TYPE_CHECKING:
     from collections.abc import Callable

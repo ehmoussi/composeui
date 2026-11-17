@@ -64,6 +64,7 @@ src/composeui/
     _views/      # the views, a module per family (view.py exports them)
   qtcore/        # Qt backend via qtpy (QtApplication, qtrenderer.py, custom widgets/)
   textualcore/   # Textual (TUI) backend
+    _renderers/  # its renderers, a module per family (renderers.py maps their keys)
   webcore/       # Web backend (Starlette + htmx + daisyUI); static/app.css is built
     _renderers/  # its renderers, a module per family (renderers.py maps their keys)
 css/             # source of webcore/static/app.css (`make css`; tools land in css/vendor/)
@@ -88,8 +89,14 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - **Adding a widget:** define the view in the `core/_views/` module of its family (set
   `_renderer_key`) and export it in the `__all__` of `core/view.py`, then add a
   renderer + `RENDERERS` entry in each backend that should support it, plus tests per backend.
-  On the web, the renderer goes in the `webcore/_renderers/` module of its family (a new
-  module for a new family), and its entry in `webcore/renderers.py`.
+  In Textual and on the web, the renderer goes in the backend's `_renderers/` module of its
+  family (a new module for a new family), and its entry in the backend's `renderers.py`.
+- **Textual renderer modules:** `textualrenderer.py` holds only `TextualWidgetRenderer` and
+  shared thread and mount helpers. Each module of `textualcore/_renderers/` holds one family,
+  as on the web. `forms.py` owns `_widget_of` and the form-row widget cache; `actions.py`
+  owns `_ComposeUIApp` with its action dispatch and key bindings. `navigation.py` holds the
+  main renderer, router and sidebar. Family modules import each other directly, not through
+  `renderers.py`, which only maps keys.
 - **Web renderer modules:** `webrenderer.py` holds only the base `WebRenderer` and the helpers
   that several families share. A module of `_renderers/` holds one family: split one that
   starts to mix two, whatever its length. The base names no concrete renderer: when it must

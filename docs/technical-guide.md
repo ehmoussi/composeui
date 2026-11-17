@@ -53,6 +53,7 @@ src/composeui/
     _views/      # the views, a module per family (view.py exports them)
   qtcore/        # Qt backend via qtpy (QtApplication, qtrenderer.py, custom widgets/)
   textualcore/   # Textual (TUI) backend
+    _renderers/  # its renderers, a module per family (renderers.py maps their keys)
   webcore/       # Web backend (Starlette + htmx + daisyUI); static/app.css is built
     _renderers/  # its renderers, a module per family (renderers.py maps their keys)
 css/             # source of webcore/static/app.css (`make css`; tools land in css/vendor/)
@@ -112,7 +113,7 @@ or `refresh()` calls.
 
 `composeui.core.view` is the public module of the views: it imports them and lists them in
 `__all__`, and its last line sets up the `Shape` union, once every class it needs exists. Each
-family of views has its module in `core/_views/`, as the web's renderers do: `inputs.py`,
+family of views has its module in `core/_views/`, as the Textual and web renderers do: `inputs.py`,
 `controls.py`, `choices.py`, `content.py`, `charts.py`, `graphics.py`, `tables.py`, `files.py`,
 `forms.py`, `actions.py`, `dialogs.py`, `containers.py` and `navigation.py`. `base.py` holds
 `View`, `define_view`, the lazy signals, the converter `CONVERTER` and the helpers that several
@@ -121,6 +122,16 @@ families share. `main.py` holds `MainView` and the state code, which treats some
 The base names no concrete view: a walk of the views calls a method that `View` defines, such
 as `_check_again` (a check run again in a new language) and `_keep_model` (a list's model).
 `View._main_view` names `MainView`, which `attrs` resolves in `base.py`: `main.py` puts it there.
+
+Textual uses the same families in `textualcore/_renderers/`. `textualrenderer.py` holds the
+base `TextualWidgetRenderer` and shared thread and mount helpers, including `_refresh_tree`.
+`renderers.py` only maps keys to renderer classes. The family modules import each other
+directly, not through that mapping. `forms.py` owns `_widget_of` and the form-row widget cache,
+so layouts and dialogs share one widget per row. `actions.py` keeps `_ComposeUIApp` beside
+the actions: the app dispatches their events and manages their key bindings. This also keeps
+the toolbar's app check and the app's action-renderer check in one module, without a cycle.
+`navigation.py` holds the main renderer, router and sidebar. These moves preserve mount
+order, worker dispatch and dialog state.
 
 A renderer (`composeui.core.renderer.Renderer`) binds a view to a toolkit object, its
 rendered object. It syncs them in both directions:
@@ -862,6 +873,8 @@ another process answers with `HX-Refresh`.
    ```
 
 2. In each backend, add a renderer and its `RENDERERS` entry (`"label": QtLabelRenderer`).
+   In Textual, put it in its family's module in `textualcore/_renderers/`, and its entry in
+   `textualcore/renderers.py`.
    The renderer registers a handler per view attribute and creates its rendered object in
    `render`:
 
