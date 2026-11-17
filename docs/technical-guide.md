@@ -435,6 +435,13 @@ section covers what users see.
   and the last bar show whole. It adds it only when the range is the whole data: uPlot runs a
   scale's range function on a zoom too, and a zoom widened at each draw would drift as the
   series change.
+- **A chart's stacked bars.** The server sends each stacked bar series its bars' bases
+  (`ChartView.stack_bases`), by the points it sends, and each y axis how far its stacks reach,
+  which its range takes in: uPlot fits a series' own values, which the legend keeps. The bars'
+  builder draws each from its base (its `y0` and `y1` facets), and the hover shows no dot on a
+  stacked bar, which would stand at the series' own value. Textual's plotext has no base:
+  each bar goes from 0 to where it ends, the stack's last series first, which the others then
+  cover.
 - **A chart's bounds.** `charts.js` wraps each scale's range function last, so that an axis'
   bounds (`Axis.minimum`, `Axis.maximum`) win over the bars' 0 and the reference lines. The x
   range keeps a zoom as the user made it, which uPlot also asks the range function for. The

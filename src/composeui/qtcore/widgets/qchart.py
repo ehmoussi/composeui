@@ -14,9 +14,10 @@ from qtpy.QtWidgets import QGraphicsItem
 
 from composeui.core import chartimage
 from composeui.core.chartcolors import is_dashed, series_color
-from composeui.core.view import Axis, ChartKind, ChartView, LineStyle
+from composeui.core.view import Axis, BarMode, ChartKind, ChartView, LineStyle
 
 if TYPE_CHECKING:
+    import numpy.typing as npt
     from qtpy.QtWidgets import QWidget
 
     from composeui.core.view import ReferenceLine, Series
@@ -110,6 +111,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         super().__init__(parent)
         self._series: list[Series] = []
         self._categories: list[str] = []
+        self._bar_mode = BarMode.GROUPED
         self._x = Axis()
         self._y = Axis()
         self._y2 = Axis()
@@ -274,6 +276,11 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
     @property
     def _x_log(self) -> bool:
         return ChartView.is_x_log(self._x, self._categories, self._series)
+
+    def set_bar_mode(self, bar_mode: BarMode) -> None:
+        """Place the bars at an x beside each other, or stacked."""
+        self._bar_mode = bar_mode
+        self._draw()
 
     def set_categories(self, categories: list[str]) -> None:
         """Show the categories on the x axis, each at its index."""
@@ -464,7 +471,12 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
             for index, curve in enumerate(self._series)
             if curve.kind is ChartKind.BAR
         }
-        slots = ChartView.bar_slots(self._series, self._categories)
+        slots = ChartView.bar_slots(self._series, self._categories, self._bar_mode)
+        stacks = (
+            ChartView.stack_bases(self._series, self._categories)
+            if self._bar_mode is BarMode.STACKED
+            else {}
+        )
         for index, (item, curve) in enumerate(zip(self._items, self._series)):
             color = curve.color or series_color(index, is_dark=is_dark)
             if isinstance(item, pg.BarGraphItem):
@@ -479,11 +491,16 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
                 base = math.floor(math.log10(min(drawn))) if is_log and len(drawn) > 0 else 0
                 xs, heights = (np.asarray(values, dtype=float) for values in all_bars[index])
                 tops = np.log10(heights) if is_log else heights
+                # each bar's own start when stacked, else the one of them all
+                starts: float | npt.NDArray[np.float64] = base
+                if index in stacks:  # on the values before it: never on a log axis
+                    starts = np.asarray(stacks[index], dtype=float)
+                    tops = starts + heights
                 offset, width = slots[index]
                 item.setOpts(
                     x0=xs + offset - width / 2,
-                    y0=base,
-                    height=tops - base,
+                    y0=starts,
+                    height=tops - starts,
                     width=width,
                     brush=color,
                     # a line of the background between neighbouring bars

@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any
 
 import attrs
 
-from composeui.core.view import SECONDS_PER_DAY, ChartKind, ChartView, LineStyle
+from composeui.core.view import SECONDS_PER_DAY, BarMode, ChartKind, ChartView, LineStyle
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -233,7 +233,9 @@ def _draw_series(sides: dict[bool, Axes], chart: ChartView) -> list[Artist | Con
         sides[False].set_yscale("log")
     if chart.y2.is_log:
         sides[True].set_yscale("log")
-    slots = ChartView.bar_slots(chart.series, chart.categories)
+    slots = ChartView.bar_slots(chart.series, chart.categories, chart.bar_mode)
+    is_stacked = chart.bar_mode is BarMode.STACKED
+    bases = ChartView.stack_bases(chart.series, chart.categories) if is_stacked else {}
     scale = _x_scale(chart)
     for index, series in enumerate(chart.series):
         axes = sides[series.on_y2]
@@ -245,6 +247,7 @@ def _draw_series(sides: dict[bool, Axes], chart: ChartView) -> list[Artist | Con
             bars = axes.bar(
                 [(x + offset) * scale for x in xs],
                 heights,
+                bottom=bases.get(index, 0),
                 width=width * scale,
                 color=color,
                 hatch=HATCHES[index % len(HATCHES)],

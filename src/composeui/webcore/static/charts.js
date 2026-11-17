@@ -78,8 +78,37 @@
         function widths(chart) {
           return xs(chart).map(function () { return series.width; });
         }
+        /** @type {uPlot.Series.BarsPathBuilderDisplay} */
+        var disp = { x0: { unit: 1, values: lefts }, size: { unit: 1, values: widths } };
+        var bases = series.bases;
+        if (bases !== undefined) {
+          // stacked: from its base, past the values before it (see `ChartView.stack_bases`)
+          var own = /** @type {number[]} */ (ownXs(spec, index));
+          /** @type {Map<number, number>} */
+          var baseAt = new Map(own.map(function (x, at) {
+            return [x, /** @type {number} */ (/** @type {number[]} */ (bases)[at])];
+          }));
+          /** @param {uPlot} chart */
+          var starts = function (chart) {
+            return xs(chart).map(function (x) {
+              var base = baseAt.get(x);
+              return base === undefined ? null : base;
+            });
+          };
+          disp.y0 = { unit: 1, values: starts };
+          disp.y1 = {
+            unit: 1,
+            values: function (chart, seriesIndex) {
+              var values = /** @type {uPlot.AlignedData[number]} */ (chart.data[seriesIndex]);
+              return starts(chart).map(function (base, at) {
+                var value = values[at];
+                return base === null || value === null || value === undefined ? null : base + value;
+              });
+            },
+          };
+        }
         options.paths = /** @type {uPlot.Series.BarsPathBuilderFactory} */ (uPlot.paths.bars)({
-          disp: { x0: { unit: 1, values: lefts }, size: { unit: 1, values: widths } },
+          disp: disp,
         });
         options.fill = color;
         // a line of the background between neighbouring bars
@@ -192,6 +221,9 @@
     spec.lines.forEach(function (line) {
       (line.vertical ? lineXs : line.on_y2 ? lineY2s : lineYs).push(line.value);
     });
+    // and the stacks of bars, as far as they reach
+    if (spec.y.stack !== undefined) lineYs = lineYs.concat(spec.y.stack);
+    if (y2 !== undefined && y2.stack !== undefined) lineY2s = lineY2s.concat(y2.stack);
     if (categories === undefined) {
       scales.x.range = rangeWith(rangeFunction(scales.x), lineXs, spec.x.log, false);
     }
@@ -214,6 +246,8 @@
       tzDate: utcDate,
       cursor: {
         dataIdx: heldIndex(spec),
+        // no dot at a stacked bar's own value: its bar ends past the values before it
+        points: { show: cursorPoint(spec) },
         // a move within the slop is a click: no zoom (uPlot zooms from `dist` pixels)
         drag: { dist: CLICK_SLOP + 1 },
       },
@@ -245,6 +279,24 @@
   /** @param {number} seconds */
   function utcDate(seconds) {
     return uPlot.tzDate(new Date(seconds * 1e3), "Etc/UTC");
+  }
+  /* the dot at the cursor of each series, as uPlot's own: hidden on a stacked bar */
+  /** @param {ChartSpec} spec @returns {(chart: uPlot, seriesIndex: number) => HTMLElement} */
+  function cursorPoint(spec) {
+    return function (chart, seriesIndex) {
+      var point = document.createElement("div");
+      point.className = "u-cursor-pt";
+      var series = spec.series[seriesIndex - 1];
+      point.hidden = series !== undefined && series.bases !== undefined;
+      return point;
+    };
+  }
+  /* the x that a series' own points were sent at */
+  /** @param {ChartSpec} spec @param {number} index */
+  function ownXs(spec, index) {
+    if (spec.data !== undefined) return spec.data[0];
+    var pair = /** @type {uPlot.AlignedData} */ (/** @type {uPlot.AlignedData[]} */ (spec.pairs)[index]);
+    return pair[0];
   }
   /* the x of a chart's points */
   /** @param {uPlot} chart @returns {number[]} */

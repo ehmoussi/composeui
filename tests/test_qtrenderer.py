@@ -88,6 +88,7 @@ from composeui.core.view import (
     SOURCE_TABLE_JOB_ROWS,
     SOURCE_TABLE_WINDOW,
     ActionView,
+    BarMode,
     ButtonVariant,
     CellStyle,
     CellWidget,
@@ -4107,6 +4108,33 @@ def test_a_time_axis_shows_dates_in_utc(qtbot: QtBot) -> None:
     assert not isinstance(numbers, pg.DateAxisItem)
     assert numbers.labelText == "Day"
     assert numbers.grid is not False
+
+
+def test_stacked_bars_stand_on_the_values_before_them(qtbot: QtBot) -> None:
+    view, chart = _chart_page_chart(qtbot, "balance")
+    plot = _plot_item(chart)
+    view_box = _view_box(chart)
+    heating, cooling, solar = (item for item in plot.items if isinstance(item, pg.BarGraphItem))
+
+    assert list(np.asarray(cooling.opts["y0"])) == [120, 95]  # on the heating
+    assert list(np.asarray(cooling.opts["height"])) == [30, 45]
+    assert list(np.asarray(solar.opts["y0"]) + np.asarray(solar.opts["height"])) == [-40, -20, -60]
+    # the room of a slot: the left axis' stack beside the right one's
+    assert heating.opts["width"] == pytest.approx(0.4)
+    qtbot.waitUntil(lambda: view_box.viewRange()[1][1] >= 150)  # the totals
+    chart.show_hover(view_box.mapViewToScene(QPointF(-0.2, 50)))
+    # each series' own value
+    assert chart.hover_text().splitlines()[:4] == [
+        "Kitchen",
+        "Heating: 120 kWh",
+        "Cooling: 30 kWh",
+        "Solar: -40 kWh",
+    ]
+
+    balance = view.router.chart.balance
+    balance.bar_mode = BarMode.GROUPED
+    assert np.asarray(cooling.opts["y0"]).max(initial=0) == 0  # from 0 again
+    assert cooling.opts["width"] == pytest.approx(0.8 / 4)
 
 
 def test_bars_without_categories_stand_at_their_x_on_a_linear_axis(qtbot: QtBot) -> None:

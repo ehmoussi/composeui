@@ -76,6 +76,7 @@ from composeui.core.view import (
     DOWNLOAD_CHUNK_SIZE,
     SOURCE_TABLE_WINDOW,
     ActionView,
+    BarMode,
     ButtonVariant,
     ButtonView,
     CellWidget,
@@ -9391,6 +9392,28 @@ def test_a_time_axis_is_sent_with_how_precise_its_times_are() -> None:
     assert json.loads(visits.renderer.chart_json())["x"]["time"] == "minute"
     visits.x = attrs.evolve(visits.x, scale=Scale.LINEAR)
     assert "time" not in json.loads(visits.renderer.chart_json())["x"]
+
+
+def test_stacked_bars_are_sent_with_their_bases_and_each_axis_its_stacks_reach() -> None:
+    main_view = ChartPagesMainView()
+    main_view.render(RendererType.WEB)
+    main_view.router.navigate(main_view.router.chart.route)  # built once it shows
+    balance = main_view.router.chart.balance
+    assert isinstance(balance.renderer, WebChartRenderer)
+
+    spec = json.loads(balance.renderer.chart_json())
+
+    heating, cooling, solar, target, visits = spec["series"]
+    # by the points sent: the cooling's at the kitchen and the office alone
+    assert spec["pairs"][1][0] == [0, 2]
+    assert cooling["bases"] == [120, 95]
+    assert (heating["bases"], solar["bases"], visits["bases"]) == ([0, 0, 0],) * 3
+    assert "bases" not in target
+    # each stack in its axis' slot
+    assert (heating["offset"], visits["offset"]) == (pytest.approx(-0.2), pytest.approx(0.2))
+    assert (spec["y"]["stack"], spec["y2"]["stack"]) == ([-60, 150], [0, 5])
+    balance.bar_mode = BarMode.GROUPED
+    assert "stack" not in json.loads(balance.renderer.chart_json())["y"]
 
 
 def test_bars_without_categories_are_sent_at_their_x_on_a_linear_axis() -> None:

@@ -2914,10 +2914,10 @@ def test_a_line_is_drawn_over_the_bars_of_the_same_categories(chart_pages_page: 
     assert y_min == 0
 
 
-#: how many of a chart's canvas pixels near a row of the right y axis' value have a CSS
-#: color, from one x to another of the x axis: [x_from, x_to, y2, color]. Opaque ones
-#: alone: a grid line is the text's color, faint
-_CHART_INK_NEAR = """(element, [xFrom, xTo, y2, color]) => {
+#: how many of a chart's canvas pixels near a row of a y axis' value have a CSS color, from
+#: one x to another of the x axis: [x_from, x_to, y, color, scale], the scale "y" or "y2".
+#: Opaque ones alone: a grid line is the text's color, faint
+_CHART_INK_NEAR = """(element, [xFrom, xTo, y, color, scale]) => {
     const chart = ComposeUI.charts.drawn.get(element);
     const probe = document.createElement("canvas").getContext("2d");
     probe.fillStyle = color;
@@ -2925,7 +2925,7 @@ _CHART_INK_NEAR = """(element, [xFrom, xTo, y2, color]) => {
     const [r, g, b] = probe.getImageData(0, 0, 1, 1).data;
     const left = Math.floor(chart.valToPos(xFrom, "x", true)) - 2;
     const right = Math.ceil(chart.valToPos(xTo, "x", true)) + 2;
-    const top = Math.round(chart.valToPos(y2, "y2", true)) - 2;
+    const top = Math.round(chart.valToPos(y, scale, true)) - 2;
     const pixels = chart.ctx.getImageData(left, top, right - left, 5).data;
     let count = 0;
     for (let i = 0; i < pixels.length; i += 4) {
@@ -2959,9 +2959,9 @@ def test_a_series_on_the_second_y_axis_is_drawn_against_an_axis_at_the_right(
     # color, and the target's dashes at 200 k€, in the text's, between the bars
     revenue = sales.locator(".u-legend .u-series").filter(has_text="Revenue")
     color = revenue.locator(".u-marker").evaluate("marker => getComputedStyle(marker).borderColor")
-    assert plot.evaluate(_CHART_INK_NEAR, [2, 2, 41, color]) > 0
+    assert plot.evaluate(_CHART_INK_NEAR, [2, 2, 41, color, "y2"]) > 0
     ink = plot.evaluate("element => getComputedStyle(element).color")
-    assert plot.evaluate(_CHART_INK_NEAR, [1.45, 1.55, 200, ink]) > 0
+    assert plot.evaluate(_CHART_INK_NEAR, [1.45, 1.55, 200, ink, "y2"]) > 0
 
     sales.scroll_into_view_if_needed()  # the mouse reaches only what the window shows
     box = sales.locator(".u-over").bounding_box()
@@ -3046,6 +3046,37 @@ def test_a_time_axis_shows_dates_in_utc_whatever_the_browser_s_zone(
         splits = plot.evaluate("element => ComposeUI.charts.drawn.get(element).axes[0]._splits")
         assert len(splits) > 1
         assert all(split % 86400 == 0 for split in splits)
+
+
+def test_stacked_bars_stand_on_the_values_before_them(chart_pages_page: Page) -> None:
+    chart_pages_page.goto("/chart")
+    balance = chart_pages_page.locator("figure").filter(has_text="Balance")
+    expect(balance.locator("canvas")).to_have_count(1)
+    plot = balance.locator("[data-chart]")
+    scales = (
+        "element => { const scales = ComposeUI.charts.drawn.get(element).scales;"
+        " return [scales.y.min, scales.y.max]; }"
+    )
+
+    # the range takes the totals in, not the series' own values alone
+    y_min, y_max = plot.evaluate(scales)
+    assert (y_min <= -60, y_max >= 150) == (True, True)
+    # the cooling's bar in the kitchen, from the heating's 120 kWh up to 150 kWh
+    cooling = balance.locator(".u-legend .u-series").filter(has_text="Cooling")
+    # a bar's color, its marker's fill: its border is the background's, as the bar's line
+    color = cooling.locator(".u-marker").evaluate(
+        "marker => getComputedStyle(marker).backgroundColor"
+    )
+    assert plot.evaluate(_CHART_INK_NEAR, [-0.25, -0.15, 135, color, "y"]) > 0
+
+    balance.scroll_into_view_if_needed()  # the mouse reaches only what the window shows
+    x = plot.evaluate("element => ComposeUI.charts.drawn.get(element).valToPos(0, 'x')")
+    balance.locator(".u-over").hover(position={"x": x, "y": 10})
+    # each series' own value; no dot at it on a stacked bar, which ends past it
+    expect(cooling.locator(".u-value")).to_have_text("30 kWh")
+    dots = balance.locator(".u-cursor-pt")
+    expect(dots).to_have_count(5)
+    assert [dot.is_visible() for dot in dots.all()] == [False, False, False, True, False]
 
 
 def test_bars_without_categories_show_whole_and_a_zoom_stays_as_it_is(

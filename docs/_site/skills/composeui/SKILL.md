@@ -269,6 +269,7 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   y=Axis(scale=Scale.LOG))`. An `Axis` does not change: set a new one, such as
   `chart.y = attrs.evolve(chart.y, scale=Scale.LOG)`. A study does not save the axes.
   `Axis(minimum=0)` starts an axis at 0, its other end fitting the data.
+  `bar_mode=BarMode.STACKED` stacks a chart's bars, on linear y axes.
   `Axis(scale=Scale.TIME)` shows the x as dates: give a series' x as `datetime.date` or
   `datetime.datetime` (held as seconds since 1970, in UTC).
   `y2` is a second y axis, at the right: put a series or a horizontal `ReferenceLine` on it

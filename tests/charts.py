@@ -8,6 +8,7 @@ from attrs import Factory
 
 from composeui.core.view import (
     Axis,
+    BarMode,
     ChartView,
     LabelView,
     LineStyle,
@@ -131,6 +132,24 @@ class ChartPage(PageView):
                 "Release",
                 vertical=True,
             )
+        ],
+    )
+    balance: ChartView = child(
+        ChartView,
+        title="Balance",
+        y=Axis(unit="kWh"),
+        categories=["Kitchen", "Bedroom", "Office"],
+        bar_mode=BarMode.STACKED,
+        series=[
+            Series.bars("Heating", [120, 80, 95]),
+            # no cooling in the bedroom: the solar stacks on the heating alone there
+            Series.bars("Cooling", [30, 45], x=[0, 2]),
+            # under 0: a stack of its own, down
+            Series.bars("Solar", [-40, -20, -60]),
+            # under the totals: the range takes the stacks in, not the values alone
+            Series.line("Target", [0, 1, 2], [100, 90, 110]),
+            # its own stack, on its own axis: beside the other one
+            Series.bars("Guests", [3, 5, 4], on_y2=True),
         ],
     )
     ages: ChartView = child(

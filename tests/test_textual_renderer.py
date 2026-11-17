@@ -3308,6 +3308,37 @@ async def test_a_time_axis_shows_dates_in_utc() -> None:
 
 
 @pytest.mark.asyncio
+async def test_stacked_bars_are_plotted_to_where_each_ends() -> None:
+    view = ChartPagesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    balance = view.router.chart.balance
+    assert isinstance(balance.renderer, TextualWidgetRenderer)
+    chart = balance.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 200)) as pilot:
+        view.router.current_route = "chart"
+        await pilot.pause()
+        chart.render()
+        plotted = _plot_monitor(chart)
+
+        # plotext has no base: each bar from 0 to its end, the stack's last first, which
+        # the others then cover
+        assert [label for label in plotted.label if label is not None] == [
+            "Guests",
+            "Solar",
+            "Cooling",
+            "Heating",
+            "Target",
+        ]
+        ends = [max(rectangle, key=abs) for rectangle in plotted.y[:12]]
+        assert ends[3:12] == [-40, -20, -60, 150, 0, 140, 120, 80, 95]
+
+
+@pytest.mark.asyncio
 async def test_an_axis_shows_the_app_s_bounds() -> None:
     view = ChartPagesMainView()
     view.render(RendererType.TEXTUAL)
