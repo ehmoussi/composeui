@@ -63,7 +63,7 @@
         label: series.name, stroke: color, value: chartValue(spec.y.unit, series.whole),
       };
       if (series.kind === "bar") {
-        // its bar in each category's group, by its left edge: offsets from the server
+        // its bar in the group at each x, by its left edge: offsets from the server
         /** @param {uPlot} chart */
         function lefts(chart) {
           return xs(chart).map(function (x) { return x + series.offset - series.width / 2; });
@@ -116,7 +116,7 @@
     var axes = [axis(spec.x), axis(spec.y)];
     var categories = spec.categories;
     if (categories !== undefined) {
-      // a category's index stands for its name; the bars stand on 0
+      // a category's index stands for its name
       var names = categories;
       /** @param {uPlot} chart @param {number | null | undefined} index */
       var name = function (chart, index) {
@@ -124,11 +124,6 @@
       };
       x.value = name;
       scales.x.range = function () { return [-0.5, names.length - 0.5]; };
-      if (!spec.y.log) {
-        scales.y.range = function (chart, min, max) {
-          return uPlot.rangeNum(Math.min(0, min), Math.max(0, max), 0.1, true);
-        };
-      }
       axes[0].splits = function () {
         return names.map(function (_, index) { return index; });
       };
@@ -136,6 +131,26 @@
         return splits.map(function (split) { return name(chart, split); });
       };
       axes[0].grid = { show: false };
+    }
+    var barStep = spec.bar_step;
+    if (barStep !== undefined) {
+      if (!spec.y.log) {
+        // the bars stand on 0
+        scales.y.range = function (chart, min, max) {
+          return uPlot.rangeNum(Math.min(0, min), Math.max(0, max), 0.1, true);
+        };
+      }
+      if (categories === undefined) {
+        var half = barStep / 2;
+        // the whole data: half a bar's room past the first and the last x, so that their
+        // bars show whole. A zoom as it is: a range widened at each draw would drift
+        scales.x.range = function (chart, min, max) {
+          var values = xs(chart);
+          if (min === null || max === null) return [-half, half];
+          if (min !== values[0] || max !== values[values.length - 1]) return [min, max];
+          return [min - half, max + half];
+        };
+      }
     }
     // the ranges take the reference lines in, as they would points
     /** @type {number[]} */

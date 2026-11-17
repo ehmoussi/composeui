@@ -462,6 +462,8 @@ def _apply_state(view: View, data: dict[str, Any]) -> None:
             current_view.load_choice(new_data[choice])
         if isinstance(current_view, RecordTableView) and "records" in new_data:
             current_view.records = current_view.structure_records(new_data["records"])
+        if isinstance(current_view, ChartView):
+            new_data = ChartView.loadable_state(new_data)
         for f in attrs.fields(current_cls):
             if (
                 f.name not in new_data
@@ -3964,18 +3966,17 @@ def _to_floats(values: Iterable[float]) -> list[float]:
 
 
 class ChartKind(enum.Enum):
-    """How a chart draws its series' points."""
+    """How a `Series` draws its points."""
 
     #: joined by a line, e.g. a result against time
     LINE = enum.auto()
     #: as dots, e.g. measurements over a model's curve
     SCATTER = enum.auto()
-    #: as bars, a group of one bar per series in each of the chart's `categories`; the
-    #: chart's own kind only
+    #: as bars, one at each x: beside the other series' bars there, in a group
     BAR = enum.auto()
 
 
-#: the share of a category's width a bar chart's group of bars takes
+#: the share of the room between two x that a group of bars takes
 BAR_GROUP_WIDTH = 0.8
 
 
@@ -4106,9 +4107,11 @@ class MapView(View):
 
 @attrs.frozen
 class Series:
-    """A curve of a `ChartView`: its points, x against y, under `name` in the legend.
+    """A layer of a `ChartView`: its points, x against y, under `name` in the legend.
 
-    A point whose x or y is NaN is not drawn: the curve has a gap there.
+    Make one with `line`, `scatter` or `bars`. A chart draws its series over the same
+    axes, e.g. a line over bars. A point whose x or y is NaN is not drawn: a line has a
+    gap there.
     """
 
     def _check_y(self, _attribute: attrs.Attribute[Any], y: list[float]) -> None:
@@ -4121,34 +4124,77 @@ class Series:
             msg = f"Cannot color the series {self.name!r} {color!r}: give it as #rrggbb."
             raise ValueError(msg)
 
-    def _check_kind(self, _attribute: attrs.Attribute[Any], kind: Optional[ChartKind]) -> None:
-        if kind is ChartKind.BAR:
-            msg = f"Cannot draw the series {self.name!r} as bars: a BAR chart draws its series so."
-            raise ValueError(msg)
-
     #: the legend's entry
     name: str
     x: list[float] = attrs.field(converter=_to_floats)
     y: list[float] = attrs.field(converter=_to_floats, validator=[_check_y])
-    #: how it is drawn, as a line or dots; None: as its chart's `kind`
-    kind: Optional[ChartKind] = attrs.field(default=None, validator=[_check_kind])
+    #: how it is drawn: as a line, dots or bars
+    kind: ChartKind = attrs.field(kw_only=True)
     #: its color, as #rrggbb, the same in every theme, e.g. a logo's or a code's; None:
     #: the backend's theme picks it
-    color: Optional[str] = attrs.field(default=None, validator=[_check_color])
+    color: Optional[str] = attrs.field(default=None, kw_only=True, validator=[_check_color])
     #: whether the area between its line and 0 is filled, e.g. a shape
-    fill: bool = False
+    fill: bool = attrs.field(default=False, kw_only=True)
     #: whether its line holds each value until the next point, in steps, e.g. the jobs
-    #: running over time; with `fill`, a step area. Dots are drawn as they are
-    step: bool = False
+    #: running over time; with `fill`, a step area
+    step: bool = attrs.field(default=False, kw_only=True)
     #: with `fill`, the area's color, as #rrggbb, e.g. a pale area under a strong line;
     #: None: the color of its line
-    fill_color: Optional[str] = attrs.field(default=None, validator=[_check_color])
+    fill_color: Optional[str] = attrs.field(default=None, kw_only=True, validator=[_check_color])
 
     @classmethod
-    def bars(cls, name: str, values: Iterable[float]) -> Series:
-        """Make a `BAR` chart's series: a bar per value, in its chart's `categories` in order."""
+    def line(  # noqa: PLR0913 (a line's options, each by its name)
+        cls,
+        name: str,
+        x: Iterable[float],
+        y: Iterable[float],
+        *,
+        color: Optional[str] = None,
+        fill: bool = False,
+        step: bool = False,
+        fill_color: Optional[str] = None,
+    ) -> Series:
+        """Make a series drawn as a line through its points, e.g. a result against time."""
+        return cls(
+            name,
+            x,
+            y,
+            kind=ChartKind.LINE,
+            color=color,
+            fill=fill,
+            step=step,
+            fill_color=fill_color,
+        )
+
+    @classmethod
+    def scatter(
+        cls, name: str, x: Iterable[float], y: Iterable[float], *, color: Optional[str] = None
+    ) -> Series:
+        """Make a series drawn as dots, e.g. measurements over a model's curve."""
+        return cls(name, x, y, kind=ChartKind.SCATTER, color=color)
+
+    @classmethod
+    def bars(
+        cls,
+        name: str,
+        values: Iterable[float],
+        *,
+        x: Optional[Iterable[float]] = None,
+        color: Optional[str] = None,
+    ) -> Series:
+        """Make a series drawn as bars: a bar per value, in its chart's `categories` in order.
+
+        With `x`, a bar at each of them instead: a category's index, or a value of the x
+        axis of a chart without categories.
+        """
         heights = list(values)
-        return cls(name, list(range(len(heights))), heights)
+        return cls(
+            name,
+            range(len(heights)) if x is None else x,
+            heights,
+            kind=ChartKind.BAR,
+            color=color,
+        )
 
 
 class LineStyle(enum.Enum):
@@ -4174,7 +4220,7 @@ class ReferenceLine:
             msg = f"Cannot color the reference line {self.label!r} {color!r}: give it as #rrggbb."
             raise ValueError(msg)
 
-    #: where it crosses its axis: a y, or an x if `vertical` (a bar chart's category index)
+    #: where it crosses its axis: a y, or an x if `vertical` (with categories, an index)
     value: float = attrs.field(converter=float)
     #: shown beside it, e.g. "Max: 40"; empty: none
     label: str = ""
@@ -4240,8 +4286,9 @@ class ChartView(View):
     list to redraw it, e.g. when a job adds points. The user's zoom stays, where the
     backend has one.
 
-    A `BAR` chart draws a group of bars for each of its `categories`, a bar per series. A
-    series' x is the index of a category, and its y is the bar's height.
+    Its series are layers over the same axes, each drawn as its own kind: a line, dots
+    or bars. With `categories`, the x axis shows them, and a series' x is the index of a
+    category. The bars at an x stand beside each other, in a group.
 
     Its axes, `x` and `y`, hold their titles, units and scales (see `Axis`). They are the
     app's, as a title is: a study doesn't save them.
@@ -4249,20 +4296,18 @@ class ChartView(View):
     A log axis (`Scale.LOG`) leaves out the values it can't show, those <= 0. A point
     at such an x isn't drawn, and such a y leaves a gap (see `drawn_points`). A reference
     line at such a value isn't drawn either (see `drawn_lines`). So a job's points never
-    make the chart fail. A bar chart's x, its categories, is never a log axis.
+    make the chart fail. An x axis that shows categories or bars is never a log axis.
     """
 
     _renderer_key = "chart"
 
-    #: how its series are drawn, unless one says otherwise (`Series.kind`)
-    kind: ChartKind = attrs.field(default=ChartKind.LINE)
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
     x: Axis = attrs.field(factory=Axis, metadata={UI_TEXT: True})
     y: Axis = attrs.field(factory=Axis, metadata={UI_TEXT: True})
     series: list[Series] = attrs.field(factory=list[Series])
     #: lines at values, e.g. a limit, drawn over the series
     reference_lines: list[ReferenceLine] = attrs.field(factory=list[ReferenceLine])
-    #: a `BAR` chart's categories, by the index each series' x names
+    #: what the x axis shows instead of numbers, by the index each series' x names
     categories: list[str] = attrs.field(factory=list[str])
     #: the action saving the chart as a report's image (see `composeui.core.chartimage`),
     #: where the backend has one: with the `report` extra installed
@@ -4277,14 +4322,37 @@ class ChartView(View):
     clicked: Signal[float, float] = attrs.Factory(Signal[float, float])
 
     @staticmethod
-    def kind_of(series: Series, kind: ChartKind) -> ChartKind:
-        """Get how `series` is drawn on a chart of `kind`: a bar chart draws only bars.
+    def is_x_log(x: Axis, categories: list[str], series: list[Series]) -> bool:
+        """Tell whether the x axis is drawn as a log axis: not one of categories or bars.
 
-        Takes the chart's kind, as a renderer refreshes it before the view holds it.
+        Takes the chart's values, as a renderer refreshes each before the view holds it.
         """
-        if kind is ChartKind.BAR or series.kind is None:
-            return kind
-        return series.kind
+        return (
+            x.is_log
+            and len(categories) == 0
+            and all(curve.kind is not ChartKind.BAR for curve in series)
+        )
+
+    @staticmethod
+    def loadable_state(data: dict[str, Any]) -> dict[str, Any]:
+        """Get a chart's saved state as it is saved now, from a study saved before.
+
+        Then, the chart held a kind, which a series without one took, and a bar chart drew
+        every series as bars.
+        """
+        if "kind" not in data:
+            return data
+        chart_kind = data["kind"]
+        series = [
+            {
+                **curve,
+                "kind": chart_kind
+                if chart_kind == ChartKind.BAR.value or curve.get("kind") is None
+                else curve["kind"],
+            }
+            for curve in data.get("series", [])
+        ]
+        return {**data, "series": series}
 
     @staticmethod
     def drawn_points(
@@ -4371,13 +4439,57 @@ class ChartView(View):
         )
 
     @staticmethod
-    def bar_slot(index: int, series_count: int) -> tuple[float, float]:
-        """Get the offset of a series' bar from its category's index, and its width.
+    def bars_of(
+        series: Series, categories: list[str], *, y_log: bool = False
+    ) -> tuple[list[float], list[float]]:
+        """Get the bars of `series` that are drawn: the x of each, and its height.
 
-        In categories: the bar's middle is at the offset, its group centered on the index.
+        With `categories`, a bar per category that has one (see `bar_heights`). Without,
+        a bar at each x. A NaN is no bar, nor is a height of 0 or less on a log y axis.
         """
-        width = BAR_GROUP_WIDTH / series_count
-        return (index - (series_count - 1) / 2) * width, width
+        points: list[tuple[float, float]]
+        if len(categories) > 0:
+            heights = ChartView.bar_heights(series, len(categories), y_log=y_log)
+            points = [(float(category), height) for category, height in enumerate(heights)]
+        else:
+            points = [(x, y) for x, y in zip(series.x, series.y) if math.isfinite(x)]
+        drawn = [(x, y) for x, y in points if math.isfinite(y) and not (y_log and not y > 0)]
+        return [x for x, _y in drawn], [y for _x, y in drawn]
+
+    @staticmethod
+    def bar_step(series: list[Series], categories: list[str]) -> float:
+        """Get the room between two bars' x: 1 between categories, else the smallest step.
+
+        The smallest difference between the x of the bar series, 1 with fewer than two x.
+        """
+        if len(categories) > 0:
+            return 1.0
+        xs = sorted(
+            {
+                x
+                for curve in series
+                if curve.kind is ChartKind.BAR
+                for x in curve.x
+                if math.isfinite(x)
+            }
+        )
+        return min((high - low for low, high in zip(xs, xs[1:])), default=1.0)
+
+    @staticmethod
+    def bar_slots(series: list[Series], categories: list[str]) -> dict[int, tuple[float, float]]:
+        """Get each bar series' slot in a group of bars, by its index in `series`.
+
+        A slot is the offset of the bar's middle from its x, and its width: the bar series
+        share `BAR_GROUP_WIDTH` of the room between two x, their group centered on the x.
+        """
+        bars = [index for index, curve in enumerate(series) if curve.kind is ChartKind.BAR]
+        if len(bars) == 0:
+            return {}
+        width = BAR_GROUP_WIDTH * ChartView.bar_step(series, categories) / len(bars)
+        return {
+            index: ((position - (len(bars) - 1) / 2) * width, width)
+            for position, index in enumerate(bars)
+        }
 
 
 def _to_point(value: Iterable[float]) -> tuple[float, float]:

@@ -2638,7 +2638,7 @@ class _SwappingMainView(MainView):
 
 @define_view
 class _SwappingChartMainView(_SwappingMainView):
-    chart: ChartView = child(ChartView, series=[Series("Curve", x=[1.0, 2.0], y=[1.0, 2.0])])
+    chart: ChartView = child(ChartView, series=[Series.line("Curve", [1.0, 2.0], [1.0, 2.0])])
 
 
 @define_view
@@ -2889,6 +2889,54 @@ def test_a_bar_chart_draws_its_bars_by_category(chart_pages_page: Page) -> None:
     legend = energy.locator(".u-legend")
     expect(legend).to_contain_text("Bedroom")
     expect(legend).to_contain_text("80 kWh")  # a whole number, as it is: not 80.00
+
+
+def test_a_line_is_drawn_over_the_bars_of_the_same_categories(chart_pages_page: Page) -> None:
+    chart_pages_page.goto("/chart")
+    orders = chart_pages_page.locator("figure").filter(has_text="Orders")
+    expect(orders.locator("canvas")).to_have_count(1)
+
+    orders.scroll_into_view_if_needed()  # the mouse reaches only what the window shows
+    box = orders.locator(".u-over").bounding_box()
+    assert box is not None
+    # the middle of February's group: its two bars, and the line's point over them
+    chart_pages_page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+
+    legend = orders.locator(".u-legend")
+    expect(legend).to_contain_text("Feb")
+    for value in ("140 k", "110 k", "95 k"):
+        expect(legend).to_contain_text(value)
+    # the bars stand on 0, the line's range with them
+    y_min = orders.locator("[data-chart]").evaluate(
+        "element => ComposeUI.charts.drawn.get(element).scales.y.min"
+    )
+    assert y_min == 0
+
+
+def test_bars_without_categories_show_whole_and_a_zoom_stays_as_it_is(
+    chart_pages_page: Page,
+) -> None:
+    chart_pages_page.goto("/chart")
+    ages = chart_pages_page.locator("figure").filter(has_text="Ages")
+    expect(ages.locator("canvas")).to_have_count(1)
+    scales = (
+        "element => { const chart = ComposeUI.charts.drawn.get(element);"
+        " return [chart.scales.x.distr, chart.scales.x.min, chart.scales.x.max]; }"
+    )
+    plot = ages.locator("[data-chart]")
+
+    # a linear axis, half a step of 10 past the first bar's x, 10, and the last's, 40
+    assert plot.evaluate(scales) == [1, 5, 45]
+
+    plot.evaluate(
+        "element => ComposeUI.charts.drawn.get(element).setScale('x', {min: 12, max: 38})"
+    )
+    assert plot.evaluate(scales) == [1, 12, 38]
+    chart_pages_page.get_by_role("button", name="Theme").click()
+    chart_pages_page.get_by_role("button", name="Dark").click()
+    expect(ages.locator(".uplot")).to_have_count(1)
+    # rebuilt at the same zoom: not widened by half a step at each draw
+    assert plot.evaluate(scales) == [1, 12, 38]
 
 
 def test_a_log_axis_draws_on_a_log_scale(chart_pages_page: Page) -> None:

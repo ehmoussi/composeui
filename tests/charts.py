@@ -6,7 +6,6 @@ from attrs import Factory
 
 from composeui.core.view import (
     Axis,
-    ChartKind,
     ChartView,
     LabelView,
     LineStyle,
@@ -39,7 +38,7 @@ class ChartPage(PageView):
         title="Pressure",
         x=Axis("Time", unit="s"),
         y=Axis(unit="kPa"),
-        series=[Series(name="Inlet", x=[0, 1, 2, 3], y=[1, 3, 2, 4])],
+        series=[Series.line("Inlet", [0, 1, 2, 3], [1, 3, 2, 4])],
         # off the grid's lines, the maximum and minimum past the data
         reference_lines=[
             ReferenceLine(4.6, "Max: 4.6", color="#d03030", style=LineStyle.SOLID),
@@ -49,15 +48,33 @@ class ChartPage(PageView):
     )
     energy: ChartView = child(
         ChartView,
-        kind=ChartKind.BAR,
         title="Energy",
         y=Axis(unit="kWh"),
         categories=["Kitchen", "Bedroom", "Office"],
         series=[
-            Series(name="Heating", x=[0, 1, 2], y=[120, 80, 95]),
+            Series.bars("Heating", [120, 80, 95]),
             # no cooling in the bedroom
-            Series(name="Cooling", x=[0, 2], y=[30, 45]),
+            Series.bars("Cooling", [30, 45], x=[0, 2]),
         ],
+    )
+    orders: ChartView = child(
+        ChartView,
+        title="Orders",
+        y=Axis(unit="k"),
+        categories=["Jan", "Feb", "Mar"],
+        # a line over the bars of two series, on the same categories
+        series=[
+            Series.bars("Shop", [120, 140, 90]),
+            Series.line("Target", [0, 1, 2], [100, 110, 125]),
+            Series.bars("Online", [80, 95, 130]),
+        ],
+    )
+    ages: ChartView = child(
+        ChartView,
+        title="Ages",
+        x=Axis(unit="y", scale=Scale.LOG),
+        # no categories: a bar at each x, whose axis then stays linear
+        series=[Series.bars("People", [4, 6, 5], x=[10, 20, 40])],
     )
     decay: ChartView = child(
         ChartView,
@@ -65,7 +82,7 @@ class ChartPage(PageView):
         x=Axis(unit="s", scale=Scale.LOG),
         y=Axis(scale=Scale.LOG),
         # a log axis shows neither 0 nor -1
-        series=[Series(name="Activity", x=[0, 1, 10, 100, 1000], y=[1, 1000, -1, 10, 1])],
+        series=[Series.line("Activity", [0, 1, 10, 100, 1000], [1, 1000, -1, 10, 1])],
     )
     jobs: ChartView = child(
         ChartView,
@@ -73,16 +90,16 @@ class ChartPage(PageView):
         x=Axis(unit="h"),
         # each count held until the next change; the queue's from 1 h, on its own x
         series=[
-            Series(
-                name="Running",
-                x=[0, 2, 5, 6],
-                y=[1, 3, 2, 4],
+            Series.line(
+                "Running",
+                [0, 2, 5, 6],
+                [1, 3, 2, 4],
                 color="#204080",
                 step=True,
                 fill=True,
                 fill_color="#c0d0f0",
             ),
-            Series(name="Queued", x=[1, 4], y=[0.5, 1], step=True),
+            Series.line("Queued", [1, 4], [0.5, 1], step=True),
         ],
     )
 

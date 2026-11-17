@@ -428,6 +428,13 @@ section covers what users see.
   of the page, up to five times: never as the other file arrives. Once both are there, each
   change of the page goes to the script before any check that a chart is shown, so a chart
   swapped out is destroyed, and a map finalized.
+- **A chart's bars.** The server places the bars: the JSON of a chart holds each bar series'
+  offset and width (`ChartView.bar_slots`), and the room between two bars' x. A series of
+  another kind takes no room, so a line stands at the categories, over the bars. Without
+  categories, `charts.js` adds half of that room to each end of the x range, so that the first
+  and the last bar show whole. It adds it only when the range is the whole data: uPlot runs a
+  scale's range function on a zoom too, and a zoom widened at each draw would drift as the
+  series change.
 - **The order of the listeners.** Listeners of one event and phase run in the order they were
   added, and `tables.js` adds its after all of `page.js`'s. `page.js`'s captured Enter
   dispatches `activate`, which selects a row, before `tables.js` activates it. A cell's Escape is

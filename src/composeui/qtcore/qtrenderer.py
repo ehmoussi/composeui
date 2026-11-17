@@ -69,7 +69,6 @@ from composeui.core.view import (
     Align,
     ButtonVariant,
     CellKind,
-    ChartKind,
     ChartView,
     ConsoleView,
     DateRangeInputMixin,
@@ -1705,7 +1704,6 @@ def _map_renderer(view: Any) -> Renderer[Any, Any]:
 
 
 class ChartViewLike(ViewLike, Protocol):
-    kind: ChartKind
     title: str
     x: Axis
     y: Axis
@@ -1728,7 +1726,6 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
         super().__init__(view)
         self._refresh_dispatcher.update(
             {
-                "kind": self._refresh_kind,
                 "title": self._refresh_title,
                 "x": self._refresh_x,
                 "y": self._refresh_y,
@@ -1746,10 +1743,6 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
             self._connect(self._rendered_object.save_image_requested, self._save_image)
             self._rendered_object.point_clicked.connect(self._view.clicked.emit)
             self.refresh()
-
-    @staticmethod
-    def _refresh_kind(_view: ChartViewLike, rendered_object: QChart, value: ChartKind) -> None:
-        rendered_object.set_kind(value)
 
     @staticmethod
     def _refresh_title(_view: ChartViewLike, rendered_object: QChart, value: str) -> None:

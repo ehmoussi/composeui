@@ -2378,7 +2378,6 @@ class WebMapRenderer(WebRenderer[MapViewLike]):
 
 
 class ChartViewLike(ViewLike, Protocol):
-    kind: ChartKind
     title: str
     x: Axis
     y: Axis
@@ -2421,12 +2420,18 @@ def _thin(x: list[float], y: list[float], max_points: int) -> tuple[list[float],
     return [x[index] for index in kept], [y[index] for index in kept]
 
 
-def _chart_points(series: Series, *, x_log: bool, y_log: bool) -> tuple[list[float], list[float]]:
+def _chart_points(
+    series: Series, categories: list[str], *, x_log: bool, y_log: bool
+) -> tuple[list[float], list[float]]:
     """Get a series' points as uPlot draws them: by ascending x, thinned when long.
 
-    A log axis' values it can't show are left out (`ChartView.drawn_points`).
+    A log axis' values it can't show are left out (`ChartView.drawn_points`), and a bar
+    series gives the bars it draws (`ChartView.bars_of`).
     """
-    xs, ys = ChartView.drawn_points(series, x_log=x_log, y_log=y_log)
+    if series.kind is ChartKind.BAR:
+        xs, ys = ChartView.bars_of(series, categories, y_log=y_log)
+    else:
+        xs, ys = ChartView.drawn_points(series, x_log=x_log, y_log=y_log)
     points = [(x, y) for x, y in zip(xs, ys) if math.isfinite(x)]
     if any(a[0] > b[0] for a, b in zip(points, points[1:])):
         points.sort(key=lambda point: point[0])
@@ -2467,7 +2472,6 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         self._refresh_dispatcher.update(
             dict.fromkeys(
                 (
-                    "kind",
                     "title",
                     "x",
                     "y",
@@ -2484,9 +2488,9 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
     def chart_json(self) -> str:
         """Get what the page's script draws, as JSON."""
         view = self._view
-        # a bar chart's x is its categories, never a log axis
-        x_log = view.x.is_log and view.kind is not ChartKind.BAR
+        x_log = ChartView.is_x_log(view.x, view.categories, view.series)
         y_log = view.y.is_log
+        slots = ChartView.bar_slots(view.series, view.categories)
         spec: dict[str, Any] = {
             "title": view.title,
             "x": {"label": view.x.label, "unit": view.x.unit, "log": x_log},
@@ -2494,7 +2498,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
             "series": [
                 {
                     "name": series.name,
-                    "kind": ChartView.kind_of(series, view.kind).name.lower(),
+                    "kind": series.kind.name.lower(),
                     # None: the theme's
                     "color": series.color,
                     "fill": series.fill,
@@ -2515,17 +2519,21 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                     "color": line.color,
                     "style": line.style.name.lower(),
                 }
-                for line in ChartView.drawn_lines(
-                    view.reference_lines,
-                    x_log=x_log,
-                    y_log=y_log,
-                )
+                for line in ChartView.drawn_lines(view.reference_lines, x_log=x_log, y_log=y_log)
             ],
         }
-        if view.kind is ChartKind.BAR:
-            self._add_bars(spec)
-            return json.dumps(spec, allow_nan=False, separators=(",", ":"))
-        points = [_chart_points(series, x_log=x_log, y_log=y_log) for series in view.series]
+        # a bar in its group, by its middle's offset from its x, and its width
+        for index, (offset, width) in slots.items():
+            spec["series"][index].update({"offset": offset, "width": width})
+        if len(slots) > 0:
+            # the room between two bars' x: half of it past the first and the last
+            spec["bar_step"] = ChartView.bar_step(view.series, view.categories)
+        if len(view.categories) > 0:
+            spec["categories"] = view.categories
+        points = [
+            _chart_points(series, view.categories, x_log=x_log, y_log=y_log)
+            for series in view.series
+        ]
         if len(points) > 0 and all(x == points[0][0] for x, _y in points):
             # uPlot's own columns: the x shared, then each series' y
             spec["data"] = [points[0][0], *([_json_number(v) for v in y] for _x, y in points)]
@@ -2534,31 +2542,11 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
             spec["pairs"] = [[x, [_json_number(v) for v in y]] for x, y in points]
         return json.dumps(spec, allow_nan=False, separators=(",", ":"))
 
-    def _add_bars(self, spec: dict[str, Any]) -> None:
-        """Add a bar chart's categories, and its bars: their heights, offsets and widths."""
-        view = self._view
-        count = len(view.categories)
-        spec["categories"] = view.categories
-        # x, the categories' indexes, shared; each series' height in each of them
-        spec["data"] = [
-            list(range(count)),
-            *(
-                [
-                    _json_number(height)
-                    for height in ChartView.bar_heights(series, count, y_log=view.y.is_log)
-                ]
-                for series in view.series
-            ),
-        ]
-        for index, series_spec in enumerate(spec["series"]):
-            offset, width = ChartView.bar_slot(index, len(view.series))
-            series_spec.update({"offset": offset, "width": width})
-
     def _description(self) -> str:
         """Describe the chart to a screen reader, which can't read its canvas."""
         view = self._view
         names = ", ".join(series.name for series in view.series)
-        if view.kind is ChartKind.BAR:
+        if len(view.categories) > 0:
             x_label, link = ", ".join(view.categories), "for"
         else:
             x_label, link = view.x.label, "against"

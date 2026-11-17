@@ -94,8 +94,8 @@ def test_the_curves_tab_shows_hides_and_draws_each_curve(tmp_path: Path) -> None
     curves.emit_cell_edited(0, 2, "Steps")
     curves.emit_cell_edited(1, 2, "Line")
     computed, measured = view.chart.series
-    assert (computed.kind, computed.step) == (None, True)
-    assert (measured.kind, measured.step) == (None, False)
+    assert (computed.kind, computed.step) == (ChartKind.LINE, True)
+    assert (measured.kind, measured.step) == (ChartKind.LINE, False)
 
     # a study keeps the curves hidden, to show them again once loaded
     curves.check_all(0, is_checked=False)
@@ -106,7 +106,7 @@ def test_the_curves_tab_shows_hides_and_draws_each_curve(tmp_path: Path) -> None
     loaded.load_state(path)
     loaded.curves.emit_cell_edited(1, 0, "True")
     (shown,) = loaded.chart.series
-    assert (shown.name, shown.kind) == ("Measured, D = 50 mm", None)
+    assert (shown.name, shown.kind) == ("Measured, D = 50 mm", ChartKind.LINE)
 
     view.clear_curves()
     assert (view.curves.rows, view.chart.series) == ([], [])

@@ -82,9 +82,9 @@ WARNING_COLOR = "#fed7aa"
 #: the pressure the pump gives (kPa): a pipe whose drop is over it can't pass that flow
 PUMP_PRESSURE = 20.0
 #: how a curve is drawn, by the text its "Drawn as" cell shows: its kind and whether in steps
-DRAWINGS: dict[str, tuple[Optional[ChartKind], bool]] = {
-    "Line": (None, False),
-    "Steps": (None, True),
+DRAWINGS: dict[str, tuple[ChartKind, bool]] = {
+    "Line": (ChartKind.LINE, False),
+    "Steps": (ChartKind.LINE, True),
     "Dots": (ChartKind.SCATTER, False),
 }
 
@@ -129,7 +129,7 @@ def pressure_drop_curve(diameter_mm: float, length: float, max_flow: float) -> S
     """Sweep the flow rate (L/s) up to `max_flow` through a pipe; the drop is in kPa."""
     flows = [max_flow * index / SWEEP_POINTS for index in range(1, SWEEP_POINTS + 1)]
     drops = [pressure_drop(flow, diameter_mm, length) for flow in flows]
-    return Series(name=f"D = {diameter_mm:g} mm", x=flows, y=drops)
+    return Series.line(f"D = {diameter_mm:g} mm", flows, drops)
 
 
 def measurements(
@@ -150,11 +150,10 @@ def measurements(
 def measured_drops(diameter_mm: float, length: float, max_flow: float) -> Series:
     """Get what the test rig measured on a pipe: dots near its computed curve."""
     points = measurements(diameter_mm, length, max_flow)
-    return Series(
-        name=f"Measured, D = {diameter_mm:g} mm",
-        x=[flow for flow, _, _ in points],
-        y=[measured for _, measured, _ in points],
-        kind=ChartKind.SCATTER,
+    return Series.scatter(
+        f"Measured, D = {diameter_mm:g} mm",
+        [flow for flow, _, _ in points],
+        [measured for _, measured, _ in points],
     )
 
 
