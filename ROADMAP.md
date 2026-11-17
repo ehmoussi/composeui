@@ -205,8 +205,6 @@ The SQLite model is complete otherwise: do not rebuild it.
   any platform must give the app.
 - **Sessions that survive a restart** (Now). A data folder on a volume: the sessions saved at
   intervals and on shutdown, and the cookies' signing key.
-- **Cleanup after a crash** (Now). Extend cleanup to other temporary directories, including web
-  uploads and sessions, without touching another instance's files or recoverable work.
 - **A bounded exit during a write** (Now). Shutdown briefly waits for active writes to finish or
   stop, without releasing resources that a worker still uses.
 - **Formulas in CSV exports** (Now, before data is shared between users). A table's Export CSV

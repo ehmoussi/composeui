@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 import zipfile
@@ -24,10 +25,12 @@ from composeui.core.model import Model
 from composeui.core.sqlitemodel import SqliteModel
 from composeui.core.study import open_study, save_study
 from composeui.core.view import MainView
+from composeui.webcore.files import SessionFiles
 
 if TYPE_CHECKING:
     from collections.abc import Generator
 
+    from composeui.core.jobs import Job
 
 _WRITER = """
 import json, os, pathlib, sys
@@ -81,6 +84,11 @@ elif kind == "study":
     save_study(SlowView(), SlowModel(), target)
 elif kind == "csv":
     SlowTable().export_csv(target)
+elif kind == "reload-child":
+    from composeui.core.reload import take_changes
+    os.environ["COMPOSEUI_RELOADED"] = str(target)
+    assert take_changes() is None
+    pause([target])
 else:
     view = MainView()
     def write(sink):
@@ -88,6 +96,97 @@ else:
         pause()
     save_download(view, target, StreamContent(write))
     view.jobs.wait(30)
+"""
+
+_WEB_WRITER = """
+import asyncio, json, os, pathlib, sys
+from starlette.requests import Request
+from starlette.testclient import TestClient
+from composeui.core.view import FilePathInputView, MainView, child, define_view
+from composeui.webcore.session import SessionStore, Hibernation
+from composeui.webcore.uploads import receive_upload
+from composeui.webcore.webapplication import WebApplication
+
+ready = pathlib.Path(os.environ["READY"])
+def pause(paths):
+    temporary = ready.with_suffix(".announcing")
+    temporary.write_text(json.dumps([str(p) for p in paths]))
+    temporary.replace(ready)
+    assert sys.stdin.readline() == "\\n"
+
+@define_view
+class Main(MainView):
+    file: FilePathInputView = child(FilePathInputView)
+
+kind = sys.argv[1]
+if kind == "web-body":
+    body = (
+        b"--boundary\\r\\nContent-Disposition: form-data; name=\\"file\\"; "
+        b"filename=\\"draft.csv\\"\\r\\n\\r\\n" + b"x" * 400000
+    )
+    reads = 0
+    async def receive():
+        global reads
+        reads += 1
+        if reads == 1:
+            return {"type": "http.request", "body": body, "more_body": True}
+        roots = pathlib.Path(os.environ["TMPDIR"]).glob("composeui-scratch-*")
+        paths = [p for root in roots for p in root.rglob("upload")]
+        assert paths and all(p.stat().st_size > 0 for p in paths)
+        pause(paths)
+        return {"type": "http.request", "body": b"\\r\\n--boundary--\\r\\n", "more_body": False}
+    async def run():
+        request = Request(
+            {
+                "type": "http",
+                "headers": [(b"content-type", b"multipart/form-data; boundary=boundary")],
+            },
+            receive,
+        )
+        async with receive_upload(request, 1000000):
+            pass
+    asyncio.run(run())
+elif kind == "web-idle":
+    store = SessionStore(
+        lambda: (Main(), None), ttl=60, max_sessions=1, hibernation=Hibernation(0, 10)
+    )
+    session_id, session = store.get_or_create(None)
+    session.main_view.file.text = "kept"
+    store.hibernate_idle()
+    assert not store.is_at_hand(session_id)
+    pause([store._directory])
+    assert store.get(session_id).main_view.file.text == "kept"
+    store.close_all()
+elif kind == "web-wake":
+    saved = pathlib.Path(os.environ["TARGET"])
+    store = SessionStore(lambda: (Main(), None), ttl=60, max_sessions=1, saved=saved)
+    restored = [
+        store.get(p.name) for p in saved.iterdir()
+        if p.is_dir() and not p.name.startswith(".")
+    ]
+    assert len(restored) == 1
+    assert restored[0].main_view.file.path.read_bytes() == b"kept upload"
+    store.close_all()
+else:
+    views = []
+    class App(WebApplication):
+        def setup_session(self, view):
+            views.append(view)
+    app = App(build_main_view=Main)
+    saved = pathlib.Path(os.environ["TARGET"]) if kind == "web-saved" else None
+    web = app.create_starlette_app(saved_sessions=saved)
+    with TestClient(web, headers={"Sec-Fetch-Site": "same-origin"}) as client:
+        client.get("/")
+        view = views[-1]
+        if kind != "web-saved":
+            view.file.text_changed.connect(lambda: pause([view.file.path]))
+        client.post(
+            "/widget/" + view.file.renderer.widget_id + "/file",
+            files={"file": ("draft.csv", b"kept upload", "text/csv")},
+        ).raise_for_status()
+        path = view.file.path
+    if kind == "web-saved":
+        pause([path])
 """
 
 _START = """
@@ -116,7 +215,7 @@ def _start_again() -> subprocess.CompletedProcess[bytes]:
 @contextlib.contextmanager
 def _writing(kind: str, target: Path, ready: Path) -> Generator[subprocess.Popen[str]]:
     process = subprocess.Popen(  # noqa: S603
-        [sys.executable, "-c", _WRITER, kind],
+        [sys.executable, "-c", _WEB_WRITER if kind.startswith("web-") else _WRITER, kind],
         env={**os.environ, "TARGET": str(target), "READY": str(ready)},
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
@@ -136,10 +235,14 @@ def _writing(kind: str, target: Path, ready: Path) -> Generator[subprocess.Popen
         process.communicate(timeout=20)
 
 
-@pytest.mark.parametrize("kind", ["sqlite", "state", "study", "stream", "csv"])
+@pytest.mark.parametrize(
+    "kind", ["sqlite", "state", "study", "stream", "csv", "web-body", "web-idle", "web-upload"]
+)
 def test_the_next_start_cleans_a_killed_writer_but_not_a_live_one(
     scratch: Path, tmp_path: Path, kind: str
 ) -> None:
+    if kind.startswith("web-"):
+        pytest.importorskip("starlette")
     target = tmp_path / "saved"
     target.write_text("previous save")
     ready = tmp_path / "ready"
@@ -341,15 +444,23 @@ def test_an_unsafe_or_unavailable_root_is_not_used(
             root.chmod(0o700)
 
 
+@pytest.mark.parametrize("failure", ["connect", "read"])
 def test_a_scratch_lock_failure_leaves_no_new_directory(
-    scratch: Path, monkeypatch: pytest.MonkeyPatch
+    scratch: Path, monkeypatch: pytest.MonkeyPatch, failure: str
 ) -> None:
     connect = sqlite3.connect
 
-    def failing(path: str, **kwargs: Any) -> sqlite3.Connection:
-        if Path(path).name == "lock.sqlite":
+    class FailedConnection(sqlite3.Connection):
+        def execute(self, sql: str, *args: Any, **kwargs: Any) -> sqlite3.Cursor:
             msg = "disk full"
             raise sqlite3.OperationalError(msg)
+
+    def failing(path: str, **kwargs: Any) -> sqlite3.Connection:
+        if Path(path).name == "lock.sqlite":
+            if failure == "connect":
+                msg = "disk full"
+                raise sqlite3.OperationalError(msg)
+            return connect(path, factory=FailedConnection, **kwargs)
         return connect(path, **kwargs)
 
     monkeypatch.setattr(sqlite3, "connect", failing)
@@ -463,3 +574,145 @@ def test_a_model_s_data_file_cannot_replace_cleanup_metadata(
     assert model.content == "study data"
     (root,) = scratch.glob("composeui-scratch-*")
     assert not any(path.is_dir() for path in root.iterdir())
+
+
+@pytest.mark.parametrize("first_to_end", ["supervisor", "child"])
+def test_a_reload_child_and_its_supervisor_both_own_the_saved_files(
+    tmp_path: Path, first_to_end: str
+) -> None:
+    pytest.importorskip("starlette")
+    owner = _files.ScratchDirectory()
+    saved = owner.path / "sessions"
+    saved.mkdir()
+    ready = tmp_path / "ready"
+    try:
+        with _writing("web-saved", saved, ready) as child:
+            (upload,) = (Path(name) for name in json.loads(ready.read_text()))
+            if first_to_end == "supervisor":
+                owner.cleanup()
+            _start_again()
+            assert upload.read_bytes() == b"kept upload"
+            child.kill()
+            child.wait(timeout=20)
+            _start_again()
+        if first_to_end == "supervisor":
+            assert not saved.exists()
+        else:
+            assert upload.read_bytes() == b"kept upload"
+            subprocess.run(  # noqa: S603
+                [sys.executable, "-c", _WEB_WRITER, "web-wake"],
+                env={**os.environ, "TARGET": str(saved), "READY": str(ready)},
+                check=True,
+                capture_output=True,
+                timeout=20,
+            )
+            assert not upload.exists()
+    finally:
+        owner.cleanup()
+    assert not saved.exists()
+
+
+def test_a_shared_scratch_lease_refuses_an_unrecognized_owner(tmp_path: Path) -> None:
+    with _files.ScratchDirectory() as directory:
+        unrelated = directory.parent / "not-an-owner"
+        unrelated.mkdir()
+        with pytest.raises(OSError, match="Not an owned scratch directory"):
+            _files.ScratchDirectory.borrow(unrelated)
+        assert _files.ScratchDirectory.borrow(tmp_path) is None
+
+
+@pytest.mark.parametrize("kind", ["web-body", "web-idle", "web-upload"])
+def test_finished_web_work_leaves_no_temporary_payload(
+    tmp_path: Path, scratch: Path, kind: str
+) -> None:
+    pytest.importorskip("starlette")
+    ready = tmp_path / "ready"
+    with _writing(kind, tmp_path / "unused", ready) as process:
+        paths = [Path(name) for name in json.loads(ready.read_text())]
+        assert process.stdin is not None
+        process.stdin.write("\n")
+        process.stdin.flush()
+        assert process.wait(timeout=20) == 0, process.communicate(timeout=5)
+    assert not any(path.exists() for path in paths)
+    (root,) = scratch.glob("composeui-scratch-*")
+    assert not any(path.is_dir() for path in root.iterdir())
+
+
+def test_a_desktop_reload_child_keeps_its_supervisor_s_files_alive(tmp_path: Path) -> None:
+    owner = _files.ScratchDirectory()
+    directory = owner.path
+    try:
+        with _writing("reload-child", directory, tmp_path / "ready") as child:
+            owner.cleanup()
+            _start_again()
+            assert directory.exists()
+            child.kill()
+            child.wait(timeout=20)
+            _start_again()
+            assert not directory.exists()
+    finally:
+        owner.cleanup()
+
+
+def test_server_files_stay_until_a_worker_s_cleanup_has_finished() -> None:
+    pytest.importorskip("starlette")
+
+    files = SessionFiles()
+    directory = files.upload_directory()
+    (directory / "draft").write_text("kept")
+    view = MainView()
+    working, go, cleaning, finish, ended = (threading.Event() for _ in range(5))
+
+    def work(_job: Job[None]) -> None:
+        working.set()
+        assert go.wait(20)
+
+    def cleanup() -> None:
+        cleaning.set()
+        assert finish.wait(20)
+        shutil.rmtree(directory)
+
+    view.jobs.start(work)
+    try:
+        assert working.wait(20)
+        files.after_workers(view.jobs, cleanup)
+        view.jobs.after_workers(ended.set)
+        files.close()
+        go.set()
+        assert cleaning.wait(20)
+        _start_again()
+        assert (directory / "draft").read_text() == "kept"
+    finally:
+        go.set()
+        finish.set()
+        view.jobs.wait(20)
+        assert ended.wait(20)
+    assert not directory.exists()
+
+
+def test_a_caller_s_storage_is_not_removed_with_its_sessions(tmp_path: Path) -> None:
+    pytest.importorskip("starlette")
+
+    files = SessionFiles(tmp_path)
+    directory = files.upload_directory()
+    (tmp_path / "important").write_text("not scratch")
+    files.after_workers(MainView().jobs, lambda: shutil.rmtree(directory))
+    files.close()
+    files.close()
+    assert not directory.exists()
+    assert (tmp_path / "important").read_text() == "not scratch"
+
+
+def test_a_scratch_lease_recognizes_a_temporary_directory_s_alias(
+    scratch: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    alias = tmp_path / "alias"
+    alias.symlink_to(scratch, target_is_directory=True)
+    monkeypatch.setattr(tempfile, "tempdir", str(alias))
+    owner = _files.ScratchDirectory()
+    borrowed = _files.ScratchDirectory.borrow(owner.path.resolve())
+    assert borrowed is not None
+    owner.cleanup()
+    assert borrowed.path.is_dir()
+    borrowed.cleanup()
+    assert not owner.path.exists()

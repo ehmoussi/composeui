@@ -11,7 +11,6 @@ import logging
 import os
 import secrets
 import sys
-import tempfile
 import threading
 import time
 import types
@@ -42,6 +41,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from typing_extensions import override
 
+from composeui.core._files import ScratchDirectory
 from composeui.core.application import Application, _add_reference_to_signals
 from composeui.core.jobs import starting_study
 from composeui.core.reactivity import start_reactions
@@ -547,9 +547,11 @@ class WebApplication(Application[MainViewT]):
             and has_change_events(Path.cwd())
         ):
             os.environ[_FORCE_POLLING_VARIABLE] = "false"
-        with tempfile.TemporaryDirectory(prefix="composeui-sessions-") as saved_sessions:
+        with ScratchDirectory() as scratch:
+            saved_sessions = scratch / "sessions"
+            saved_sessions.mkdir()
             # for the server's processes, which keep the sessions across its restarts
-            os.environ[_SAVED_SESSIONS_VARIABLE] = saved_sessions
+            os.environ[_SAVED_SESSIONS_VARIABLE] = str(saved_sessions)
             os.environ[_SIGNING_VARIABLE] = secrets.token_urlsafe(32)
             uvicorn.run(
                 f"{__name__}:{create_reloaded_starlette_app.__name__}",

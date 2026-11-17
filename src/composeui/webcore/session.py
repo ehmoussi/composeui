@@ -22,6 +22,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
+from composeui.core._files import ScratchDirectory
 from composeui.core.model import InvalidStateError
 from composeui.core.reactivity import batch, stop_reactions
 from composeui.core.registry import RendererType
@@ -36,6 +37,7 @@ from composeui.core.view import (
     dialogs_in,
 )
 from composeui.webcore.downloads import downloads_marker
+from composeui.webcore.files import SessionFiles
 from composeui.webcore.order import PostOrder
 from composeui.webcore.page import jobs_poller, page_marker
 from composeui.webcore.uploads import UploadRefusal
@@ -79,6 +81,7 @@ _NO_ROOM = "the server has no room for it right now"
 _UPLOADS_NAME = "uploads"
 #: the suffix of a session's directory being saved, renamed without it once complete
 _PARTIAL_SUFFIX = ".partial"
+_UPLOAD_DIRECTORY = re.compile(r"composeui-[a-z0-9_]{8}")
 
 LOGGER = logging.getLogger("COMPOSEUI")
 
@@ -102,14 +105,26 @@ def _saved_uploads(file: Path) -> Path | None:
     if not file.exists():
         return None
     path = Path(file.read_text(encoding="utf-8"))
-    is_ours = path.parent == Path(tempfile.gettempdir()) and path.name.startswith("composeui-")
-    return path if is_ours and path.is_dir() and not path.is_symlink() else None
+    is_ours = (
+        path.parent == Path(tempfile.gettempdir()) or path.parent == file.parent.parent / ".uploads"
+    ) and _UPLOAD_DIRECTORY.fullmatch(path.name) is not None
+    return (
+        path
+        if is_ours and path.is_dir() and not path.is_symlink() and not path.parent.is_symlink()
+        else None
+    )
 
 
 class WebSession(RenderTarget):
     """A session's view tree, rendered once and then driven by its browser's requests."""
 
-    def __init__(self, main_view: MainView, model: Model | None = None) -> None:
+    def __init__(
+        self,
+        main_view: MainView,
+        model: Model | None = None,
+        *,
+        files: SessionFiles | None = None,
+    ) -> None:
         super().__init__()
         self.main_view = main_view
         #: names this session in its pages, which send it back with their requests: a page
@@ -118,6 +133,8 @@ class WebSession(RenderTarget):
         self.page_tag = secrets.token_hex(16)
         # held here: the signals giving it to callbacks only keep a weak reference
         self.model = model
+        self._files = SessionFiles() if files is None else files
+        self._owns_files = files is None
         #: where the file path fields' uploads are kept, made by the first one
         self._uploads: Path | None = None
         #: the directory of the upload that each file field holds, by its widget's id
@@ -246,12 +263,15 @@ class WebSession(RenderTarget):
                 stream.cancel()
             if self._uploads is not None:
                 # a job may still read them, even dropped: its thread goes on
-                self.main_view.jobs.after_workers(
-                    functools.partial(shutil.rmtree, self._uploads, ignore_errors=True)
+                self._files.after_workers(
+                    self.main_view.jobs,
+                    functools.partial(shutil.rmtree, self._uploads, ignore_errors=True),
                 )
                 self._uploads = None
                 self._held_uploads.clear()
                 self._replaced_uploads.clear()
+            if self._owns_files:
+                self._files.close()
 
     @property
     def closed(self) -> bool:
@@ -418,7 +438,7 @@ class WebSession(RenderTarget):
     ) -> Path:
         """Move a received file where the session keeps it for `renderer`; get its path."""
         if isinstance(renderer, WebActionRenderer):
-            path = Path(tempfile.mkdtemp(prefix="composeui-"), name)
+            path = self._files.upload_directory() / name
             shutil.move(str(received), str(path))
             return path
         if isinstance(renderer, WebTableRenderer):
@@ -464,7 +484,7 @@ class WebSession(RenderTarget):
     def _upload_directory(self, widget_id: str) -> Path:
         """Get a new directory for a field's upload, which `_hold_upload` makes the field's."""
         if self._uploads is None:
-            self._uploads = Path(tempfile.mkdtemp(prefix="composeui-"))
+            self._uploads = self._files.upload_directory()
         field = self._uploads / widget_id
         field.mkdir(exist_ok=True)
         return Path(tempfile.mkdtemp(dir=field))
@@ -500,7 +520,7 @@ class WebSession(RenderTarget):
         its own directory, removed once no path of `kept` is in it.
         """
         if self._uploads is None:
-            self._uploads = Path(tempfile.mkdtemp(prefix="composeui-"))
+            self._uploads = self._files.upload_directory()
         table = self._uploads / widget_id
         table.mkdir(exist_ok=True)
         for directory in table.iterdir():
@@ -543,7 +563,7 @@ class WebSession(RenderTarget):
         With `is_save`, the user saved the study (Save's post): it has no unsaved changes
         any more. A link's GET only downloads, and changes nothing.
         """
-        with self.lock, tempfile.TemporaryDirectory(prefix="composeui-") as directory:
+        with self.lock, ScratchDirectory() as directory:
             main_view = self.main_view
             if main_view.state_filepath is not None:
                 name = main_view.state_filepath.name
@@ -588,7 +608,7 @@ class WebSession(RenderTarget):
 
     def _open_upload(self, filename: str, content: bytes) -> bool:
         """Open an uploaded study, or say in the status bar why it can't; tell if it opened."""
-        with tempfile.TemporaryDirectory(prefix="composeui-") as directory:
+        with ScratchDirectory() as directory:
             path = Path(directory, "study")
             path.write_bytes(content)
             try:
@@ -792,7 +812,9 @@ class SessionStore:
         saved: Path | None = None,
         hibernation: Hibernation | None = None,
     ) -> None:
+        saved = None if saved is None else saved.resolve()
         self._build_session = build_session
+        self._files = SessionFiles(saved)
         self._ttl = ttl
         self._max_sessions = max_sessions
         self.hibernation = hibernation
@@ -807,7 +829,7 @@ class SessionStore:
         if saved is not None:
             self._find_saved(saved)
         elif hibernation is not None:
-            self._directory = Path(tempfile.mkdtemp(prefix="composeui-sessions-"))
+            self._directory = self._files.directory()
             self._owns_directory = True
 
     def _find_saved(self, directory: Path) -> None:
@@ -939,7 +961,7 @@ class SessionStore:
         """Build a session, closing its model if the session can't take it."""
         main_view, model = self._build_session()
         try:
-            return WebSession(main_view, model)
+            return WebSession(main_view, model, files=self._files)
         except BaseException:
             if model is not None:
                 model.close()
@@ -1060,8 +1082,7 @@ class SessionStore:
             self._entries.clear()
         for session_id, entry in entries:
             self._end(session_id, entry)
-        if self._owns_directory and self._directory is not None:
-            shutil.rmtree(self._directory, ignore_errors=True)
+        self._files.close()
 
     def _drop_expired(self) -> None:
         """Drop the sessions idle for `ttl`, in memory or on disk. Called with the lock held.

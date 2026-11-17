@@ -1243,7 +1243,7 @@ def test_an_upload_stops_going_to_the_disk_once_over_the_limit(
 
     assert asyncio.run(receive())
     assert 0 < max(written) <= 1_000_000
-    assert list(tmp_path.iterdir()) == []  # the scratch folder is gone
+    assert list(tmp_path.rglob("upload")) == []  # no upload payload remains
 
 
 def _disk_with(*free: int) -> mock.Mock:
@@ -1277,7 +1277,7 @@ def test_an_upload_stops_going_to_the_disk_once_it_runs_short(
 
     assert asyncio.run(receive()) is UploadRefusal.NO_ROOM
     assert sum(1 for size in sizes if size > 0) < 6  # it stopped, and its bytes are gone
-    assert list(tmp_path.iterdir()) == []
+    assert list(tmp_path.rglob("upload")) == []
 
 
 class _BufferedTailFails:
@@ -1307,7 +1307,7 @@ def _scratch_file_opens_with(
 
 
 def _no_room_for_a_folder(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(tempfile, "mkdtemp", mock.Mock(side_effect=OSError(errno.ENOSPC, "full")))
+    monkeypatch.setattr(Path, "mkdir", mock.Mock(side_effect=OSError(errno.ENOSPC, "full")))
 
 
 def _no_room_for_the_file(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1443,7 +1443,7 @@ def test_a_malformed_upload_hands_nothing_over_and_leaves_no_file(
 
     assert response.status_code == 400
     assert picked == []
-    assert list(tmp_path.iterdir()) == []
+    assert list(tmp_path.rglob("upload")) == []
 
 
 def test_a_server_that_stops_removes_the_uploads_of_its_sessions() -> None:
@@ -1525,12 +1525,15 @@ def test_an_upload_is_one_file_on_the_disk_as_its_callbacks_run(
         dataset = main_view.form.dataset
         field = _part(dataset, "field")
         files: list[list[Path]] = []
+        content = b"x" * (2 * 1024 * 1024)
         dataset.uploaded.connect(
-            lambda _file: files.append([p for p in tmp_path.rglob("*") if p.is_file()])
+            lambda _file: files.append(
+                [p for p in tmp_path.rglob("*") if p.is_file() and p.read_bytes() == content]
+            )
         )
         url = f"/widget/{field.widget_id}/file"
 
-        client.post(url, files={"file": ("é.csv", b"x" * (2 * 1024 * 1024), "text/csv")})
+        client.post(url, files={"file": ("é.csv", content, "text/csv")})
 
         assert dataset.file is not None
         assert dataset.file.name == "é.csv"
@@ -1980,8 +1983,13 @@ def _store_of_data_files(saved: Path) -> SessionStore:
     return SessionStore(lambda: (DataFileMainView(), None), ttl=60.0, max_sessions=2, saved=saved)
 
 
-def test_a_session_restored_by_a_reload_owns_its_uploads(tmp_path: Path) -> None:
-    store = _store_of_data_files(tmp_path)
+@pytest.mark.parametrize("relative", [False, True])
+def test_a_session_restored_by_a_reload_owns_its_uploads(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, relative: bool
+) -> None:
+    monkeypatch.chdir(tmp_path.parent)
+    saved = Path(tmp_path.name) if relative else tmp_path
+    store = _store_of_data_files(saved)
     created = store.get_or_create(None)
     assert created is not None
     session_id, session = created
@@ -1992,7 +2000,7 @@ def test_a_session_restored_by_a_reload_owns_its_uploads(tmp_path: Path) -> None
     assert path is not None
     store.save_all()
 
-    restored_store = _store_of_data_files(tmp_path)
+    restored_store = _store_of_data_files(saved)
     restored = restored_store.get(session_id)
 
     assert restored is not None
@@ -2003,7 +2011,11 @@ def test_a_session_restored_by_a_reload_owns_its_uploads(tmp_path: Path) -> None
     assert not path.exists()
 
 
-def test_a_saved_session_naming_other_uploads_never_deletes_them(tmp_path: Path) -> None:
+@pytest.mark.parametrize("name", ["unrelated", "composeui-scratch-unrelated"])
+def test_a_saved_session_naming_other_uploads_never_deletes_them(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, name: str
+) -> None:
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
     store = _store_of_data_files(tmp_path)
     created = store.get_or_create(None)
     assert created is not None
@@ -2012,7 +2024,7 @@ def test_a_saved_session_naming_other_uploads_never_deletes_them(tmp_path: Path)
     measurements = session.main_view.form.measurements
     _pick_file(session, _part(measurements, "field").widget_id, "first.csv", b"first")
     store.save_all()
-    unrelated = tmp_path / "unrelated"
+    unrelated = tmp_path / name
     unrelated.mkdir()
     (tmp_path / session_id / "uploads").write_text(str(unrelated))
 

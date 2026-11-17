@@ -188,6 +188,9 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- Crash cleanup also covers web upload staging, session uploads, idle-session snapshots, and
+  reload working directories. A running child keeps its supervisor's files locked if the
+  supervisor ends first. Session files stay until their workers and cleanup have finished.
 - The next app start removes abandoned SQLite scratch databases, temporary study data, and
   unfinished study or export files created by this version. Locked resources of another
   running process, completed saves, and recoverable autosaves are kept.

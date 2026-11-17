@@ -10,6 +10,7 @@ runs the program again in a new child process, which opens the study.
 from __future__ import annotations
 
 import contextlib
+import functools
 import importlib
 import importlib.abc
 import importlib.util
@@ -20,13 +21,13 @@ import platform
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 import types
 from contextvars import ContextVar
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from composeui.core._files import ScratchDirectory
 from composeui.core.model import InvalidStateError
 from composeui.core.study import open_study, save_study
 from composeui.core.view import _RELOADED_STATE, load_session_data, session_data
@@ -86,7 +87,15 @@ def is_reloaded() -> bool:
 
 
 def _state_directory() -> Path:
-    return Path(os.environ[RELOADED_VARIABLE])
+    directory = Path(os.environ[RELOADED_VARIABLE])
+    _hold_state_directory(directory)
+    return directory
+
+
+@functools.cache
+def _hold_state_directory(directory: Path) -> ScratchDirectory | None:
+    # Keep a child's lease until process exit, also if its supervisor is killed first.
+    return ScratchDirectory.borrow(directory)
 
 
 def take_changes() -> list[Path] | None:
@@ -165,8 +174,8 @@ def rerun_program() -> Any:
     pycache_prefix = sys.pycache_prefix
     importlib.invalidate_caches()  # the directories' listings, e.g. for a new module
     try:
-        with tempfile.TemporaryDirectory(prefix="composeui-pycache-") as cache:
-            sys.pycache_prefix = cache
+        with ScratchDirectory() as cache:
+            sys.pycache_prefix = str(cache)
             _run_as_main(main)
     except _AppKept:
         pass
@@ -469,8 +478,11 @@ def run_reloading(
     previous_handler = signal.signal(signal.SIGTERM, _exit)
     child: subprocess.Popen[bytes] | None = None
     try:
-        with tempfile.TemporaryDirectory(prefix="composeui-reload-") as state_directory:
-            env = {**os.environ, RELOADED_VARIABLE: state_directory}
+        with contextlib.ExitStack() as resources:
+            state_directory = resources.enter_context(ScratchDirectory())
+            # Stop the child before its supervisor removes files that it may still read.
+            resources.callback(lambda: _stop(child))
+            env = {**os.environ, RELOADED_VARIABLE: str(state_directory)}
             child = subprocess.Popen(command, env=env)  # noqa: S603
             for changed in changes:
                 if len(changed) > 0:
@@ -492,7 +504,6 @@ def run_reloading(
     except KeyboardInterrupt:
         pass
     finally:
-        _stop(child)
         if isinstance(changes, types.GeneratorType):
             changes.close()
         signal.signal(signal.SIGTERM, previous_handler)

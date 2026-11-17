@@ -33,7 +33,7 @@ _RECORD = "partial.json"
 def _root() -> Path:
     # A shared temporary directory must not make one user's files another user's to delete.
     user = hashlib.sha256(os.fsencode(Path.home())).hexdigest()[:16]
-    return Path(tempfile.gettempdir()) / f"composeui-scratch-{user}"
+    return Path(tempfile.gettempdir()).resolve() / f"composeui-scratch-{user}"
 
 
 def _check_root(root: Path) -> None:
@@ -45,11 +45,26 @@ def _check_root(root: Path) -> None:
         raise OSError(msg)
 
 
-def _lock(path: Path, *, wait: float = 0.0) -> sqlite3.Connection | None:
+def _connect(path: Path, *, wait: float = 0.0) -> sqlite3.Connection:
     if path.is_symlink():
         msg = f"Scratch lock is a symbolic link: {path}"
         raise OSError(msg)
-    connection = sqlite3.connect(str(path), timeout=wait, check_same_thread=False)
+    return sqlite3.connect(str(path), timeout=wait, check_same_thread=False)
+
+
+def _hold(path: Path) -> sqlite3.Connection:
+    connection = _connect(path)
+    try:
+        connection.execute("BEGIN")
+        connection.execute("SELECT count(*) FROM sqlite_master").fetchone()
+    except BaseException:
+        connection.close()
+        raise
+    return connection
+
+
+def _lock(path: Path, *, wait: float = 0.0) -> sqlite3.Connection | None:
+    connection = _connect(path, wait=wait)
     try:
         connection.execute("BEGIN EXCLUSIVE")
     except sqlite3.DatabaseError:
@@ -167,15 +182,21 @@ def _remove_staging(partial: Path, data: dict[str, Any]) -> bool:
 
 
 def _discard(directory: Path, connection: sqlite3.Connection) -> None:
+    exclusive = None
     try:
-        if not _remove_partial(directory):
-            return
         # Order lock release and deletion with another process's startup sweep.
         with _GUARD, _starting(directory.parent):
             connection.close()
+            exclusive = _lock(directory / _LOCK)
+            if exclusive is None or not _remove_partial(directory):
+                return
+            exclusive.close()  # Windows won't remove an open database
+            exclusive = None
             shutil.rmtree(directory)
     finally:
         connection.close()
+        if exclusive is not None:
+            exclusive.close()
 
 
 class ScratchDirectory:
@@ -194,12 +215,30 @@ class ScratchDirectory:
                 self.path = root / uuid.uuid4().hex
                 self.path.mkdir(mode=0o700)
                 try:
-                    connection = _lock(self.path / _LOCK)
-                    assert connection is not None  # a new directory under the startup lock
+                    connection = _hold(self.path / _LOCK)
                 except BaseException:
                     shutil.rmtree(self.path)
                     raise
         self._connection: sqlite3.Connection | None = connection
+
+    @classmethod
+    def borrow(cls, path: Path) -> ScratchDirectory | None:
+        """Hold the scratch owner of `path`, if it is managed, across a child process's use."""
+        path = path.resolve()
+        root = _root()
+        directory = next((p for p in (path, *path.parents) if p.parent == root), None)
+        if directory is None:
+            return None  # caller-owned storage, not a disposable directory
+        with _GUARD:
+            _check_root(root)
+            with _starting(root):
+                if _NAME.fullmatch(directory.name) is None or directory.is_symlink():
+                    msg = f"Not an owned scratch directory: {directory}"
+                    raise OSError(msg)
+                held = cls.__new__(cls)
+                held.path = directory
+                held._connection = _hold(directory / _LOCK)  # noqa: SLF001 (same class's factory)
+                return held
 
     def cleanup(self) -> None:
         """Remove the directory once its files are no longer used."""

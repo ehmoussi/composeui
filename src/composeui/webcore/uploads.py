@@ -11,7 +11,6 @@ from __future__ import annotations
 import contextlib
 import enum
 import shutil
-import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, NamedTuple
 
@@ -20,6 +19,8 @@ from python_multipart.exceptions import MultipartParseError
 from python_multipart.multipart import parse_options_header
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
+
+from composeui.core._files import ScratchDirectory
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -244,12 +245,14 @@ async def receive_upload(
     if content_type != b"multipart/form-data":
         yield None, {}
         return
-    directory = None
+    owner = None
     # no room for a folder: the body is still read, for the status bar to say so
     with contextlib.suppress(OSError):
-        directory = Path(await run_in_threadpool(tempfile.mkdtemp, prefix="composeui-"))
+        owner = await run_in_threadpool(ScratchDirectory)
     try:
-        yield await _receive_multipart(request, directory, max_size, min_free_disk)
+        yield await _receive_multipart(
+            request, None if owner is None else owner.path, max_size, min_free_disk
+        )
     finally:
-        if directory is not None:
-            await run_in_threadpool(shutil.rmtree, directory, ignore_errors=True)
+        if owner is not None:
+            await run_in_threadpool(owner.cleanup)
