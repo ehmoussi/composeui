@@ -35,9 +35,11 @@ from composeui.core.view import (
     View,
     dialogs_in,
 )
+from composeui.webcore._renderers.actions import WebActionRenderer
 from composeui.webcore._renderers.charts import WebChartRenderer
 from composeui.webcore._renderers.content import WebConsoleRenderer, WebImageRenderer
 from composeui.webcore._renderers.files import WebFilePathInputRenderer, WebFileUploadRenderer
+from composeui.webcore._renderers.navigation import WebMainRenderer, page_path
 from composeui.webcore._renderers.tables import WebSourceTableRenderer, WebTableRenderer
 from composeui.webcore.changes import collect_dirty
 from composeui.webcore.downloads import downloads_marker
@@ -45,14 +47,7 @@ from composeui.webcore.order import PostOrder
 from composeui.webcore.page import jobs_poller, page_marker
 from composeui.webcore.rendertarget import RenderTarget, rendering_into
 from composeui.webcore.uploads import UploadRefusal
-from composeui.webcore.webrenderer import (
-    UnsupportedEventError,
-    WebActionRenderer,
-    WebMainRenderer,
-    handle_event,
-    page_path,
-    render_dirty,
-)
+from composeui.webcore.webrenderer import UnsupportedEventError, handle_event, render_dirty
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping

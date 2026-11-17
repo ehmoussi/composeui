@@ -2,17 +2,26 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-from typing import TYPE_CHECKING, Any, Callable, Generic, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Callable, TypeVar, cast
 
 from markupsafe import Markup
-from typing_extensions import Protocol
 
 from composeui.core.renderer import ViewLike
-from composeui.core.view import SEARCH_DELAY_MS
+from composeui.core.view import TreeView, walk_tree
 from composeui.webcore.changes import _DIRTY
-from composeui.webcore.webrenderer import WebRenderer, _icon
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping
+
+    from composeui.core.view import TreeNode, TreePath
+import hashlib
+from typing import TYPE_CHECKING, Generic
+
+from typing_extensions import Protocol
+
+from composeui.core.view import SEARCH_DELAY_MS
+from composeui.webcore.webrenderer import _MARK_ICONS, WebRenderer, _file_icon, _icon
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -380,3 +389,170 @@ class WebMultiComboBoxRenderer(WebCheckListRenderer):
             oob=self._oob(oob=oob),
             summary=shown.summary,
         )
+
+
+class WebTreeRenderer(WebRenderer[TreeView]):
+    """Nested lists of the nodes, each a button selecting it after an arrow toggling it.
+
+    A click or Enter on a node selects it (`aria-current`), on its arrow expands or
+    collapses it (`aria-expanded`); a collapsed node's children are left out. Either way
+    the tree is swapped back, each button keeping its own id, its node's position depth
+    first. So htmx gives the focus back to the button that had it, as a table's rows do.
+    A button posts its node's path: a node a stale page still shows swaps the tree back.
+    """
+
+    _role = "tree"
+
+    def __init__(self, view: TreeView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "nodes": self._mark_dirty,
+                "expanded": self._mark_dirty,
+                "selected": self._mark_dirty,
+                "done_text": self._mark_dirty,
+                "warning_text": self._mark_dirty,
+                "error_text": self._mark_dirty,
+            }
+        )
+
+    def to_html(self, *, oob: bool = False) -> Markup:
+        positions = {
+            path: position for position, (path, _node) in enumerate(walk_tree(self._view.nodes))
+        }
+        # clipped to a pane too narrow for it, the focus rings at its edges left whole
+        return Markup(
+            '<ul {} class="flex flex-col gap-0.5 overflow-clip [overflow-clip-margin:4px]">{}</ul>'
+        ).format(self._root_attributes(oob=oob), self._nodes_html(self._view.nodes, (), positions))
+
+    def _nodes_html(
+        self, nodes: Iterable[TreeNode], parent: TreePath, positions: Mapping[TreePath, int]
+    ) -> Markup:
+        disabled = "" if self.is_enabled else " disabled"
+        items: list[str] = []
+        for node in nodes:
+            path = (*parent, node.key)
+            position, label = positions[path], node.label
+            children = ""
+            if len(node.children) == 0:
+                toggle = Markup('<span class="size-6 shrink-0" aria-hidden="true"></span>')
+            else:
+                is_expanded = path in self._view.expanded
+                turn = "" if is_expanded else " -rotate-90"
+                # named by its node, which `aria-expanded` says it expands or collapses
+                toggle = Markup(
+                    '<button id="{widget_id}-toggle-{position}" type="button"'
+                    ' class="btn btn-ghost btn-xs btn-square"'
+                    ' aria-expanded="{lower}" aria-label="{label}"'
+                    "{post}{disabled}>"
+                    "{chevron_icon}</button>"
+                ).format(
+                    widget_id=self.widget_id,
+                    position=position,
+                    lower=str(is_expanded).lower(),
+                    label=label,
+                    post=self._post("toggle", path, expanded=not is_expanded),
+                    disabled=disabled,
+                    chevron_icon=_icon("chevron", "size-3" + turn),
+                )
+                if is_expanded:
+                    children = Markup(
+                        '<ul class="ms-3 flex flex-col gap-0.5 border-s border-base-300 ps-1">'
+                        "{}</ul>"
+                    ).format(self._nodes_html(node.children, path, positions))
+            is_selected = path == self._view.selected
+            selected = Markup(' aria-current="true"') if is_selected else ""
+            variant = "btn-soft btn-primary" if is_selected else "btn-ghost"
+            mark_id = f"{self.widget_id}-mark-{position}"
+            described = (
+                "" if node.mark is None else Markup(' aria-describedby="{}"').format(mark_id)
+            )
+            items.append(
+                Markup(
+                    '<li><div class="flex items-center gap-1">{toggle}'
+                    '<button id="{widget_id}-node-{position}" type="button"'
+                    ' class="btn btn-sm {variant} min-w-0 shrink justify-start font-normal"'
+                    "{selected}{described}"
+                    "{post}{disabled}>{node_content}"
+                    "</button></div>{children}</li>"
+                ).format(
+                    toggle=toggle,
+                    widget_id=self.widget_id,
+                    position=position,
+                    variant=variant,
+                    selected=selected,
+                    described=described,
+                    post=self._post("select", path),
+                    disabled=disabled,
+                    node_content=self._node_content(node, mark_id),
+                    children=children,
+                )
+            )
+        return Markup("").join(items)
+
+    def _node_content(self, node: TreeNode, mark_id: str) -> Markup:
+        """Show a node's icon, its label as bold or underlined as it says, then its mark.
+
+        The mark's icon is hidden from screen readers, which read its name (at `mark_id`)
+        as the button's description, after the label naming it.
+        """
+        # a label too long for the pane cut short, the icon and the mark kept whole
+        styles = [
+            style
+            for style, is_on in (("font-bold", node.is_bold), ("underline", node.is_underlined))
+            if is_on
+        ]
+        label = Markup('<span class="{}">{}</span>').format(
+            " ".join(["truncate", *styles]), node.label
+        )
+        mark = ""
+        if node.mark is not None:
+            icon, color = _MARK_ICONS[node.mark]
+            text = self._view.mark_text(node.mark)
+            mark = Markup(
+                '<span class="shrink-0 {color}">{icon}</span><span id="{mark_id}"'
+                " hidden>{text}</span>"
+            ).format(color=color, icon=_icon(icon), mark_id=mark_id, text=text)
+        return Markup("{file_icon}{label}{mark}").format(
+            file_icon=_file_icon(node.icon), label=label, mark=mark
+        )
+
+    def _post(self, event: str, path: TreePath, *, expanded: bool = False) -> Markup:
+        """Get the attributes posting an event of the node at `path`, without swapping it back."""
+        values = {"event": event, "path": json.dumps(list(path))}
+        if event == "toggle":
+            values["expanded"] = str(expanded).lower()
+        return Markup(
+            """ hx-post="/widget/{}" hx-vals='{}'"""
+            ' hx-swap="none"'
+        ).format(self.widget_id, json.dumps(values))
+
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        # a disabled tree can't be clicked: a post saying otherwise is refused
+        if not self.is_enabled or event not in ("select", "toggle"):
+            super().dispatch(event, form)
+        path = self._posted_path(form.get("path", ""))
+        if path is None or (event == "toggle" and len(self._view.node(path).children) == 0):
+            # a node a stale page still shows: swap the tree back as it now is
+            self._mark_dirty(self._view, self.widget_id, self._view.nodes)
+            return
+        if event == "select":
+            if path != self._view.selected:
+                self._view.selected = path
+                self._view.selection_changed.emit(path)
+            return
+        is_expanded = form.get("expanded") == "true"
+        if is_expanded != (path in self._view.expanded):
+            self._view.expanded = self._view.expanded_with(path, is_expanded=is_expanded)
+            self._view.toggled.emit(path, is_expanded)
+
+    def _posted_path(self, posted: str) -> TreePath | None:
+        """Get the path a button posted, if a node of the tree is there."""
+        try:
+            keys = json.loads(posted)
+        except ValueError:
+            return None
+        if not isinstance(keys, list) or not all(isinstance(key, str) for key in keys):
+            return None
+        path = tuple(keys)
+        return path if path in {path for path, _node in walk_tree(self._view.nodes)} else None

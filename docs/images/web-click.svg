@@ -69,7 +69,7 @@
 
   <rect class="renderer" x="780" y="20" width="160" height="56" rx="8"/>
   <text class="title" x="860" y="44" text-anchor="middle">Renderers, views</text>
-  <text class="muted mono" x="860" y="63" text-anchor="middle">webrenderer.py</text>
+  <text class="muted mono" x="860" y="63" text-anchor="middle">_renderers/</text>
 
   <line class="lifeline" x1="100" y1="76" x2="100" y2="600"/>
   <line class="lifeline" x1="290" y1="76" x2="290" y2="600"/>

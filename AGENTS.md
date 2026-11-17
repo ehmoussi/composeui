@@ -64,6 +64,7 @@ src/composeui/
   qtcore/        # Qt backend via qtpy (QtApplication, qtrenderer.py, custom widgets/)
   textualcore/   # Textual (TUI) backend
   webcore/       # Web backend (Starlette + htmx + daisyUI); static/app.css is built
+    _renderers/  # its renderers, a module per family (renderers.py maps their keys)
 css/             # source of webcore/static/app.css (`make css`; tools land in css/vendor/)
 js/              # the scripts' type check (`make js-check`; TypeScript lands in js/vendor/)
 src/examples/    # example apps (pipeform.py, pipecatalogue.py, ...), also used by tests; not in the wheel
@@ -85,6 +86,13 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   backends are fine.
 - **Adding a widget:** define the view in `core/view.py` (set `_renderer_key`), then add a
   renderer + `RENDERERS` entry in each backend that should support it, plus tests per backend.
+  On the web, the renderer goes in the `webcore/_renderers/` module of its family (a new
+  module for a new family), and its entry in `webcore/renderers.py`.
+- **Web renderer modules:** `webrenderer.py` holds only the base `WebRenderer` and the helpers
+  that several families share. A module of `_renderers/` holds one family: split one that
+  starts to mix two, whatever its length. The base names no concrete renderer: when it must
+  treat one apart, add a hook with a default, as `is_drawn_apart` and `shows` do, not an
+  `isinstance` check, which would tie that renderer to the base's module.
 - **Adding a backend:** add one `RendererType` member in `core/registry.py` (with its extra
   in `pyproject.toml`), one
   `RENDERERS` mapping in the new backend's renderers module, and its application classes
