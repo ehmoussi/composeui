@@ -28,18 +28,16 @@ from composeui.core.view import (
     replace_cell,
     split_pattern,
 )
+from composeui.webcore._renderers.files import _PATH_KINDS, _FilesTexts, _ServerFiles
 from composeui.webcore.changes import _DIRTY
 from composeui.webcore.serverfiles import resolve_roots
 from composeui.webcore.webrenderer import (
     _MARK_ICONS,
-    _PATH_KINDS,
     TView,
     UnsupportedEventError,
     WebRenderer,
     _file_types,
-    _FilesTexts,
     _icon,
-    _ServerFiles,
 )
 
 if TYPE_CHECKING:

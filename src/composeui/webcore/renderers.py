@@ -5,6 +5,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Callable, Final
 
 from composeui.webcore._renderers.charts import WebChartRenderer
+from composeui.webcore._renderers.files import (
+    WebFilePathInputRenderer,
+    WebFileUploadRenderer,
+    WebFolderPathInputRenderer,
+    WebSavePathInputRenderer,
+)
 from composeui.webcore._renderers.tables import WebSourceTableRenderer, WebTableRenderer
 from composeui.webcore.webrenderer import (
     WebActionRenderer,
@@ -20,12 +26,9 @@ from composeui.webcore.webrenderer import (
     WebDownloadRenderer,
     WebDrawingRenderer,
     WebExpanderRenderer,
-    WebFilePathInputRenderer,
-    WebFileUploadRenderer,
     WebFloatInputRenderer,
     WebFloatRangeSliderRenderer,
     WebFloatSliderRenderer,
-    WebFolderPathInputRenderer,
     WebFormDialogRenderer,
     WebFormLabelRenderer,
     WebFormRenderer,
@@ -49,7 +52,6 @@ from composeui.webcore.webrenderer import (
     WebRadioGroupRenderer,
     WebRangeSliderRenderer,
     WebRouterRenderer,
-    WebSavePathInputRenderer,
     WebSeparatorRenderer,
     WebSidebarRenderer,
     WebSliderRenderer,
