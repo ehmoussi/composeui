@@ -27,7 +27,6 @@ import re
 import shutil
 import sys
 import threading
-import uuid
 import weakref
 from collections import Counter, OrderedDict, deque
 from collections.abc import Callable, Hashable, Mapping, Sequence
@@ -57,6 +56,8 @@ from cattrs.strategies import configure_tagged_union
 from typing_extensions import Buffer, ParamSpec, Unpack, dataclass_transform
 
 from composeui.core import study
+from composeui.core._files import partial_file as _partial_path
+from composeui.core._files import publish as _publish
 
 # a field's type, which attrs resolves at runtime
 from composeui.core.autosave import Autosave  # noqa: TC001
@@ -2019,13 +2020,10 @@ class MainView(View):
     def save_state(self, filepath: Path) -> None:
         """Save the current state into a json file, with its versions (`file_data`)."""
         path = filepath.resolve()
-        partial = _partial_path(path)
-        try:
+        with _partial_path(path) as partial:
             with partial.open("w") as f:
                 json.dump(self.file_data(), f)
             _publish(partial, path)
-        finally:
-            partial.unlink(missing_ok=True)
         self.state_filepath = filepath
 
     def has_unsaved_changes(self) -> bool:
@@ -6397,18 +6395,6 @@ SOURCE_TABLE_JOB_ROWS = 100_000
 _NO_ROW_IDS = object()
 
 
-def _partial_path(path: Path) -> Path:
-    """Get a name beside `path`, its own, to write a file before it replaces `path`."""
-    return path.with_name(f".{path.name}.{uuid.uuid4().hex}.partial")
-
-
-def _publish(partial: Path, path: Path) -> None:
-    """Replace `path` with the whole file `partial`, as one step, keeping `path`'s mode."""
-    if path.exists():
-        shutil.copymode(path, partial)
-    partial.replace(path)
-
-
 def save_download(
     main_view: MainView, path: Path, content: Union[bytes, Path, StreamContent]
 ) -> None:
@@ -6422,19 +6408,17 @@ def save_download(
         _save_stream(main_view, path, content)
         return
     target = path.resolve()
-    partial = _partial_path(target)
     try:
-        if isinstance(content, Path):
-            shutil.copyfile(content, partial)
-        else:
-            partial.write_bytes(content)
-        _publish(partial, target)
+        with _partial_path(target) as partial:
+            if isinstance(content, Path):
+                shutil.copyfile(content, partial)
+            else:
+                partial.write_bytes(content)
+            _publish(partial, target)
     except OSError as error:
         failed = main_view.tr("Can't save to {name}: {error}.")
         main_view.status_bar.show_message(failed.format(name=path.name, error=error))
         return
-    finally:
-        partial.unlink(missing_ok=True)
     main_view.status_bar.show_message(main_view.tr("Saved {name}.").format(name=path.name))
 
 
@@ -6461,8 +6445,7 @@ def _write_stream(job: Job[bool], content: StreamContent, path: Path) -> bool:
     or failed, it leaves the file `path` as it was.
     """
     path = path.resolve()
-    partial = _partial_path(path)
-    try:
+    with _partial_path(path) as partial:
         with partial.open("wb") as file:
 
             def put(piece: bytes) -> None:
@@ -6481,8 +6464,6 @@ def _write_stream(job: Job[bool], content: StreamContent, path: Path) -> bool:
                     return False
                 raise
         _publish(partial, path)
-    finally:
-        partial.unlink(missing_ok=True)
     return True
 
 
@@ -6493,16 +6474,13 @@ def _write_csv(job: Optional[Job[bool]], chunks: Iterator[str], path: Path) -> b
     source can't read, a full disk), it leaves the file `path` as it was. Tell if it wrote it.
     """
     path = path.resolve()
-    partial = _partial_path(path)
-    try:
+    with _partial_path(path) as partial:
         with partial.open("w", encoding="utf-8", newline="") as file:
             for chunk in chunks:
                 if job is not None and job.is_canceled:
                     return False
                 file.write(chunk)
         _publish(partial, path)
-    finally:
-        partial.unlink(missing_ok=True)
     return True
 
 

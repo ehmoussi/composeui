@@ -188,6 +188,11 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Fixed
 
+- The next app start removes abandoned SQLite scratch databases, temporary study data, and
+  unfinished study or export files created by this version. Locked resources of another
+  running process, completed saves, and recoverable autosaves are kept.
+- Concurrent study saves use separate staging directories, so they cannot overwrite or
+  remove each other's unfinished archive.
 - On the web, a page keeps its session when the server's clock steps back, e.g. at a time sync.
   The session cookie was refused until the clock caught up: the page reloaded into a new
   session, without the unsaved work.

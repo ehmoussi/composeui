@@ -205,8 +205,10 @@ The SQLite model is complete otherwise: do not rebuild it.
   any platform must give the app.
 - **Sessions that survive a restart** (Now). A data folder on a volume: the sessions saved at
   intervals and on shutdown, and the cookies' signing key.
-- **A clean exit during a write** (Now). An exit waits briefly for a write, and the next start
-  removes what a crash left.
+- **Cleanup after a crash** (Now). Extend cleanup to other temporary directories, including web
+  uploads and sessions, without touching another instance's files or recoverable work.
+- **A bounded exit during a write** (Now). Shutdown briefly waits for active writes to finish or
+  stop, without releasing resources that a worker still uses.
 - **Formulas in CSV exports** (Now, before data is shared between users). A table's Export CSV
   and `frame_content` escape a text cell that a spreadsheet would run as a formula, with a way to
   keep the exact values.
@@ -276,8 +278,8 @@ reproducible.
   each row that it reads ([the checks](benchmarks/README.md#why-sqlite-sessions-slow-down)). The
   shared SQLite database addresses it.
 - **A process that exits during a write may crash.** At exit, the model's finalizer closes the
-  connection and deletes its files while a job's thread can still be writing. A process that is
-  killed leaves its files behind. "A clean exit during a write" fixes both.
+  connection and deletes its files while a job's thread can still be writing. "A bounded exit
+  during a write" addresses this.
 
 ## Stable release (Later)
 

@@ -19,10 +19,8 @@ import io
 import itertools
 import math
 import operator
-import os
 import re
 import sqlite3
-import tempfile
 import threading
 import time
 import weakref
@@ -48,6 +46,7 @@ from urllib.request import HTTPRedirectHandler, build_opener, urlopen
 import attrs
 from typing_extensions import dataclass_transform
 
+from composeui.core._files import ScratchDirectory
 from composeui.core.jobs import current_job
 from composeui.core.model import InvalidStateError, Model, RefusedError
 from composeui.core.signal import Signal, SignalNoArgs
@@ -62,6 +61,7 @@ from composeui.core.view import (
 )
 
 if TYPE_CHECKING:
+    import os
     from collections.abc import Generator, Iterable, Mapping, Sequence
     from http.client import HTTPMessage
     from typing import IO
@@ -1538,20 +1538,29 @@ class _Database:
         self.pragma_statements = statements
         journal = pragmas.get("journal_mode")
         self._journal = None if journal is None else _pragma_statement("journal_mode", journal)
-        fd, name = tempfile.mkstemp(prefix="composeui-", suffix=".sqlite")
-        os.close(fd)
-        self.path = Path(name)
+        directory = ScratchDirectory()
+        self.path = directory.path / "data.sqlite"
         # threads take turns through the model's lock
-        self.connection = sqlite3.connect(name, check_same_thread=False, timeout=WAIT_SECONDS)
-        self.connection.row_factory = sqlite3.Row
-        for statement in statements:
-            self.connection.execute(statement)
+        try:
+            self.connection = sqlite3.connect(
+                str(self.path), check_same_thread=False, timeout=WAIT_SECONDS
+            )
+        except BaseException:
+            directory.cleanup()
+            raise
         #: the read-only connections not in use, for the next queries `reading` it
         self.idle_readers: list[sqlite3.Connection] = []
         # also when the model is dropped unclosed (e.g. an expired web session's)
         self._finalizer = weakref.finalize(
-            self, _discard, self.connection, self.path, self.idle_readers
+            self, _discard, self.connection, directory, self.idle_readers
         )
+        try:
+            self.connection.row_factory = sqlite3.Row
+            for statement in statements:
+                self.connection.execute(statement)
+        except BaseException:
+            self.close()
+            raise
         #: the queries reading it on connections of their own (`SqliteModel.reading`)
         self.readers = 0
 
@@ -1602,11 +1611,13 @@ def _pragma_statement(name: str, value: int | str) -> str:
     return f"PRAGMA {name} = {value}"
 
 
-def _discard(connection: sqlite3.Connection, path: Path, readers: list[sqlite3.Connection]) -> None:
+def _discard(
+    connection: sqlite3.Connection,
+    directory: ScratchDirectory,
+    readers: list[sqlite3.Connection],
+) -> None:
     for reader in readers:  # first: the last connection closed deletes the WAL journal
         reader.close()
     readers.clear()
     connection.close()
-    # the WAL journal's files too, which the last connection closed deletes, unless it crashed
-    for name in (path.name, f"{path.name}-wal", f"{path.name}-shm"):
-        path.with_name(name).unlink(missing_ok=True)
+    directory.cleanup()
