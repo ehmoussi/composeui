@@ -47,7 +47,7 @@ def test_a_move_of_the_slider_shows_the_figure_of_its_value(
 
 def _first_peak(frequency: int) -> float:
     (line,) = wave_figure(frequency).axes[0].get_lines()
-    return float(np.asarray(line.get_xdata())[np.asarray(line.get_ydata()).argmax()])
+    return float(np.asarray(line.get_xdata())[np.argmax(np.asarray(line.get_ydata()))])
 
 
 def test_a_figure_draws_its_frequency() -> None:
