@@ -441,7 +441,7 @@ def test_a_job_handing_over_before_the_main_view_renders_reaches_it_in_order(
 def test_a_main_view_its_backend_doesn_t_render_still_gets_its_jobs_results(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    renderers = pytest.importorskip("composeui.webcore.webrenderer").RENDERERS
+    renderers = pytest.importorskip("composeui.webcore.renderers").RENDERERS
     monkeypatch.delitem(renderers, "main")  # e.g. a backend of an app's own
     main_view = MainView()
     results: list[int] = []
