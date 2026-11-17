@@ -111,6 +111,7 @@ from composeui.core.dashboard import (
 )
 from composeui.core.reactivity import reactive
 from composeui.core.view import (
+    Axis,
     ChartView,
     DownloadView,
     HorizontalView,
@@ -138,7 +139,7 @@ class PickupsDashboard(DashboardView):
     filters: Filters = child(Filters, title="Filters")
     status: LabelView = child(LabelView)
     summary: Summary = child(Summary)
-    by_hour: ChartView = bar_chart("Pickups by hour", HOURS, y_title="Pickups")
+    by_hour: ChartView = bar_chart("Pickups by hour", HOURS, y=Axis("Pickups"))
     table: SourceTableView = child(SourceTableView)
     download_rows: DownloadView = child(
         DownloadView, text="Download these pickups", filename="pickups.csv"

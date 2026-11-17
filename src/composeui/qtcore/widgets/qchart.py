@@ -13,7 +13,7 @@ from qtpy.QtGui import QAction, QColor, QFont, QPalette
 
 from composeui.core import chartimage
 from composeui.core.chartcolors import is_dashed, series_color
-from composeui.core.view import ChartKind, ChartView, LineStyle
+from composeui.core.view import Axis, ChartKind, ChartView, LineStyle
 
 if TYPE_CHECKING:
     from qtpy.QtWidgets import QWidget
@@ -72,10 +72,9 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._series: list[Series] = []
         self._kind = ChartKind.LINE
         self._categories: list[str] = []
-        self._x_log = False
-        self._y_log = False
+        self._x = Axis()
+        self._y = Axis()
         self._bars: list[pg.BarGraphItem] = []
-        self._units = ("", "")
         self._items: list[pg.PlotDataItem] = []
         self._reference_lines: list[ReferenceLine] = []
         self._line_items: list[pg.InfiniteLine] = []
@@ -109,11 +108,25 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
     def set_title(self, title: str) -> None:
         self.getPlotItem().setTitle(title or None)
 
-    def set_axis(self, axis: str, title: str, unit: str) -> None:
-        """Label the `axis` ("bottom" or "left"); pyqtgraph scales the unit, e.g. into ms."""
-        self.getPlotItem().setLabel(axis, title or None, units=unit or None)
-        x_unit, y_unit = self._units
-        self._units = (unit, y_unit) if axis == "bottom" else (x_unit, unit)
+    def set_axis(self, side: str, axis: Axis) -> None:
+        """Show `axis` at a `side` ("bottom" or "left"), labeled, as a log axis or a linear one.
+
+        pyqtgraph scales the unit, e.g. into ms. A bar chart's x stays its categories.
+        """
+        self.getPlotItem().setLabel(side, axis.title or None, units=axis.unit or None)
+        if side == "bottom":
+            self._x = axis
+        else:
+            self._y = axis
+        self._draw()
+
+    @property
+    def _x_log(self) -> bool:
+        return self._x.is_log
+
+    @property
+    def _y_log(self) -> bool:
+        return self._y.is_log
 
     def set_kind(self, kind: ChartKind) -> None:
         """Draw the series as `kind`, unless they say otherwise (`Series.kind`)."""
@@ -123,11 +136,6 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
     def set_categories(self, categories: list[str]) -> None:
         """Name a bar chart's categories, under their groups of bars."""
         self._categories = categories
-        self._draw()
-
-    def set_log(self, *, x_log: bool, y_log: bool) -> None:
-        """Make the axes log axes or linear ones; a bar chart's x stays its categories."""
-        self._x_log, self._y_log = x_log, y_log
         self._draw()
 
     def set_series(self, series: list[Series]) -> None:
@@ -352,7 +360,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
 
     def _hover_lines(self, x: float) -> list[str]:
         """Get what the hover shows at `x`: where it is, then each series' value there."""
-        x_unit, y_unit = self._units
+        x_unit, y_unit = self._x.unit, self._y.unit
         if self._kind is ChartKind.BAR:
             category = round(x)
             if not 0 <= category < len(self._categories):

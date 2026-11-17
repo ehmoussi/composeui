@@ -22,6 +22,7 @@ from composeui.core.application import run
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable, as_parameters, table
 from composeui.core.view import (
     Align,
+    Axis,
     ButtonVariant,
     ButtonView,
     ChartView,
@@ -186,10 +187,8 @@ class ChartTab(TabPage):
     chart: ChartView = child(
         ChartView,
         title=T("Hoop Stress"),
-        x_title=T("Outer Radius"),
-        x_unit="mm",
-        y_title=T("Stress"),
-        y_unit="MPa",
+        x=Axis(T("Outer Radius"), unit="mm"),
+        y=Axis(T("Stress"), unit="MPa"),
         height=280,
     )
 

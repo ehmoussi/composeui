@@ -27,6 +27,7 @@ from composeui.core.registry import RendererType
 from composeui.core.view import (
     OMIT,
     Align,
+    Axis,
     ButtonVariant,
     ButtonView,
     CellWidget,
@@ -185,7 +186,7 @@ class TaskMainView(MainView):
     progress: ProgressBarView = child(ProgressBarView, maximum=TASK_COUNT)
     metrics: TaskMetrics = Factory(TaskMetrics)
     running: ChartView = child(
-        ChartView, title=T("Tasks running"), x_title=T("Time"), x_unit="s", height=240
+        ChartView, title=T("Tasks running"), x=Axis(T("Time"), unit="s"), height=240
     )
     details: TaskDetails = child(TaskDetails, title=T("Tasks"), is_expanded=True)
     #: a failed task's error, opened from its link

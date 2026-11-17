@@ -8,10 +8,10 @@ These sections cover the kinds of chart, axes and reference lines, colors, what 
 draws, clicks, and report images.
 
 ```python
-from composeui.core.view import ChartView, Series, child
+from composeui.core.view import Axis, ChartView, Series, child
 
 chart: ChartView = child(
-    ChartView, title="Pressure Drop", x_title="Flow Rate", x_unit="L/s", y_unit="kPa"
+    ChartView, title="Pressure Drop", x=Axis("Flow Rate", unit="L/s"), y=Axis(unit="kPa")
 )
 
 chart.series = [*chart.series, Series(name="D = 50 mm", x=flows, y=drops)]
@@ -31,12 +31,12 @@ per series. The x of a series names a category by its index, and its y is the he
 bar:
 
 ```python
-from composeui.core.view import ChartKind, ChartView, Series, child
+from composeui.core.view import Axis, ChartKind, ChartView, Series, child
 
 energy: ChartView = child(
     ChartView,
     kind=ChartKind.BAR,
-    y_unit="kWh",
+    y=Axis(unit="kWh"),
     categories=["Kitchen", "Bedroom", "Office"],
     series=[Series(name="Heating", x=[0, 1, 2], y=[120, 80, 95])],
 )
@@ -46,23 +46,40 @@ energy: ChartView = child(
 categories in order.
 
 `bar_chart`, from `composeui.core.dashboard`, gives a view field a bar chart. It takes the
-chart's `title` and `categories`, and optionally its `x_title`, `y_title`, and `height`:
+chart's `title` and `categories`, and optionally its axes (`x`, `y`) and its `height`:
 
 ```python
 from composeui.core.dashboard import bar_chart
-from composeui.core.view import ChartView
+from composeui.core.view import Axis, ChartView
 
-energy: ChartView = bar_chart("Energy", ["Kitchen", "Bedroom", "Office"], y_title="Energy")
+energy: ChartView = bar_chart("Energy", ["Kitchen", "Bedroom", "Office"], y=Axis("Energy"))
 ```
 
 `series_of(frame, x, y)` from `composeui.core.dataframesource` makes a series of two columns of a
 pandas, Polars, or PyArrow frame. It leaves out the rows missing a value. Its `name` is the y
 column's, or the `name` that you give.
 
-## Log axes
+## Axes
 
-`x_log` and `y_log` make an axis a log axis. A log axis leaves out what it cannot show: the
-chart does not draw a point at an x of 0 or less, and a y of 0 or less leaves a gap.
+The `x` and `y` of the chart are its axes. Each one is an `Axis`: a title, a `unit`, and a
+`scale`. `Axis("Time", unit="s")` shows the label "Time (s)", and the chart shows the unit
+with the values that the user hovers over.
+
+An `Axis` does not change. To change an axis, set a new one:
+
+```python
+import attrs
+
+from composeui.core.view import Scale
+
+chart.y = attrs.evolve(chart.y, scale=Scale.LOG)
+```
+
+The axes belong to the code of the app, as a title does. The study does not save them, and
+`tr` translates their titles.
+
+`Scale.LOG` makes an axis a log axis. A log axis leaves out what it cannot show: the chart
+does not draw a point at an x of 0 or less, and a y of 0 or less leaves a gap.
 
 ## Reference lines
 

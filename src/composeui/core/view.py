@@ -109,6 +109,7 @@ __all__ = [
     "ActionView",
     "Align",
     "ArrowShape",
+    "Axis",
     "ButtonVariant",
     "ButtonView",
     "CellKind",
@@ -247,6 +248,7 @@ __all__ = [
     "RowTextAreaView",
     "SavePathInputMixin",
     "SavePathInputView",
+    "Scale",
     "SelectionMode",
     "SeparatorAction",
     "Series",
@@ -4184,6 +4186,47 @@ class ReferenceLine:
     style: LineStyle = LineStyle.DASHED
 
 
+class Scale(enum.Enum):
+    """How an `Axis` places its values."""
+
+    #: evenly, a value's distance from another by their difference
+    LINEAR = enum.auto()
+    #: by their logarithm, e.g. a decay over decades; it shows only values over 0
+    LOG = enum.auto()
+
+
+@attrs.frozen
+class Axis:
+    """An axis of a `ChartView`: its title, its unit and how it places its values.
+
+    E.g. ``Axis("Time", unit="s")``, labeled "Time (s)". The chart shows the unit with
+    the values the user hovers too. Assign a new one to change it:
+    ``chart.y = attrs.evolve(chart.y, scale=Scale.LOG)``.
+    """
+
+    title: str = ""
+    #: shown after the title, as "Time (s)", and with the values the user hovers
+    unit: str = attrs.field(default="", kw_only=True)
+    scale: Scale = attrs.field(default=Scale.LINEAR, kw_only=True)
+
+    @property
+    def is_log(self) -> bool:
+        """Tell whether it is a log axis, which shows only values over 0."""
+        return self.scale is Scale.LOG
+
+    @property
+    def label(self) -> str:
+        """Get its label: its title with its unit, as "Time (s)"."""
+        if self.unit == "":
+            return self.title
+        return f"({self.unit})" if self.title == "" else f"{self.title} ({self.unit})"
+
+    def translated(self, translate: Translate) -> Axis:
+        """Get it with its title translated again; itself if `tr` didn't translate it."""
+        title = translate_again(self.title, translate)
+        return self if title is self.title else attrs.evolve(self, title=title)
+
+
 #: past it, a float's digits no longer tell the whole number it is (see `ChartView.is_whole`)
 _WHOLE_LIMIT = 1e15
 
@@ -4200,7 +4243,10 @@ class ChartView(View):
     A `BAR` chart draws a group of bars for each of its `categories`, a bar per series. A
     series' x is the index of a category, and its y is the bar's height.
 
-    A log axis (`x_log`, `y_log`) leaves out the values it can't show, those <= 0. A point
+    Its axes, `x` and `y`, hold their titles, units and scales (see `Axis`). They are the
+    app's, as a title is: a study doesn't save them.
+
+    A log axis (`Scale.LOG`) leaves out the values it can't show, those <= 0. A point
     at such an x isn't drawn, and such a y leaves a gap (see `drawn_points`). A reference
     line at such a value isn't drawn either (see `drawn_lines`). So a job's points never
     make the chart fail. A bar chart's x, its categories, is never a log axis.
@@ -4211,18 +4257,13 @@ class ChartView(View):
     #: how its series are drawn, unless one says otherwise (`Series.kind`)
     kind: ChartKind = attrs.field(default=ChartKind.LINE)
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
-    x_title: str = attrs.field(default="", metadata={UI_TEXT: True})
-    y_title: str = attrs.field(default="", metadata={UI_TEXT: True})
-    #: the x axis' unit, shown as "Time (s)", and with the values the user hovers
-    x_unit: str = attrs.field(default="")
-    y_unit: str = attrs.field(default="")
+    x: Axis = attrs.field(factory=Axis, metadata={UI_TEXT: True})
+    y: Axis = attrs.field(factory=Axis, metadata={UI_TEXT: True})
     series: list[Series] = attrs.field(factory=list[Series])
     #: lines at values, e.g. a limit, drawn over the series
     reference_lines: list[ReferenceLine] = attrs.field(factory=list[ReferenceLine])
     #: a `BAR` chart's categories, by the index each series' x names
     categories: list[str] = attrs.field(factory=list[str])
-    x_log: bool = attrs.field(default=False)
-    y_log: bool = attrs.field(default=False)
     #: the action saving the chart as a report's image (see `composeui.core.chartimage`),
     #: where the backend has one: with the `report` extra installed
     save_image_text: str = attrs.field(default=T("Save Image"), metadata={UI_TEXT: True})
@@ -4337,13 +4378,6 @@ class ChartView(View):
         """
         width = BAR_GROUP_WIDTH / series_count
         return (index - (series_count - 1) / 2) * width, width
-
-    @staticmethod
-    def axis_label(title: str, unit: str) -> str:
-        """Get an axis' label: its title with its unit, as "Time (s)"."""
-        if unit == "":
-            return title
-        return f"({unit})" if title == "" else f"{title} ({unit})"
 
 
 def _to_point(value: Iterable[float]) -> tuple[float, float]:

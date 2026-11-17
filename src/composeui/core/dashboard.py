@@ -24,6 +24,7 @@ from composeui.core.dataframesource import (
 )
 from composeui.core.reactivity import untracked
 from composeui.core.view import (
+    Axis,
     ChartKind,
     ChartView,
     DateRangeInputMixin,
@@ -123,21 +124,21 @@ def bar_chart(
     title: str,
     categories: Iterable[str],
     *,
-    x_title: str = "",
-    y_title: str = "",
+    x: Optional[Axis] = None,
+    y: Optional[Axis] = None,
     height: Optional[int] = None,
 ) -> ChartView:
     """Get a view field's default: a bar chart with a group of bars per category.
 
-    E.g. ``by_hour: ChartView = bar_chart("Pickups by hour", HOURS)``.
+    E.g. ``by_hour: ChartView = bar_chart("Pickups by hour", HOURS, y=Axis("Pickups"))``.
     """
     return child(
         ChartView,
         kind=ChartKind.BAR,
         title=title,
         categories=list(categories),
-        x_title=x_title,
-        y_title=y_title,
+        x=x or Axis(),
+        y=y or Axis(),
         height=height,
     )
 

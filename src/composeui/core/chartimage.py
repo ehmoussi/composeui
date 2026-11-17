@@ -182,8 +182,8 @@ def chart_figure(chart: ChartView, options: ImageOptions = DEFAULT_OPTIONS) -> F
         _draw_reference_lines(axes, chart)
         if options.show_title and chart.title:
             axes.set_title(chart.title)
-        axes.set_xlabel(ChartView.axis_label(chart.x_title, chart.x_unit))
-        axes.set_ylabel(ChartView.axis_label(chart.y_title, chart.y_unit))
+        axes.set_xlabel(chart.x.label)
+        axes.set_ylabel(chart.y.label)
         if options.x_range is not None:
             axes.set_xlim(*options.x_range)
         if options.y_range is not None:
@@ -193,12 +193,12 @@ def chart_figure(chart: ChartView, options: ImageOptions = DEFAULT_OPTIONS) -> F
 
 
 def _draw_curves(axes: Axes, chart: ChartView) -> None:
-    if chart.x_log:
+    if chart.x.is_log:
         axes.set_xscale("log")
-    if chart.y_log:
+    if chart.y.is_log:
         axes.set_yscale("log")
     for index, series in enumerate(chart.series):
-        x, y = ChartView.drawn_points(series, x_log=chart.x_log, y_log=chart.y_log)
+        x, y = ChartView.drawn_points(series, x_log=chart.x.is_log, y_log=chart.y.is_log)
         color = series.color or SERIES_COLORS[index % len(SERIES_COLORS)]
         if ChartView.kind_of(series, chart.kind) is ChartKind.SCATTER:
             axes.plot(
@@ -238,10 +238,10 @@ def _draw_curves(axes: Axes, chart: ChartView) -> None:
 
 def _draw_bars(axes: Axes, chart: ChartView) -> None:
     count = len(chart.categories)
-    if chart.y_log:
+    if chart.y.is_log:
         axes.set_yscale("log")
     for index, series in enumerate(chart.series):
-        heights = ChartView.bar_heights(series, count, y_log=chart.y_log)
+        heights = ChartView.bar_heights(series, count, y_log=chart.y.is_log)
         offset, width = ChartView.bar_slot(index, len(chart.series))
         drawn = [category for category, height in enumerate(heights) if math.isfinite(height)]
         axes.bar(
@@ -260,8 +260,8 @@ def _draw_bars(axes: Axes, chart: ChartView) -> None:
 
 def _draw_reference_lines(axes: Axes, chart: ChartView) -> None:
     """Draw the chart's reference lines, labeled inside the axes, at their ends."""
-    x_log = chart.x_log and chart.kind is not ChartKind.BAR
-    for line in ChartView.drawn_lines(chart.reference_lines, x_log=x_log, y_log=chart.y_log):
+    x_log = chart.x.is_log and chart.kind is not ChartKind.BAR
+    for line in ChartView.drawn_lines(chart.reference_lines, x_log=x_log, y_log=chart.y.is_log):
         color = line.color or REFERENCE_LINE_COLOR
         style = REFERENCE_LINE_STYLES[line.style]
         # not in the legend, which names the series: its label is beside it

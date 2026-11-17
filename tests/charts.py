@@ -5,6 +5,7 @@ from __future__ import annotations
 from attrs import Factory
 
 from composeui.core.view import (
+    Axis,
     ChartKind,
     ChartView,
     LabelView,
@@ -13,6 +14,7 @@ from composeui.core.view import (
     PageView,
     ReferenceLine,
     Router,
+    Scale,
     Series,
     child,
     define_view,
@@ -35,9 +37,8 @@ class ChartPage(PageView):
     chart: ChartView = child(
         ChartView,
         title="Pressure",
-        x_title="Time",
-        x_unit="s",
-        y_unit="kPa",
+        x=Axis("Time", unit="s"),
+        y=Axis(unit="kPa"),
         series=[Series(name="Inlet", x=[0, 1, 2, 3], y=[1, 3, 2, 4])],
         # off the grid's lines, the maximum and minimum past the data
         reference_lines=[
@@ -50,7 +51,7 @@ class ChartPage(PageView):
         ChartView,
         kind=ChartKind.BAR,
         title="Energy",
-        y_unit="kWh",
+        y=Axis(unit="kWh"),
         categories=["Kitchen", "Bedroom", "Office"],
         series=[
             Series(name="Heating", x=[0, 1, 2], y=[120, 80, 95]),
@@ -61,16 +62,15 @@ class ChartPage(PageView):
     decay: ChartView = child(
         ChartView,
         title="Decay",
-        x_unit="s",
-        x_log=True,
-        y_log=True,
+        x=Axis(unit="s", scale=Scale.LOG),
+        y=Axis(scale=Scale.LOG),
         # a log axis shows neither 0 nor -1
         series=[Series(name="Activity", x=[0, 1, 10, 100, 1000], y=[1, 1000, -1, 10, 1])],
     )
     jobs: ChartView = child(
         ChartView,
         title="Jobs",
-        x_unit="h",
+        x=Axis(unit="h"),
         # each count held until the next change; the queue's from 1 h, on its own x
         series=[
             Series(
