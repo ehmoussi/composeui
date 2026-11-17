@@ -12,6 +12,8 @@ import os
 import secrets
 import sys
 import tempfile
+import threading
+import time
 import types
 from collections import deque
 from contextvars import ContextVar
@@ -29,6 +31,7 @@ from typing import (
     cast,
 )
 
+import itsdangerous
 import uvicorn
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
@@ -76,7 +79,7 @@ from composeui.webcore.webrenderer import check_routes
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
 
-    from starlette.types import Receive, Scope, Send
+    from starlette.types import ASGIApp, Receive, Scope, Send
     from typing_extensions import TypeVarTuple, Unpack
 
     from composeui.core.application import _ConnectDecorator, _ConnectModelDecorator
@@ -193,7 +196,7 @@ def create_starlette_app(
             # `same_site="lax"`: cross-site POSTs carry no session cookie, a layer under
             # `SameOriginMiddleware`, which also refuses other ports and subdomains.
             Middleware(
-                SessionMiddleware,
+                _SessionMiddleware,
                 secret_key=secret_key or secrets.token_urlsafe(32),
                 same_site="lax",
             ),
@@ -211,6 +214,34 @@ def create_starlette_app(
     if reloading:
         _hide_reload_polls()
     return app
+
+
+class _SteadySigner(itsdangerous.TimestampSigner):
+    """A cookie's signer whose clock never goes back, within its process.
+
+    itsdangerous refuses a cookie signed later than its check, by the clock: once the
+    system's clock steps back, e.g. at a time sync, every cookie signed before would be
+    refused until the clock caught up. Its page would reload into a new session, its
+    unsaved work out of reach. The latest second seen is the time instead.
+    """
+
+    def __init__(self, secret_key: str) -> None:
+        super().__init__(secret_key)
+        self._latest = 0
+        self._lock = threading.Lock()
+
+    def get_timestamp(self) -> int:
+        with self._lock:
+            self._latest = max(self._latest, int(time.time()))
+            return self._latest
+
+
+class _SessionMiddleware(SessionMiddleware):
+    """Starlette's session cookie, signed by `_SteadySigner`."""
+
+    def __init__(self, app: ASGIApp, /, secret_key: str, **options: Any) -> None:
+        super().__init__(app, secret_key, **options)
+        self.signer = _SteadySigner(secret_key)
 
 
 class _GZipMiddleware(GZipMiddleware):

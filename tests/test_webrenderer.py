@@ -4239,6 +4239,21 @@ def test_an_idle_session_expires() -> None:
     assert len(app.session_views) == 2  # the reload started a fresh session
 
 
+def test_a_session_outlives_the_server_s_clock_stepping_back(
+    client: TestClient, main_view: HelloMainView, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # the cookie was signed at the page's load; then the clock steps back, e.g. at a sync
+    stepped_back = time.time() - 5
+    monkeypatch.setattr(time, "time", lambda: stepped_back)
+
+    response = client.post(
+        f"/widget/{_field_id(main_view.form.name)}", data={"value": "Alice", "event": "input"}
+    )
+
+    assert "hx-refresh" not in response.headers  # no reload into a new session
+    assert main_view.form.name.text == "Alice"
+
+
 def test_a_session_that_expires_cancels_its_jobs() -> None:
     canceled = threading.Event()
 
