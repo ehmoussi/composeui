@@ -2,17 +2,24 @@
 
 from __future__ import annotations
 
-import hashlib
 from typing import TYPE_CHECKING, Any, Final
 
-from markdown_it import MarkdownIt
 from markupsafe import Markup
-from typing_extensions import Protocol
 
 from composeui.core.renderer import ViewLike
+from composeui.core.view import FormRowView, StatusBar
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+import hashlib
+from typing import TYPE_CHECKING
+
+from markdown_it import MarkdownIt
+from typing_extensions import Protocol
+
 from composeui.core.view import (
     ConsoleView,
-    FormRowView,
     LogType,
     MetricView,
     TextRole,
@@ -411,3 +418,52 @@ class WebLogRenderer(WebRenderer[LogViewLike]):
             LOG_CLASSES=_LOG_CLASSES[self._view.log_type],
             log_message=self._view.log_message,
         )
+
+
+#: seconds a status bar waits past its message's timeout before fetching itself again
+_AUTO_CLEAR_MARGIN = 0.25
+
+
+class WebStatusBarRenderer(WebRenderer[StatusBar]):
+    _role = "status_bar"
+
+    def __init__(self, view: StatusBar) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "message": self._mark_dirty,
+                "timeout": self._mark_dirty,
+            }
+        )
+
+    def to_html(self, *, oob: bool = False) -> Markup:
+        # docked like Qt/Textual's status bar; an empty message leaves a quiet empty line
+        return Markup(
+            "<footer {root_attributes}{auto_clear_attributes}"
+            ' role="status" aria-live="polite"'
+            ' class="status-bar fixed inset-x-0 bottom-0 z-20 flex min-h-9 items-center gap-2'
+            ' border-t border-base-300 px-4 text-sm">'
+            "{message}"
+            "</footer>"
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            auto_clear_attributes=self._auto_clear_attributes(),
+            message=self._view.message,
+        )
+
+    def _auto_clear_attributes(self) -> Markup:
+        """Fetch the bar again once its message has timed out.
+
+        `show_message`'s timer clears the message on the server outside any request,
+        so no response ever tells the browser. Instead, a bar showing a message asks
+        for its own current state once, just after `timeout`; by then the timer has
+        cleared it. A message that was replaced or re-shown meanwhile comes back with
+        its own fresh delay, so a stale fetch is harmless.
+        """
+        if self._view.message == "" or self._view.timeout <= 0:
+            return Markup()
+        # margin: the browser's delay starts after the server's timer did, but not by much
+        delay_ms = round((self._view.timeout + _AUTO_CLEAR_MARGIN) * 1000)
+        return Markup(
+            ' hx-get="/widget/{}" hx-trigger="load delay:{}ms" hx-swap="outerHTML"'
+        ).format(self.widget_id, delay_ms)

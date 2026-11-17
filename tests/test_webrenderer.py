@@ -140,6 +140,7 @@ from composeui.webcore import downloads as downloads_module
 from composeui.webcore import serverfiles
 from composeui.webcore import session as session_module
 from composeui.webcore import streaming as streaming_module
+from composeui.webcore._renderers.actions import WebActionRenderer
 from composeui.webcore._renderers.charts import CHART_MAX_POINTS, WebChartRenderer
 from composeui.webcore._renderers.choices import WebRadioGroupRenderer
 from composeui.webcore._renderers.content import (
@@ -147,9 +148,12 @@ from composeui.webcore._renderers.content import (
     WebLabelRenderer,
     WebLogRenderer,
     WebMarkdownRenderer,
+    WebStatusBarRenderer,
 )
 from composeui.webcore._renderers.files import WebFilePathInputRenderer
+from composeui.webcore._renderers.forms import WebFormLabelRenderer
 from composeui.webcore._renderers.inputs import WebFloatInputRenderer, WebInputRenderer
+from composeui.webcore._renderers.navigation import RESERVED_ROUTES, WebMainRenderer
 from composeui.webcore._renderers.tables import WebTableRenderer
 from composeui.webcore.changes import collect_dirty
 from composeui.webcore.downloads import DOWNLOAD_TTL, FETCHED_TTL, MAX_DOWNLOADS, Downloads
@@ -179,13 +183,8 @@ from composeui.webcore.uploads import (
 )
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from composeui.webcore.webrenderer import (
-    RESERVED_ROUTES,
     UnsupportedEventError,
-    WebActionRenderer,
-    WebFormLabelRenderer,
-    WebMainRenderer,
     WebRenderer,
-    WebStatusBarRenderer,
     handle_event,
     render_dirty,
 )

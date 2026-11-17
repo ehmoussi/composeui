@@ -49,6 +49,7 @@ from composeui.core.registry import RendererType
 from composeui.core.reload import has_change_events
 from composeui.core.study import open_study
 from composeui.core.view import FILTER_PATTERNS_VARIABLE, View, made_signals, view_fields
+from composeui.webcore._renderers.navigation import check_routes
 from composeui.webcore.headers import SecurityHeadersMiddleware
 from composeui.webcore.limits import BodySizeLimitMiddleware
 from composeui.webcore.order import DuplicatePostError
@@ -74,7 +75,6 @@ from composeui.webcore.routes import (
 )
 from composeui.webcore.session import Hibernation, SessionStore
 from composeui.webcore.streaming import MAX_SESSION_STREAMS, MAX_STREAMS, StreamPlaces
-from composeui.webcore.webrenderer import check_routes
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence

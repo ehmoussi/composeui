@@ -53,6 +53,7 @@ src/composeui/
   qtcore/        # Qt backend via qtpy (QtApplication, qtrenderer.py, custom widgets/)
   textualcore/   # Textual (TUI) backend
   webcore/       # Web backend (Starlette + htmx + daisyUI); static/app.css is built
+    _renderers/  # its renderers, a module per family (renderers.py maps their keys)
 css/             # source of webcore/static/app.css (`make css`; tools land in css/vendor/)
 js/              # the scripts' type check (`make js-check`; TypeScript lands in js/vendor/)
 src/examples/    # example apps (pipeform.py, pipecatalogue.py, ...), also used by tests; not in the wheel
@@ -365,18 +366,22 @@ section covers what users see.
 - **htmx requests and responses.** The page and the server talk through htmx requests and
   responses, with Starlette (not FastAPI) and no JavaScript framework. Each renderer writes its
   HTML by hand (no Jinja2), with `markupsafe.Markup`, which escapes every value put in it.
-- **The renderers' modules.** Most families of renderers have a module in `_renderers/`: `inputs.py`
-  (text, numbers, dates), `controls.py` (check boxes, buttons, sliders), `choices.py`, `content.py`
-  (labels, images, Markdown, consoles, logs, metrics), `charts.py`, `graphics.py` (maps, drawings),
-  `tables.py` and `files.py` (path fields, uploads, the server's files). Such a module imports
-  `webrenderer.py`. So `renderers.py`, not `webrenderer.py`, maps each renderer key to its class,
-  written out, not discovered. `webrenderer.py` keeps the base `WebRenderer`, and the forms, actions
-  and menus, dialogs, containers, tabs, the router and the main view. The base names no renderer at
-  run time: it asks each one, through `is_drawn_apart` (a dialog, drawn at the end of the page) and
-  `shows` (a router's or a tab's page shown). A form row's label is always a `WebFormLabelRenderer`,
-  which the base only casts to. `changes.py` collects the renderers that a request changes
-  (`collect_dirty`), and `rendertarget.py` holds a session's view tree and its lock
-  (`RenderTarget`).
+- **The renderers' modules.** `webrenderer.py` holds the base `WebRenderer` and the helpers that the
+  renderers share, such as `_view_html` and the icons. Each family of renderers has its module in
+  `_renderers/`: `inputs.py` (text, numbers, dates), `controls.py` (check boxes, buttons, sliders),
+  `choices.py` (also the tree), `content.py` (labels, images, Markdown, consoles, logs, metrics, the
+  status bar), `charts.py`, `graphics.py` (maps, drawings), `tables.py`, `files.py` (path fields,
+  uploads, the server's files), `forms.py`, `actions.py` (menus, toolbars), `dialogs.py`,
+  `containers.py` (rows, columns, panes, lists, tabs, pages) and `navigation.py` (the main view, its
+  sidebar and router). A module holds one family: split one that starts to mix two, whatever its
+  length. Such a module imports `webrenderer.py`. So `renderers.py`, not `webrenderer.py`, maps each
+  renderer key to its class, written out, not discovered. The base names no renderer at run time: it
+  asks each one, through `is_drawn_apart` (a dialog, drawn at the end of the page) and `shows` (a
+  router's or a tab's page shown). A form row's label is always a `WebFormLabelRenderer`, which the
+  base only casts to. When the base must treat a renderer apart, add such a hook with a default, not
+  an `isinstance` check, which would tie that renderer to the base's module. `changes.py` collects
+  the renderers that a request changes (`collect_dirty`), and `rendertarget.py` holds a session's
+  view tree and its lock (`RenderTarget`).
 - **No code in the markup.** The page's `Content-Security-Policy` (`headers.py`) runs script
   files only, and htmx runs without `allowEval`: no inline handler, `hx-on`, `js:` value, or
   trigger filter. A renderer marks its element (`data-post-event`, `data-close-dialog`, ...) or
@@ -871,7 +876,10 @@ another process answers with `HX-Refresh`.
 
    A web renderer has no widget to keep. It renders its fragment in `to_html`, and applies the
    browser's events to the view in `dispatch`. Its handlers mark it dirty (`_mark_dirty`). See
-   [A button click on the web](#a-button-click-on-the-web).
+   [A button click on the web](#a-button-click-on-the-web). Put it in the module of its family
+   in `webcore/_renderers/`, or in a new module for a new family, and its entry in
+   `webcore/renderers.py`, not in `webrenderer.py` (see
+   [Requests and updates](#requests-and-updates)).
 
 3. Add tests for each backend that exercise the real rendered widgets. See
    [Tests](#tests).
