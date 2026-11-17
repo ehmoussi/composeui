@@ -20,7 +20,7 @@ from composeui.qtcore.qtrenderer import RENDERERS as QT_RENDERERS
 from composeui.qtcore.qtrenderer import QtStatusBarRenderer
 from composeui.textualcore.textualrenderer import RENDERERS as TEXTUAL_RENDERERS
 from composeui.textualcore.textualrenderer import TextualStatusBarRenderer
-from composeui.webcore.webrenderer import RENDERERS as WEB_RENDERERS
+from composeui.webcore.renderers import RENDERERS as WEB_RENDERERS
 
 if TYPE_CHECKING:
     import pytest

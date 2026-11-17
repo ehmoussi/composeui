@@ -46,7 +46,7 @@ class RendererType(enum.Enum):
         ("textual", "textual_fspicker", "textual_plotext"),
     )
     WEB = Backend(
-        "composeui.webcore.webrenderer",
+        "composeui.webcore.renderers",
         "composeui.webcore.webapplication",
         "web",
         ("itsdangerous", "markdown_it", "markupsafe", "python_multipart", "starlette", "uvicorn"),

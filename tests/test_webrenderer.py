@@ -140,6 +140,8 @@ from composeui.webcore import downloads as downloads_module
 from composeui.webcore import serverfiles
 from composeui.webcore import session as session_module
 from composeui.webcore import streaming as streaming_module
+from composeui.webcore._renderers.charts import CHART_MAX_POINTS, WebChartRenderer
+from composeui.webcore.changes import collect_dirty
 from composeui.webcore.downloads import DOWNLOAD_TTL, FETCHED_TTL, MAX_DOWNLOADS, Downloads
 from composeui.webcore.headers import POLICY
 from composeui.webcore.icons import icon_url
@@ -154,6 +156,7 @@ from composeui.webcore.order import (
     PostOrder,
 )
 from composeui.webcore.page import JOBS_POLL_MS, SESSION_TAG_FIELD, SESSION_TAG_HEADER
+from composeui.webcore.renderers import RENDERERS
 from composeui.webcore.routes import SESSION_KEY
 from composeui.webcore.session import Hibernation, SessionStore, WebSession
 from composeui.webcore.streaming import MAX_QUEUED_BYTES, Stream, StreamFailedError
@@ -166,12 +169,9 @@ from composeui.webcore.uploads import (
 )
 from composeui.webcore.webapplication import WebApplication, WebModelApplication
 from composeui.webcore.webrenderer import (
-    CHART_MAX_POINTS,
-    RENDERERS,
     RESERVED_ROUTES,
     UnsupportedEventError,
     WebActionRenderer,
-    WebChartRenderer,
     WebFilePathInputRenderer,
     WebFloatInputRenderer,
     WebFormLabelRenderer,
@@ -185,7 +185,6 @@ from composeui.webcore.webrenderer import (
     WebRenderer,
     WebStatusBarRenderer,
     WebTableRenderer,
-    collect_dirty,
     handle_event,
     render_dirty,
 )
@@ -1022,7 +1021,9 @@ def test_the_web_backend_builds_its_html_with_markup() -> None:
     """A text put in HTML by an f-string would go unescaped: `Markup.format` escapes it."""
     webcore = Path(__file__).parent.parent / "src/composeui/webcore"
     found: list[str] = []
-    for path in (webcore / "webrenderer.py", webcore / "page.py"):  # the modules writing HTML
+    # the modules writing HTML, the renderers moved out of `webrenderer.py` included
+    modules = [webcore / "webrenderer.py", webcore / "page.py"]
+    for path in [*modules, *sorted((webcore / "_renderers").glob("*.py"))]:
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.JoinedStr):
                 text = "".join(
@@ -1031,9 +1032,9 @@ def test_the_web_backend_builds_its_html_with_markup() -> None:
                     if isinstance(value, ast.Constant) and isinstance(value.value, str)
                 )
                 if any(mark in text for mark in ("<", '="', "='")):
-                    found.append(f"{path.name}:{node.lineno} f-string")
+                    found.append(f"{path.relative_to(webcore)}:{node.lineno} f-string")
             elif isinstance(node, ast.Attribute) and ast.unparse(node) == "html.escape":
-                found.append(f"{path.name}:{node.lineno} html.escape")
+                found.append(f"{path.relative_to(webcore)}:{node.lineno} html.escape")
     assert found == []
 
 
