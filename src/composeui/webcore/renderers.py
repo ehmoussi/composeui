@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Callable, Final
 
 from composeui.webcore._renderers.charts import WebChartRenderer
+from composeui.webcore._renderers.tables import WebSourceTableRenderer, WebTableRenderer
 from composeui.webcore.webrenderer import (
     WebActionRenderer,
     WebButtonRenderer,
@@ -52,10 +53,8 @@ from composeui.webcore.webrenderer import (
     WebSeparatorRenderer,
     WebSidebarRenderer,
     WebSliderRenderer,
-    WebSourceTableRenderer,
     WebSplitterRenderer,
     WebStatusBarRenderer,
-    WebTableRenderer,
     WebTabPageRenderer,
     WebTabsRenderer,
     WebTextAreaRenderer,

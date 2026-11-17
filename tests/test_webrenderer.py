@@ -141,6 +141,7 @@ from composeui.webcore import serverfiles
 from composeui.webcore import session as session_module
 from composeui.webcore import streaming as streaming_module
 from composeui.webcore._renderers.charts import CHART_MAX_POINTS, WebChartRenderer
+from composeui.webcore._renderers.tables import WebTableRenderer
 from composeui.webcore.changes import collect_dirty
 from composeui.webcore.downloads import DOWNLOAD_TTL, FETCHED_TTL, MAX_DOWNLOADS, Downloads
 from composeui.webcore.headers import POLICY
@@ -184,7 +185,6 @@ from composeui.webcore.webrenderer import (
     WebRadioGroupRenderer,
     WebRenderer,
     WebStatusBarRenderer,
-    WebTableRenderer,
     handle_event,
     render_dirty,
 )
