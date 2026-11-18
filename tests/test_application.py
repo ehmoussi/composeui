@@ -440,24 +440,34 @@ def test_run_refuses_to_set_up_a_model_it_isn_t_given() -> None:
 
 
 @pytest.mark.parametrize(
-    ("option", "app_level", "signal_level"),
+    ("options", "app_level", "signal_level", "reactivity_level"),
     [
-        ("--log", logging.DEBUG, logging.INFO),
-        ("--log-signals", logging.INFO, logging.DEBUG),
-        ("--debug", logging.DEBUG, logging.DEBUG),
+        ([], logging.INFO, logging.INFO, logging.INFO),
+        (["--log"], logging.DEBUG, logging.INFO, logging.INFO),
+        (["--log-signals"], logging.INFO, logging.DEBUG, logging.INFO),
+        (["--log-reactivity"], logging.INFO, logging.INFO, logging.DEBUG),
+        (["--log-signals", "--log-reactivity"], logging.INFO, logging.DEBUG, logging.DEBUG),
+        (["--debug"], logging.DEBUG, logging.DEBUG, logging.DEBUG),
     ],
 )
-def test_the_log_options_show_the_app_s_or_the_signals_debug_messages(
-    option: str, app_level: int, signal_level: int, monkeypatch: pytest.MonkeyPatch
+def test_the_log_options_enable_debug_messages_for_the_requested_loggers(
+    options: list[str],
+    app_level: int,
+    signal_level: int,
+    reactivity_level: int,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    loggers = [logging.getLogger("COMPOSEUI"), logging.getLogger("COMPOSEUI_SIGNAL")]
+    loggers = [
+        logging.getLogger(name)
+        for name in ("COMPOSEUI", "COMPOSEUI_SIGNAL", "COMPOSEUI_REACTIVITY")
+    ]
     for logger in loggers:
         monkeypatch.setattr(logger, "level", logger.level)  # for the other tests
-    monkeypatch.setattr("sys.argv", ["count", option])
+    monkeypatch.setattr("sys.argv", ["count", *options])
 
     Application(build_main_view=_CountMainView).run()
 
-    assert [logger.level for logger in loggers] == [app_level, signal_level]
+    assert [logger.level for logger in loggers] == [app_level, signal_level, reactivity_level]
 
 
 @pytest.mark.parametrize(("options", "is_shown"), [(["--log"], True), ([], False)])
@@ -577,7 +587,9 @@ def test_a_log_file_keeps_only_its_previous_content_when_it_grows(tmp_path: Path
     assert not (tmp_path / "app.log.2").exists()
 
 
-@pytest.mark.parametrize("name", ["COMPOSEUI", "COMPOSEUI_SIGNAL", "COMPOSEUI_VIEW"])
+@pytest.mark.parametrize(
+    "name", ["COMPOSEUI", "COMPOSEUI_SIGNAL", "COMPOSEUI_REACTIVITY", "COMPOSEUI_VIEW"]
+)
 def test_each_composeui_log_goes_to_the_file_until_the_code_raises(
     name: str, tmp_path: Path
 ) -> None:

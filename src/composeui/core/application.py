@@ -23,6 +23,7 @@ from composeui.core._views.base import set_references
 from composeui.core._views.tables import take_filter_patterns
 from composeui.core.autosave import Autosave
 from composeui.core.jobs import starting_study
+from composeui.core.reactivity import TRACE_LOGGER as REACTIVITY_LOGGER
 from composeui.core.reactivity import start_reactions
 from composeui.core.registry import RendererType, has_renderer
 from composeui.core.reload import is_reloaded
@@ -53,11 +54,15 @@ LOGGER = logging.getLogger("COMPOSEUI")
 _STREAM_HANDLER = logging.StreamHandler(sys.stdout)
 _STREAM_HANDLER.setFormatter(logging.Formatter("%(asctime)s: %(message)s", "%Y-%m-%d %H:%M:%S"))
 LOGGER.addHandler(_STREAM_HANDLER)
+_REACTIVITY_STREAM_HANDLER = logging.StreamHandler(sys.stdout)
+_REACTIVITY_STREAM_HANDLER.setFormatter(_STREAM_HANDLER.formatter)
+REACTIVITY_LOGGER.addHandler(_REACTIVITY_STREAM_HANDLER)
 #: the size at which a log file starts again, its previous content kept beside it
 _LOG_FILE_MAX_BYTES = 5 * 1024 * 1024
 _LOG_OUTPUTS = (
     (LOGGER, _STREAM_HANDLER),
     (SIGNAL_LOGGER, SIGNAL_STREAM_HANDLER),
+    (REACTIVITY_LOGGER, _REACTIVITY_STREAM_HANDLER),
     (VIEW_LOGGER, VIEW_STREAM_HANDLER),
 )
 
@@ -291,6 +296,11 @@ class Application(Generic[MainViewT]):
             "--log-signals", help="Log all the emitted signals.", action="store_true"
         )
         self._parser.add_argument(
+            "--log-reactivity",
+            help="Log what schedules reactive methods and when they run.",
+            action="store_true",
+        )
+        self._parser.add_argument(
             "--language", metavar="LANGUAGE", help="Show the app in LANGUAGE, e.g. fr."
         )
         self._add_reference_to_signals()
@@ -347,6 +357,9 @@ class Application(Generic[MainViewT]):
             SIGNAL_LOGGER.setLevel(level=logging.DEBUG)
         else:
             SIGNAL_LOGGER.setLevel(level=logging.INFO)
+        REACTIVITY_LOGGER.setLevel(
+            logging.DEBUG if self._args.log_reactivity or self._args.debug else logging.INFO
+        )
         if self._args.language is not None:
             self.main_view.set_language(self._args.language)
         # the file asked for wins: the work an unclean end left waits for the next start

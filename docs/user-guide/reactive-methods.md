@@ -235,6 +235,14 @@ print(reactive_inputs(main_view))
 A child view that a method reads on its way to a field, such as `quantity`, does not show: the
 field does.
 
+Run the app with `--log-reactivity` to see which field or task scheduled a method. The log shows
+each cause and each run with the same reaction ID. If several inputs change before a method
+runs, the log shows each change but only one run for those changes. The log shows input names,
+not values.
+
+The flag takes effect after the app reads its command-line options. The first runs on Qt and
+Textual happen before then. On the web, the flag also traces the first runs of each session.
+
 ## On each backend
 
 - **The same on each backend.** Reactive methods are part of `composeui.core`. They run on

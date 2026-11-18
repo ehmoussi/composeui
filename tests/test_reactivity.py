@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import gc
+import logging
+import re
 import subprocess
 import sys
 import threading
@@ -123,7 +125,10 @@ class FormView(MainView):
         self.summary.text = f"{self.name.text} in {self.city.text}"
 
 
-def test_one_signal_s_changes_run_a_method_once_after_its_callbacks() -> None:
+def test_one_signal_s_changes_run_a_method_once_after_its_callbacks(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="COMPOSEUI_REACTIVITY")
     view = FormView()
     start_reactions(view)
     summaries: list[str] = []
@@ -139,6 +144,20 @@ def test_one_signal_s_changes_run_a_method_once_after_its_callbacks() -> None:
 
     assert summaries == [" in "]
     assert (view.summary.text, view.runs) == ("Ada in London", 2)
+    messages = [
+        record.getMessage() for record in caplog.records if record.name == "COMPOSEUI_REACTIVITY"
+    ]
+    initial, first_run, name_change, city_change, second_run = messages
+    assert "initial run" in initial
+    assert "name.text changed" in name_change
+    assert "city.text changed" in city_change
+    assert all("FormView.summarize" in message for message in messages)
+    assert first_run.startswith("Run ")
+    assert second_run.startswith("Run ")
+    reaction = re.search(r"\[reaction \d+\]", first_run)
+    assert reaction is not None
+    assert all(reaction[0] in message for message in messages)
+    assert all("Ada" not in message and "London" not in message for message in messages)
 
 
 def test_a_failing_callback_still_shows_the_changes_made_before_it_failed() -> None:
@@ -506,7 +525,10 @@ class SquareView(MainView):
         self.shown.text = "..." if result is None else str(result)
 
 
-def test_a_task_s_result_is_an_input_and_start_latest_follows_the_field() -> None:
+def test_a_task_s_result_is_an_input_and_start_latest_follows_the_field(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="COMPOSEUI_REACTIVITY")
     view = SquareView()
     start_reactions(view)
     assert view.shown.text == "..."
@@ -518,6 +540,12 @@ def test_a_task_s_result_is_an_input_and_start_latest_follows_the_field() -> Non
 
     assert view.shown.text == "49"
     assert reactive_inputs(view) == {"compute": ["number.value"], "show": ["squares"]}
+    assert any(
+        record.name == "COMPOSEUI_REACTIVITY"
+        and "squares changed" in record.getMessage()
+        and "SquareView.show" in record.getMessage()
+        for record in caplog.records
+    )
 
 
 @define_view

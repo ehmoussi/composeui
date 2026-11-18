@@ -187,7 +187,11 @@ When the app runs, it shows the `info` messages and above. These options of ever
 | --- | --- |
 | `--log` | The `debug` messages of ComposeUI and of the loggers of `get_logger` |
 | `--log-signals` | Each signal that is emitted |
+| `--log-reactivity` | What schedules each reactive method and when it runs |
 | `--debug` | All of the above |
+
+Use `--log-signals` and `--log-reactivity` together to trace both. See
+[Debug a method's inputs](reactive-methods.md#debug-a-methods-inputs) for what the trace shows.
 
 The result of `get_logger` is a standard `logging.Logger`. Add a handler to it to write its messages
 to a file too.
