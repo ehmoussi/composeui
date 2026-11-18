@@ -8,8 +8,8 @@ The notable changes of each release of ComposeUI. The format follows
 
 ### Added
 
-- `--log-reactivity` shows which inputs schedule reactive methods and when those methods run.
-  `--debug` also enables this trace.
+- `--log-reactivity` shows how many reactions watch a changed input. For each run, it logs
+  the causes and the time spent in the method. `--debug` also enables this trace.
 - Layers in a chart: a `ChartView` draws lines, dots and bars over the same axes, for example
   a line over bars. The bars of several series stand side by side at each x, and the lines
   and dots are over them, on Qt, Textual, the web and in report images.

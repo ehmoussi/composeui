@@ -50,6 +50,12 @@ if TYPE_CHECKING:
     from composeui.webcore.webrenderer import WebRenderer
 
 
+def _trace_messages(caplog: pytest.LogCaptureFixture) -> list[str]:
+    return [
+        record.getMessage() for record in caplog.records if record.name == "COMPOSEUI_REACTIVITY"
+    ]
+
+
 @define_view
 class HourView(MainView):
     """Shows the hour picked, only once the box is checked."""
@@ -108,6 +114,31 @@ def test_stopped_methods_run_no_more_until_they_start_again() -> None:
     assert view.shown.text == "11:00"
 
 
+def test_a_reaction_stopped_while_waiting_has_no_run_in_the_trace(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="COMPOSEUI_REACTIVITY")
+    view = HourView()
+    start_reactions(view)
+    caplog.clear()
+
+    def change_and_stop() -> None:
+        view.is_on.is_checked = True
+        stop_reactions(view)
+
+    signal = SignalNoArgs()
+    signal.connect(change_and_stop)
+    signal.emit()
+
+    (change,) = _trace_messages(caplog)
+    assert "is_on.is_checked (watched by 1 reaction)" in change
+    assert view.shown.text == "Off"
+
+    start_reactions(view)
+    assert view.shown.text == "11:00"
+    assert _trace_messages(caplog)[-1].endswith("causes: initial run")
+
+
 @define_view
 class FormView(MainView):
     name: LabelView = child(LabelView)
@@ -144,19 +175,17 @@ def test_one_signal_s_changes_run_a_method_once_after_its_callbacks(
 
     assert summaries == [" in "]
     assert (view.summary.text, view.runs) == ("Ada in London", 2)
-    messages = [
-        record.getMessage() for record in caplog.records if record.name == "COMPOSEUI_REACTIVITY"
-    ]
-    initial, first_run, name_change, city_change, second_run = messages
+    messages = _trace_messages(caplog)
+    initial, name_change, city_change, second_run = messages
     assert "initial run" in initial
-    assert "name.text changed" in name_change
-    assert "city.text changed" in city_change
-    assert all("FormView.summarize" in message for message in messages)
-    assert first_run.startswith("Run ")
-    assert second_run.startswith("Run ")
-    reaction = re.search(r"\[reaction \d+\]", first_run)
+    assert "name.text (watched by 1 reaction)" in name_change
+    assert "city.text (watched by 1 reaction)" in city_change
+    assert re.search(r"Run FormView\.summarize .* \d+\.\d+ ms\b", initial)
+    assert re.search(r"Run FormView\.summarize .* \d+\.\d+ ms\b", second_run)
+    assert "causes: name.text, city.text" in second_run
+    reaction = re.search(r"\[reaction \d+\]", initial)
     assert reaction is not None
-    assert all(reaction[0] in message for message in messages)
+    assert reaction[0] in second_run
     assert all("Ada" not in message and "London" not in message for message in messages)
 
 
@@ -245,16 +274,25 @@ class TaxView(MainView):
         self.taxed.text = str(self.price.value * 2)
 
 
-def test_methods_run_in_their_start_order_whatever_ran_before() -> None:
+def test_methods_run_in_their_start_order_whatever_ran_before(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="COMPOSEUI_REACTIVITY")
     view = TaxView()
     start_reactions(view)
     assert view.runs == ["summary", "tax", "summary"]
 
     view.runs.clear()
+    caplog.clear()
     view.price.value = 20
     # the same order again, though show_summary last read the price after tax did
     assert view.runs == ["summary", "tax", "summary"]
     assert view.summary.text == "20 -> 40"
+    first, second = (
+        message for message in _trace_messages(caplog) if "TaxView.show_summary" in message
+    )
+    assert first.endswith("causes: price.value")
+    assert second.endswith("causes: taxed.text")
 
 
 @define_view
@@ -278,15 +316,31 @@ class TaxFirstView(MainView):
         self.summary.text = f"{self.price.value} -> {self.taxed.text}"
 
 
-def test_a_waiting_method_whose_input_an_earlier_one_sets_runs_once() -> None:
+@pytest.mark.parametrize("level", [logging.INFO, logging.DEBUG])
+def test_a_waiting_method_whose_input_an_earlier_one_sets_runs_once(
+    level: int, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(level, logger="COMPOSEUI_REACTIVITY")
     view = TaxFirstView()
     start_reactions(view)
     view.runs.clear()
+    caplog.clear()
 
     view.price.value = 20
 
     assert view.runs == ["tax", "summary"]
     assert view.summary.text == "20 -> 40"
+    messages = _trace_messages(caplog)
+    if level == logging.DEBUG:
+        price_change, taxed_change, tax_run, summary_run = messages
+        assert "price.value (watched by 2 reactions)" in price_change
+        assert "taxed.text (watched by 1 reaction)" in taxed_change
+        assert "TaxFirstView.tax" in tax_run
+        assert tax_run.endswith("causes: price.value")
+        assert "TaxFirstView.show_summary" in summary_run
+        assert summary_run.endswith("causes: price.value, taxed.text")
+    else:
+        assert messages == []
 
 
 @define_view
@@ -436,14 +490,23 @@ def test_two_failing_methods_raise_the_first_error_and_log_the_other(
     assert isinstance(record.exc_info[1], KeyError)
 
 
-def test_a_failing_method_lets_the_others_show_the_change_then_raises() -> None:
+def test_a_failing_method_lets_the_others_show_the_change_then_raises(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    caplog.set_level(logging.DEBUG, logger="COMPOSEUI_REACTIVITY")
     view = FailingView()
     start_reactions(view)
+    caplog.clear()
 
     with pytest.raises(ValueError, match="the method's own error"):
         view.source.text = "boom"
 
     assert view.copy.text == "boom"
+    _, failed, copied = _trace_messages(caplog)
+    assert re.search(r"Run FailingView\.check .* \d+\.\d+ ms \(failed\)", failed)
+    assert failed.endswith("causes: source.text")
+    assert "FailingView.copy_source" in copied
+    assert "failed" not in copied
     # it read its input before it failed: it runs again when the input changes
     view.source.text = "fine"
     assert view.copy.text == "fine"
@@ -540,11 +603,10 @@ def test_a_task_s_result_is_an_input_and_start_latest_follows_the_field(
 
     assert view.shown.text == "49"
     assert reactive_inputs(view) == {"compute": ["number.value"], "show": ["squares"]}
+    messages = _trace_messages(caplog)
+    assert any("Change squares (watched by 1 reaction)" in message for message in messages)
     assert any(
-        record.name == "COMPOSEUI_REACTIVITY"
-        and "squares changed" in record.getMessage()
-        and "SquareView.show" in record.getMessage()
-        for record in caplog.records
+        "SquareView.show" in message and message.endswith("causes: squares") for message in messages
     )
 
 

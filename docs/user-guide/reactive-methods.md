@@ -235,10 +235,22 @@ print(reactive_inputs(main_view))
 A child view that a method reads on its way to a field, such as `quantity`, does not show: the
 field does.
 
-Run the app with `--log-reactivity` to see which field or task scheduled a method. The log shows
-each cause and each run with the same reaction ID. If several inputs change before a method
-runs, the log shows each change but only one run for those changes. The log shows input names,
+Run the app with `--log-reactivity` to see which fields and tasks change and what runs as a
+result. For example:
+
+```text
+Change name.text (watched by 1 reaction)
+Change city.text (watched by 1 reaction)
+Run Form.summarize [reaction 12]: 0.420 ms; causes: name.text, city.text
+```
+
+The count is the number of reactions that directly watch the input when it changes. It is not
+the number of runs. If several inputs change before a method runs, the log lists them on the
+same run. If the method runs again, the log lists only the new causes. It shows input names,
 not values.
+
+The time is the elapsed time inside the method, not the time spent waiting to run or doing
+work in a background task. The log marks a run that raises an exception as `failed`.
 
 The flag takes effect after the app reads its command-line options. The first runs on Qt and
 Textual happen before then. On the web, the flag also traces the first runs of each session.

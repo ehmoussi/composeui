@@ -11,6 +11,7 @@ import itertools
 import logging
 import pathlib
 import threading
+import time
 import weakref
 from collections import deque
 from contextlib import contextmanager
@@ -55,8 +56,8 @@ _TRACKING: contextvars.ContextVar[_Reaction | None] = contextvars.ContextVar(
 _RUNNING: contextvars.ContextVar[_Reaction | None] = contextvars.ContextVar(
     "composeui_running", default=None
 )
-#: the reactions to run once the current batch of changes is over
-_PENDING: contextvars.ContextVar[dict[_Reaction, None] | None] = contextvars.ContextVar(
+#: the reactions to run once the current batch of changes is over, with causes only in a trace
+_PENDING: contextvars.ContextVar[dict[_Reaction, list[str] | None] | None] = contextvars.ContextVar(
     "composeui_pending", default=None
 )
 
@@ -180,7 +181,7 @@ def batch() -> Generator[None]:
     if _PENDING.get() is not None:
         yield
         return
-    pending: dict[_Reaction, None] = {}
+    pending: dict[_Reaction, list[str] | None] = {}
     token = _PENDING.set(pending)
     try:
         yield
@@ -230,8 +231,27 @@ class Source:
         if len(self._readers) == 0:
             return
         with batch():
-            for reaction in tuple(self._readers):
-                _schedule(reaction, self)
+            readers = tuple(self._readers)
+            cause = (
+                self._log_change(readers)
+                if readers and TRACE_LOGGER.isEnabledFor(logging.DEBUG)
+                else None
+            )
+            for reaction in readers:
+                _schedule(reaction, cause)
+
+    def _log_change(self, readers: tuple[_Reaction, ...]) -> str:
+        # Use one name for this change and for every run that it causes.
+        with untracked():
+            owner = readers[0].owner()
+            label = self.label(_paths(owner) if owner is not None else {})
+            TRACE_LOGGER.debug(
+                "Change %s (watched by %d %s)",
+                label,
+                len(readers),
+                "reaction" if len(readers) == 1 else "reactions",
+            )
+        return label
 
     def label(self, paths: dict[int, str]) -> str:
         return self._label(paths)
@@ -304,19 +324,31 @@ class _Reaction:
         self.stopped = True
         self._forget_inputs()
 
-    def run(self) -> None:
+    def run(self, causes: list[str] | None) -> None:
         owner = self.owner()
         if self.stopped or owner is None:
             return
-        TRACE_LOGGER.debug("Run %s [reaction %d]", self.name, self.order)
         self._forget_inputs()
         tracking = _TRACKING.set(self)
         running = _RUNNING.set(self)
+        succeeded = False
+        started = time.perf_counter_ns() if causes is not None else 0
         try:
             self.function(owner)
+            succeeded = True
         finally:
+            elapsed = time.perf_counter_ns() - started if causes is not None else 0
             _RUNNING.reset(running)
             _TRACKING.reset(tracking)
+            if causes is not None:
+                TRACE_LOGGER.debug(
+                    "Run %s [reaction %d]: %.3f ms%s; causes: %s",
+                    self.name,
+                    self.order,
+                    elapsed / 1_000_000,
+                    "" if succeeded else " (failed)",
+                    ", ".join(causes),
+                )
 
     def _forget_inputs(self) -> None:
         for source in self.inputs:
@@ -437,7 +469,7 @@ def _set_watched(
     """
     if _RUNNING.get() is not None:
         check_write(view, name)
-    pending: dict[_Reaction, None] = {}
+    pending: dict[_Reaction, list[str] | None] = {}
     batching = _PENDING.set(pending) if _PENDING.get() is None else None
     # the hooks' reads, e.g. the renderer's old value, aren't the method's inputs
     tracking = _TRACKING.set(None) if _TRACKING.get() is not None else None
@@ -516,24 +548,18 @@ def _reactive_methods(cls: type[Any]) -> dict[str, Callable[[Any], None]]:
     return methods
 
 
-def _schedule(reaction: _Reaction, source: Source | None = None) -> None:
+def _schedule(reaction: _Reaction, cause: str | None = "initial run") -> None:
     """Run `reaction` once the current batch is over: its callers open one."""
     pending = _PENDING.get()
     assert pending is not None
-    pending[reaction] = None
-    if TRACE_LOGGER.isEnabledFor(logging.DEBUG) and (owner := reaction.owner()) is not None:
-        with untracked():
-            if source is None:
-                TRACE_LOGGER.debug(
-                    "Schedule %s [reaction %d]: initial run", reaction.name, reaction.order
-                )
-            else:
-                TRACE_LOGGER.debug(
-                    "Schedule %s [reaction %d]: %s changed",
-                    reaction.name,
-                    reaction.order,
-                    source.label(_paths(owner)),
-                )
+    if cause is None or not TRACE_LOGGER.isEnabledFor(logging.DEBUG):
+        pending.setdefault(reaction, None)
+        return
+    causes = pending.get(reaction)
+    if causes is None:
+        pending[reaction] = [cause]
+    else:
+        causes.append(cause)
 
 
 @contextmanager
@@ -560,7 +586,7 @@ def _recording_reads() -> Generator[None]:
                 del _FieldReader.__set__  # type: ignore[attr-defined]
 
 
-def _flush(pending: dict[_Reaction, None]) -> None:
+def _flush(pending: dict[_Reaction, list[str] | None]) -> None:
     """Run the `pending` reactions, and those they make pending, then raise the first error.
 
     One method's error doesn't keep the others from showing the change.
@@ -571,25 +597,28 @@ def _flush(pending: dict[_Reaction, None]) -> None:
         _run_all(pending)
 
 
-def _run_all(pending: dict[_Reaction, None]) -> None:
+def _run_all(pending: dict[_Reaction, list[str] | None]) -> None:
     """Run the `pending` reactions in their start order, and those they make pending."""
     runs: dict[_Reaction, int] = {}
     error: Exception | None = None
     # by start order: the orders are unique, so the reactions are never compared
     queue: list[tuple[int, _Reaction]] = []
-    queued: set[_Reaction] = set()
+    queued: dict[_Reaction, list[str] | None] = {}
 
     def take_pending() -> None:
-        for reaction in pending:
+        for reaction, causes in pending.items():
             if reaction not in queued:
-                queued.add(reaction)
+                queued[reaction] = causes
                 heapq.heappush(queue, (reaction.order, reaction))
+            elif causes is not None:
+                # It has not run yet: these changes belong to the same run.
+                queued[reaction] = (queued[reaction] or []) + causes
         pending.clear()
 
     take_pending()
     while len(queue) > 0:
         _order, reaction = heapq.heappop(queue)
-        queued.discard(reaction)
+        causes = queued.pop(reaction)
         runs[reaction] = runs.get(reaction, 0) + 1
         if runs[reaction] > _MAX_RUNS:
             msg = (
@@ -598,7 +627,7 @@ def _run_all(pending: dict[_Reaction, None]) -> None:
             )
             raise ReactiveLoopError(msg)
         try:
-            reaction.run()
+            reaction.run(causes)
         except Exception as raised:  # raised once the others ran
             if error is None:
                 error = raised

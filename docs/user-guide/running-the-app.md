@@ -187,7 +187,7 @@ When the app runs, it shows the `info` messages and above. These options of ever
 | --- | --- |
 | `--log` | The `debug` messages of ComposeUI and of the loggers of `get_logger` |
 | `--log-signals` | Each signal that is emitted |
-| `--log-reactivity` | What schedules each reactive method and when it runs |
+| `--log-reactivity` | Changed inputs, how many reactions watch them, and what caused each timed run |
 | `--debug` | All of the above |
 
 Use `--log-signals` and `--log-reactivity` together to trace both. See
