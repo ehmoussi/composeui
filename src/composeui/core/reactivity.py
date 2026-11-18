@@ -34,6 +34,7 @@ __all__ = [
 _ViewT = TypeVar("_ViewT", bound="View")
 
 LOGGER = logging.getLogger("COMPOSEUI")
+TRACE_LOGGER = logging.getLogger("COMPOSEUI_REACTIVITY")
 
 #: the most runs of one method while one change settles: past it, methods change each other
 _MAX_RUNS = 100
@@ -230,7 +231,7 @@ class Source:
             return
         with batch():
             for reaction in tuple(self._readers):
-                _schedule(reaction)
+                _schedule(reaction, self)
 
     def label(self, paths: dict[int, str]) -> str:
         return self._label(paths)
@@ -307,6 +308,7 @@ class _Reaction:
         owner = self.owner()
         if self.stopped or owner is None:
             return
+        TRACE_LOGGER.debug("Run %s [reaction %d]", self.name, self.order)
         self._forget_inputs()
         tracking = _TRACKING.set(self)
         running = _RUNNING.set(self)
@@ -514,11 +516,24 @@ def _reactive_methods(cls: type[Any]) -> dict[str, Callable[[Any], None]]:
     return methods
 
 
-def _schedule(reaction: _Reaction) -> None:
+def _schedule(reaction: _Reaction, source: Source | None = None) -> None:
     """Run `reaction` once the current batch is over: its callers open one."""
     pending = _PENDING.get()
     assert pending is not None
     pending[reaction] = None
+    if TRACE_LOGGER.isEnabledFor(logging.DEBUG) and (owner := reaction.owner()) is not None:
+        with untracked():
+            if source is None:
+                TRACE_LOGGER.debug(
+                    "Schedule %s [reaction %d]: initial run", reaction.name, reaction.order
+                )
+            else:
+                TRACE_LOGGER.debug(
+                    "Schedule %s [reaction %d]: %s changed",
+                    reaction.name,
+                    reaction.order,
+                    source.label(_paths(owner)),
+                )
 
 
 @contextmanager
