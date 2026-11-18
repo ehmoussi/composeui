@@ -195,33 +195,35 @@ Callbacks run outside the lock, including the immediate call from `now=True`.
 ### Reactive methods
 
 `composeui.core.reactivity` runs the [reactive methods](user-guide/reactive-methods.md) of the
-views. It costs nothing until a class with a `@reactive` method exists:
+views. Field tracking starts with the first `@reactive` method or the first call to a helper
+that follows its inputs:
 
-- **The view classes wait.** `@define_view` registers each view class
-  (`register_view_class`). The first `@reactive` tracks the fields of the classes defined
-  before it, and each class defined later is tracked as soon as it is defined.
-- **A field gets a descriptor.** A tracked class gets a `_FieldReader` for each public field,
-  except `renderer`, and a `__setattr__` around the one that `attrs` gives it. The values stay
-  in the instance's `__dict__` (`slots=False`).
-- **Reads are plain outside a run.** `_FieldReader` has a `__set__` but no `__get__`, so a read
-  takes the value from `__dict__` without calling Python. `_recording_reads` gives the class a
-  `__get__` while a batch of methods runs, in any thread: a counter under a lock removes it when
-  the last batch ends. The `__get__` records the read in the method that the `_TRACKING`
-  context variable holds. Another thread's reads are not recorded: its context holds no method.
-- **A write tells the readers.** `_FieldReader.__set__` stores the value, then calls
-  `Source.changed` when the value differs (`_differs`). So a write with `object.__setattr__`,
-  which skips the renderer, still reaches the methods. The `__setattr__` refuses the write of
-  a field that the running method read (`check_write`). It then opens a batch, and records no
-  read in the `on_setattr` hooks. It also starts or stops the views that enter or leave the
-  field.
+- **The view classes wait.** `@define_view` registers each view class. When field tracking
+  starts, ComposeUI sets up the registered classes. It sets up later classes as they register.
+- **A field gets a descriptor.** A tracked class gets a `_FieldReader` for each public field
+  except signals and `renderer`. It wraps the `__setattr__` that `attrs` gives it. The values
+  stay in the instance's `__dict__` (`slots=False`).
+- **Reads need no descriptor outside a batch.** `_FieldReader` has neither `__get__` nor
+  `__set__` then, so reads take the value directly from `__dict__`. `_recording_reads`
+  installs both methods and uses a counter under a lock to remove them when the last batch
+  in any thread ends. `__get__` records the read only if `_TRACKING` holds a reaction in
+  the current context.
+- **Writes take a short path when possible.** If no method has read a view's fields and
+  the current context is not tracking reads, the wrapper calls the normal setter without
+  checking for changed inputs. It still handles child views that enter or leave the field.
+  Otherwise `_set_watched` refuses a write if the running method already read that field.
+  It runs the field's hooks without tracking their reads, then tells the readers if the
+  value changed. `_FieldReader.__set__` only stores the value. Use `set_value` to tell the
+  readers about a write that bypasses the field's hooks.
 - **Batches.** `batch()` holds the methods to run in the `_PENDING` context variable, and runs
   them when the outermost batch ends. `Signal.emit`, `Renderer.stop_refresh`, the web session's
   handling of an event, New and Open (`_apply_state`, `_reset_state`), and `start_reactions`
   open one.
 - **A fixed order.** Each `_Reaction` takes a number when it starts. `_run_all` runs the
-  waiting reactions by that number, from a heap. A reaction that runs more than 100 times in
-  one batch raises `ReactiveLoopError`. When a method fails, the others still run, then the
-  first exception is raised and the others are logged.
+  waiting reactions by that number, from a heap. If a reaction needs a 101st run in one
+  batch, `_run_all` stops the batch with `ReactiveLoopError`. Otherwise, when a method
+  fails, the waiting methods still run. `_run_all` raises the first exception and logs
+  any others.
 - **No leaks.** A `Source` holds its readers by weak key, and a `_Reaction` its view by weak
   reference. An ended web session calls `stop_reactions` on its main view.
 - **Tasks.** A `Task` has a `Source` too. Reading its state records it, its `changed` signal
