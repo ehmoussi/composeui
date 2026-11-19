@@ -17,11 +17,17 @@ backends' modules included, can change in any release without an entry here.
 - `DialogView.ask(on_accept, on_reject=None)` opens a dialog and calls one of the functions
   once the user answers, and `forget()` closes it without calling either. An app no longer
   keeps what each confirmation is about in a field of its own.
+- `Task.progress_reported` emits each progress value of a task's run once, for output that
+  a callback appends. `Task.changed` also emits for a start, a cancel and an outcome.
+- `Job.raise_if_canceled()` stops a canceled job's function with `JobCanceledError`.
 
 ### Changed
 
 - The main view's questions before it replaces a file or discards unsaved changes are
   destructive: Enter now cancels them, instead of replacing or discarding.
+- On Qt and Textual, what jobs hand to the main thread while it is busy comes to it
+  together: each progress value is still emitted, and the reactive methods run once after
+  them, not once per value.
 
 ### Fixed
 

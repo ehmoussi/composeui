@@ -14,12 +14,14 @@ from typing import TYPE_CHECKING, cast
 import pytest
 
 from composeui.core.application import ModelApplication
-from composeui.core.jobs import CalledInJobError, JobCanceledError
+from composeui.core.jobs import CalledInJobError, JobCanceledError, starting_study
 from composeui.core.model import Model, RefusedError
+from composeui.core.reactivity import reactive, start_reactions
 from composeui.core.registry import RendererType
 from composeui.core.view import (
     ActionView,
     ButtonView,
+    InputView,
     LabelRowInputView,
     LabelView,
     ListView,
@@ -509,6 +511,173 @@ def test_job_progress_injects_context_and_arrives_before_the_outcome(
     assert outcomes == (["failed"] if fail else ["finished"])
 
 
+def _report_each(
+    job: Job[None, int], count: int, reported: threading.Event, release: threading.Event
+) -> None:
+    """Report 1 to `count`, then wait for `release`: its outcome comes after them."""
+    for value in range(1, count + 1):
+        job.report_progress(value)
+    reported.set()
+    assert release.wait(10)
+
+
+@define_view
+class _CopyMainView(MainView):
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.copy = self.build_task(_report_each)
+        self.shown: list[int | None] = []
+
+    @reactive
+    def show_progress(self) -> None:
+        self.shown.append(self.copy.progress)
+
+
+def test_progress_reported_while_the_main_thread_is_busy_reaches_it_at_once(
+    qtbot: QtBot,
+) -> None:
+    pytest.importorskip("qtpy")
+    main_view = _CopyMainView()
+    main_view.render(RendererType.QT)
+    start_reactions(main_view)
+    values: list[int] = []
+    main_view.copy.progress_reported.connect(values.append)
+    reported, release = threading.Event(), threading.Event()
+    try:
+        main_view.copy.start(3, reported, release)
+        assert reported.wait(5)  # the main thread ran no event meanwhile
+        assert values == []
+        qtbot.waitUntil(lambda: len(values) == 3)
+    finally:
+        release.set()
+    qtbot.waitUntil(lambda: not main_view.copy.is_running)
+
+    assert values == [1, 2, 3]  # each one
+    # its first run, the start, once for the three reports, the outcome
+    assert main_view.shown == [None, None, 3, 3]
+
+
+def test_a_callback_raising_doesn_t_stop_what_the_job_handed_over_after_it(
+    qtbot: QtBot,
+) -> None:
+    pytest.importorskip("qtpy")
+    main_view = MainView()
+    main_view.render(RendererType.QT)
+    values: list[int] = []
+    error = ValueError("no luck")
+
+    def show(value: int) -> None:
+        values.append(value)
+        if value == 1:
+            raise error
+
+    reported, release = threading.Event(), threading.Event()
+    with qtbot.capture_exceptions() as exceptions:
+        try:
+            main_view.jobs.start(_report_each, 3, reported, release).progress.connect(show)
+            assert reported.wait(5)  # the three wait for the main thread together
+            qtbot.waitUntil(lambda: len(values) == 3)
+        finally:
+            release.set()
+        qtbot.waitUntil(lambda: not main_view.jobs.is_running)
+
+    assert values == [1, 2, 3]
+    assert [exception for _type, exception, _traceback in exceptions] == [error]
+
+
+def test_a_callback_s_nested_event_loop_gets_what_the_job_handed_over_in_order(
+    qtbot: QtBot,
+) -> None:
+    pytest.importorskip("qtpy")
+    main_view = MainView()
+    main_view.render(RendererType.QT)
+    values: list[int] = []
+    reported, release = threading.Event(), threading.Event()
+
+    def report(job: Job[None, int]) -> None:
+        job.report_progress(1)
+        job.report_progress(2)
+        reported.set()
+        assert release.wait(10)
+        job.report_progress(3)
+
+    def show(value: int) -> None:
+        values.append(value)
+        if value == 1:  # as a modal dialog does, while 2 waits and 3 isn't reported yet
+            release.set()
+            qtbot.waitUntil(lambda: 3 in values)
+
+    try:
+        main_view.jobs.start(report).progress.connect(show)
+        assert reported.wait(5)
+        qtbot.waitUntil(lambda: not main_view.jobs.is_running)
+    finally:
+        release.set()
+
+    assert values == [1, 2, 3]
+
+
+@define_view
+class _NoteMainView(MainView):
+    note: InputView = child(InputView)
+    summary: InputView = child(InputView)
+
+    @reactive
+    def summarize(self) -> None:
+        self.summary.text = self.note.text[:4]
+
+
+def _read(job: Job[str], text: str) -> str:
+    """Read `text`, as a job reading what the next start reads again, e.g. a file."""
+    del job
+    return text
+
+
+def test_what_a_study_s_job_gives_on_a_toolkit_is_no_unsaved_change(
+    qtbot: QtBot,
+) -> None:
+    pytest.importorskip("qtpy")
+    main_view = _NoteMainView()
+    main_view.render(RendererType.QT)
+    start_reactions(main_view)
+    main_view._mark_saved()  # noqa: SLF001 (as the app's start does)
+    with starting_study(main_view.jobs):  # as the app's start does
+        job = main_view.jobs.start(_read, "from the job")
+    job.finished.connect(lambda text: setattr(main_view.note, "text", text))
+    qtbot.waitUntil(lambda: not main_view.jobs.is_running)
+
+    # its reactive method ran before the study was taken as saved, not after a batch
+    assert main_view.summary.text == "from"
+    assert not main_view.has_unsaved_changes()
+
+
+def test_raise_if_canceled_stops_the_job_once_it_is_canceled(
+    app: ModelApplication[MainView, _Model],
+) -> None:
+    jobs = app.main_view.jobs
+    started = threading.Event()
+
+    def work(job: Job[int]) -> int:
+        job.raise_if_canceled()  # not yet: it goes on
+        started.set()
+        job.sleep(10)
+        job.raise_if_canceled()
+        return 1
+
+    job = jobs.start(work)
+    errors: list[Exception] = []
+    results: list[int] = []
+    job.failed.connect(errors.append)
+    job.finished.connect(results.append)
+    assert started.wait(5)
+    job.cancel()
+    jobs.wait()
+
+    assert results == []
+    (error,) = errors
+    assert isinstance(error, JobCanceledError)
+
+
 def test_waiting_for_a_job_running_past_its_time_says_how_many(
     app: ModelApplication[MainView, _Model],
 ) -> None:
@@ -614,6 +783,13 @@ def test_a_task_tracks_runs_and_injects_context_on_the_main_thread(
 
     task.finished.connect(finished)
     task.failed.connect(lambda failure: outcomes.append((len(states), failure)))
+
+    def reported(value: int, *, main_view: MainView, model: _Model) -> None:
+        assert main_view is view
+        assert model is app.model
+        outcomes.append((len(states), f"reported {value}"))
+
+    task.progress_reported.connect(reported)
     assert not task.is_running
     assert task.result is None
     assert task.progress is None
@@ -639,7 +815,14 @@ def test_a_task_tracks_runs_and_injects_context_on_the_main_thread(
     view.jobs.drop()
     assert states[-1] == (False, None, None, None, False)
     # dropping emits no outcome
-    assert outcomes == [(3, error), (6, 8), (9, error)]
+    assert outcomes == [
+        (2, "reported 3"),
+        (3, error),
+        (5, "reported 4"),
+        (6, 8),
+        (8, "reported 5"),
+        (9, error),
+    ]
 
 
 def test_a_task_can_succeed_with_none_and_restart_from_its_changed_callback() -> None:

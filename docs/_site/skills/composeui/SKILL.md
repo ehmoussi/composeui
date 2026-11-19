@@ -244,9 +244,13 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
 - **Run slow work in jobs** (`main_view.jobs.start(work, *args)`), not in a callback: a
   callback blocks the UI. The function of a job never touches a view. Connect `finished`,
   `failed`, and `progress` (`job.report_progress(value)`), which emit on the main thread.
+  A job can report often: on Qt and Textual, the reactive methods run once for the values
+  that a busy main thread gets together. To stop a canceled job from a helper, call
+  `job.raise_if_canceled()`.
   Raise `RefusedError` for an expected refusal only. For a function that a view runs again
   and again, create `self.jobs.task(work)` once in `__attrs_post_init__`, not as a field; in
-  a view that is not the main view, `self.build_task(work)`.
+  a view that is not the main view, `self.build_task(work)`. A task's `progress` holds the
+  last value only: connect `task.progress_reported` to get each one, e.g. output to append.
   Let the task set its controls' state: `task.disables(*views)` and
   `task.cancel_with(stop)`, rather than enabling them in each callback. For an input that
   changes quickly, such as a slider, call `task.start_latest(*args)`: it replaces the
