@@ -100,7 +100,8 @@ variables: RecordTableView[Variable] = child(
 )
 ```
 
-On a `TableView`, `cell_widgets` maps each column's index to its `CellWidget`.
+On a `TableView`, `cell_widgets` maps each column's index to its `CellWidget`. To give each
+row its own, see [A widget per row](#a-widget-per-row).
 
 - **`CellWidget.check_box()`** shows a check box. The box is checked when the cell's text
   is "true", ignoring case. A change sets the text to "True" or "False".
@@ -232,6 +233,55 @@ class StudyFilesMainView(MainView):
   path that `text` names from `base_folder`. It is `None` for a cell without a widget.
 
 [`studyinputs.py`](../../src/examples/studyinputs.py) lists a study's files this way.
+
+### A widget per row
+
+When no cell of a row tells which widget its cells need, override `cell_widget(row, column)`.
+For example, a study's inputs can have the same name but be a file or a folder, and only the
+app knows which:
+
+```python
+from typing import Optional
+
+from composeui.core.view import CellWidget, MainView, TableView, child, define_view
+
+PATH = 1
+
+
+@define_view
+class InputsTableView(TableView):
+    # the rows of folders, which no cell shows
+    _folders: tuple[int, ...] = ()
+
+    def show_inputs(self, rows: list[list[str]], folders: tuple[int, ...]) -> None:
+        self._folders = folders
+        self.rows = rows
+
+    def cell_widget(self, row: int, column: int) -> Optional[CellWidget]:
+        if column != PATH:
+            return super().cell_widget(row, column)
+        return CellWidget.folder_path() if row in self._folders else CellWidget.file_path()
+
+
+@define_view
+class StudyInputsMainView(MainView):
+    inputs: InputsTableView = child(
+        InputsTableView, headers=["Name", "Path"], editable_columns=[PATH]
+    )
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.inputs.show_inputs([["Mesh", "mesh.med"], ["Mesh", "materials"]], folders=(1,))
+```
+
+- **Every backend uses it.** Qt, Textual, and the web draw each cell with the widget that
+  `cell_widget` gives, and its "…" button picks a path of that kind. On the web, the list of the
+  server's files opens for it, and an upload stays while a cell holds its path.
+- **Set what it reads before `rows`.** The table asks `cell_widget` again when `rows` or
+  `cell_widgets` change, and after the user's edit. In the example, `show_inputs` sets
+  `_folders` first. A field whose name starts with `_` doesn't reach the renderer.
+- **The header's check box comes from `cell_widgets`.** A check-all box (`check_all`) is a
+  column's: `cell_widget` doesn't add one.
 
 ### How cells and headers look
 

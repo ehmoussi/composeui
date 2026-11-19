@@ -297,6 +297,7 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
             self._connect(table.browse_clicked, self._browse)
             self._connect(table.check_all_clicked, self._check_all)
             self._connect(table.header_clicked, self._sort_by)
+            table.set_widget_of(self._cell_widget)
             bar.check = self._view.filter_error
             bar.placeholder = lambda column, is_pattern: self._view.filter_placeholder(
                 column, is_pattern=is_pattern
@@ -458,6 +459,10 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
 
     def _click_cell(self, position: int, column: int) -> None:
         self._view.cell_clicked.emit(self._view.shown_rows[position], column)
+
+    def _cell_widget(self, position: int, column: int) -> CellWidget | None:
+        """Get the widget of the cell at `position` among the rows shown."""
+        return self._view.cell_widget(self._view.shown_rows[position], column)
 
     def _activate_row(self, index: QModelIndex) -> None:
         self._view.row_activated.emit(self._view.shown_rows[index.row()])

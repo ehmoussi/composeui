@@ -140,6 +140,39 @@ class CellWidgetsMainView(MainView):
 
 
 @define_view
+class RequiredOptionsTableView(TableView):
+    """Options, each checked in its first cell; those the app requires have no box."""
+
+    _required: tuple[int, ...] = ()
+
+    def require(self, rows: tuple[int, ...]) -> None:
+        """Require the options of `rows`, before the rows are shown."""
+        self._required = rows
+
+    def cell_widget(self, row: int, column: int) -> Optional[CellWidget]:
+        if column == 0 and row not in self._required:
+            return CellWidget.check_box()
+        return super().cell_widget(row, column)
+
+
+@define_view
+class RequiredOptionsMainView(MainView):
+    """A study's options: the mesh is required, the report is not."""
+
+    app_title = "Options"
+    extension = ".options"
+
+    options: RequiredOptionsTableView = Factory(RequiredOptionsTableView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.options.require((0,))
+        self.options.headers = ["Use", "Option"]
+        self.options.rows = [["True", "Mesh"], ["False", "Report"]]
+        self.options.editable_columns = [0]
+
+
+@define_view
 class DataFilesTableMainView(MainView):
     """A study's inputs, each read from a file picked in its row."""
 

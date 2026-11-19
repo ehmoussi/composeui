@@ -29,6 +29,7 @@ from composeui.textualcore.widgets.composefilepathinput import (
 from composeui.textualcore.widgets.composetree import MARKS
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from textual import events
@@ -147,7 +148,8 @@ class ComposeTable(DataTable[Text]):
     on the cursor's row, a double click on the clicked cell's. It types paths too, whose
     cells show the path and "[…]". A click on an editable one opens textual-fspicker's
     picker of a file, a folder or a file to save (see `file_picker`), the cell taking the
-    path picked. A `CellWidget.path_by` column's widget is that of each row's kind.
+    path picked. Each cell's widget is the one `widget_of` gives, by row and column, e.g.
+    for a `CellWidget.path_by` column, that of the row's kind.
     `cell_edited` emits each cell the user changed: its row, its column (without the check
     column) and its text.
 
@@ -183,6 +185,8 @@ class ComposeTable(DataTable[Text]):
         self.check_all_clicked: Signal[int] = Signal()
         self.editable_columns: list[int] = []
         self.cell_widgets: dict[int, CellWidget] = {}
+        #: the widget of each cell, by its row and column; `cell_widgets` are the columns'
+        self.widget_of: Callable[[int, int], CellWidget | None] = lambda _row, _column: None
         #: the texts asking before a save path replaces a file (see `FILE_TEXTS`)
         self.file_texts: dict[str, str] = {}
         self._checked_columns: dict[int, bool | None] = {}
@@ -264,11 +268,8 @@ class ComposeTable(DataTable[Text]):
         self.refresh()
 
     def _widget(self, column: int, row: int | None = None) -> CellWidget | None:
-        """Get a column's widget, or that of its cell in `row`: its kind's for `path_by`."""
-        widget = self.cell_widgets.get(column)
-        if widget is None or row is None:
-            return widget
-        return widget.for_row(self._rows[row] if row < len(self._rows) else [])
+        """Get a column's widget, or that of its cell in `row` (see `widget_of`)."""
+        return self.cell_widgets.get(column) if row is None else self.widget_of(row, column)
 
     def _kind(self, column: int, row: int | None = None) -> CellKind | None:
         widget = self._widget(column, row)
@@ -279,7 +280,7 @@ class ComposeTable(DataTable[Text]):
 
     def _cell(self, row: int, column: int, cells: list[str]) -> Text:
         """Show a cell: its mark, then its text or its widget's, as its style says."""
-        content = self._content(column, cells)
+        content = self._content(row, column, cells)
         style = self._style(row, column)
         if style.mark is not None:
             glyph, mark_style = MARKS[style.mark]
@@ -290,11 +291,10 @@ class ComposeTable(DataTable[Text]):
             content.stylize(f"{style.text_color} on {style.background}")
         return content
 
-    def _content(self, column: int, cells: list[str]) -> Text:
+    def _content(self, row: int, column: int, cells: list[str]) -> Text:
         """Show a cell's text, or its widget's."""
         text = cells[column] if column < len(cells) else ""
-        widget = self.cell_widgets.get(column)
-        widget = None if widget is None else widget.for_row(cells)
+        widget = self._widget(column, row)
         if widget is None:
             return Text(text)
         if widget.kind is CellKind.CHECK_BOX:
@@ -393,7 +393,13 @@ class ComposeTable(DataTable[Text]):
             )
             return is_editable and self.show_cursor
         if action == "toggle_check":
-            return len(self._editable_columns(kind=CellKind.CHECK_BOX)) > 0 and self.show_cursor
+            # the cursor row's: `widget_of` may give a box to some rows only
+            row = self.cursor_row
+            return (
+                self.show_cursor
+                and row < len(self._rows)
+                and len(self._editable_columns(kind=CellKind.CHECK_BOX, row=row)) > 0
+            )
         return super().check_action(action, parameters)
 
     def action_edit_row(self) -> None:
@@ -407,9 +413,9 @@ class ComposeTable(DataTable[Text]):
                 self._pick(row, picked[0])
 
     def action_toggle_check(self) -> None:
+        # one at least, as `check_action` found
         checked = self._editable_columns(kind=CellKind.CHECK_BOX, row=self.cursor_row)
-        if len(checked) > 0:
-            self._toggle_check(self.cursor_row, checked[0])
+        self._toggle_check(self.cursor_row, checked[0])
 
     def _editable_columns(self, kind: CellKind | None = None, row: int | None = None) -> list[int]:
         """Get the `editable_columns` whose cells show `kind`, in order: typed in if None.
@@ -433,7 +439,11 @@ class ComposeTable(DataTable[Text]):
 
     def _set_cell(self, row: int, column: int, text: str) -> None:
         """Show a cell the user changed and emit it; its row is one of the rows shown."""
-        self._rows = replace_cell(self._rows, row, column, text)
+        self._rows = rows = replace_cell(self._rows, row, column, text)
+        # first: a cell's widget may follow the edit once applied
+        self.cell_edited.emit(row, column, text)
+        if self._rows is not rows:
+            return  # answered with other rows, already shown
         check = 1 if self._is_multiple else 0
         # the whole row: a path cell's widget may follow the kind this cell gives
         for shown in range(len(self._headers)):
@@ -442,7 +452,6 @@ class ComposeTable(DataTable[Text]):
                 self._cell(row, shown, self._rows[row]),
                 update_width=True,
             )
-        self.cell_edited.emit(row, column, text)
 
     def _toggle_check(self, row: int, column: int) -> None:
         assert row < len(self._rows)  # a row clicked, or the cursor's, shown only on a row
@@ -454,7 +463,9 @@ class ComposeTable(DataTable[Text]):
         assert row < len(self._rows)  # see `_toggle_check`
         cells = self._rows[row]
         text = cells[column] if column < len(cells) else ""
-        options = list(self.cell_widgets[column].options)
+        widget = self._widget(column, row)
+        assert widget is not None  # a combobox's cell, clicked as one
+        options = list(widget.options)
         picker = ComposeOptionPicker([*options, *([] if text in options else [text])], text)
 
         def apply(picked: str | None) -> None:

@@ -221,6 +221,7 @@ class TableViewLike(ViewLike, Protocol):
     row_headers: list[str]
 
     def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
+    def cell_widget(self, row: int, column: int) -> CellWidget | None: ...
     def mark_text(self, mark: NodeMark) -> str: ...
     def shown_cell_styles(self) -> dict[tuple[int, int], CellStyle]: ...
     def column_checked(self, column: int) -> bool | None: ...
@@ -280,6 +281,7 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeFilterTab
             table.cell_clicked.connect(self._click_cell)
             table.check_all_clicked.connect(self._check_all)
             table.header_clicked.connect(self._sort_by)
+            table.widget_of = self._cell_widget
             bar.check = self._view.filter_error
             bar.placeholder = lambda column, is_pattern: self._view.filter_placeholder(
                 column, is_pattern=is_pattern
@@ -442,6 +444,10 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeFilterTab
 
     def _click_cell(self, position: int, column: int) -> None:
         self._view.cell_clicked.emit(self._view.shown_rows[position], column)
+
+    def _cell_widget(self, position: int, column: int) -> CellWidget | None:
+        """Get the widget of the cell at `position` among the rows shown."""
+        return self._view.cell_widget(self._view.shown_rows[position], column)
 
     def _activate_row(self, position: int) -> None:
         self._view.row_activated.emit(self._view.shown_rows[position])
