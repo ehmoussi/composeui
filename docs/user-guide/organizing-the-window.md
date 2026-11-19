@@ -397,6 +397,7 @@ class ClearDialog(DialogView):
         self.title = "Clear the form"
         self.text = "Every field will be emptied."
         self.accept_text = "Clear"  # "OK" otherwise; the other button is `reject_text`
+        self.is_destructive = True  # Enter rejects it
 
 
 @define_view
@@ -411,6 +412,12 @@ class AppMainView(MainView):
 
 Escape, or closing the window of the dialog, rejects a confirmation. It accepts a message,
 which has only one answer.
+
+A confirmation that loses something once accepted, such as deleting files, sets
+`is_destructive`. The focus then goes to the reject button, so Enter rejects the dialog.
+The accept button shows as dangerous: red on Qt, Textual and the web. A message and a form
+dialog ignore `is_destructive`. The main view's own questions before they replace a file or
+discard unsaved changes are destructive.
 
 A dialog is not study data: saving, opening, and New leave it alone.
 

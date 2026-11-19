@@ -3158,6 +3158,20 @@ def test_a_message_has_one_button_and_escape_or_closing_accepts_it(qtbot: QtBot)
     assert view.name.text == ""
 
 
+@pytest.mark.parametrize("is_destructive", [True, False])
+def test_enter_rejects_a_destructive_confirmation_and_accepts_another(
+    qtbot: QtBot, *, is_destructive: bool
+) -> None:
+    view, _window, box = _dialog_window(qtbot)
+    dialog = view.confirm_clear
+    dialog.is_destructive = is_destructive
+
+    dialog.open()
+    qtbot.keyClick(box, Qt.Key.Key_Return)
+    qtbot.waitUntil(lambda: not dialog.is_visible)
+    assert view.name.text == ("Ada" if is_destructive else "")
+
+
 def test_clicking_a_table_row_selects_it_and_emits_only_for_the_user(qtbot: QtBot) -> None:
     view = HorizontalMainView()
     view.render(RendererType.QT)

@@ -9,6 +9,17 @@ backends' modules included, can change in any release without an entry here.
 
 ## [Unreleased]
 
+### Added
+
+- `DialogView.is_destructive`: a confirmation that loses something once accepted puts the
+  focus on its reject button, so Enter rejects it. Its accept button shows as dangerous, on
+  Qt, Textual and the web.
+
+### Changed
+
+- The main view's questions before it replaces a file or discards unsaved changes are
+  destructive: Enter now cancels them, instead of replacing or discarding.
+
 ### Fixed
 
 - A table that overrides `cell_widget(row, column)` gets a widget per row on every backend.

@@ -51,6 +51,10 @@ class DialogView(View):
     Nothing waits for the answer, since a web request can't: it comes through
     `accepted` or `rejected`, once the dialog is closed. A dialog is what the app asks,
     not study data: never saved, loaded or reset.
+
+    A confirmation that loses something once accepted, such as deleting files, sets
+    `is_destructive`: the focus goes to the rejecting button, so Enter rejects, and the
+    accepting button shows as dangerous.
     """
 
     _renderer_key = "dialog"
@@ -61,6 +65,8 @@ class DialogView(View):
     accept_text: str = attrs.field(default=T("OK"), metadata={UI_TEXT: True})
     #: the rejecting button's text; a message has no such button
     reject_text: str = attrs.field(default=T("Cancel"), metadata={UI_TEXT: True})
+    #: whether accepting loses something: Enter then rejects; a message or form ignores it
+    is_destructive: bool = attrs.field(default=False)
 
     accepted: SignalNoArgs = attrs.Factory(SignalNoArgs)
     rejected: SignalNoArgs = attrs.Factory(SignalNoArgs)
@@ -108,6 +114,7 @@ class ReplaceFileDialogView(DialogView):
 
     kind: DialogKind = attrs.field(default=DialogKind.CONFIRM)
     accept_text: str = attrs.field(default=T("Replace"), metadata={UI_TEXT: True})
+    is_destructive: bool = attrs.field(default=True)
     #: the file to write and the function writing it, while the user hasn't answered
     _pending: Optional[tuple[Path, Callable[[Path], object]]] = attrs.field(
         default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
@@ -169,6 +176,7 @@ class DiscardChangesDialogView(DialogView):
         default=T("The study has unsaved changes. Discard them?"), metadata={UI_TEXT: True}
     )
     accept_text: str = attrs.field(default=T("Discard"), metadata={UI_TEXT: True})
+    is_destructive: bool = attrs.field(default=True)
     #: what goes on once the user agrees, while they haven't answered
     _pending: Callable[[], object] = attrs.field(
         default=_do_nothing, init=False, repr=False, eq=False, metadata={OMIT: True}

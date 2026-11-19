@@ -35,7 +35,10 @@ class WebDialogRenderer(WebRenderer[DialogView]):
     def __init__(self, view: DialogView) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
-            dict.fromkeys(("title", "text", "kind", "accept_text", "reject_text"), self._mark_dirty)
+            dict.fromkeys(
+                ("title", "text", "kind", "accept_text", "reject_text", "is_destructive"),
+                self._mark_dirty,
+            )
         )
 
     def to_html(self, *, oob: bool = False) -> Markup:
@@ -43,12 +46,21 @@ class WebDialogRenderer(WebRenderer[DialogView]):
         title_id = f"{self.widget_id}-title"
         text_id = f"{self.widget_id}-text"
         disabled = "" if self.is_enabled else " disabled"
+        is_confirm = view.kind is DialogKind.CONFIRM
+        # a destructive confirmation focuses its rejecting button: Enter mustn't lose anything
+        is_safe_first = is_confirm and view.is_destructive
         reject = (
-            self._button_html("reject", view.reject_text, "btn", disabled)
-            if view.kind is DialogKind.CONFIRM
+            self._button_html("reject", view.reject_text, "btn", disabled, is_focused=is_safe_first)
+            if is_confirm
             else ""
         )
-        accept = self._button_html("accept", view.accept_text, "btn btn-primary", disabled)
+        accept = self._button_html(
+            "accept",
+            view.accept_text,
+            "btn btn-error" if is_safe_first else "btn btn-primary",
+            disabled,
+            is_focused=not is_safe_first,
+        )
         # a disabled dialog can't be closed: its answer would be ignored
         cancel = (
             Markup(
@@ -81,9 +93,11 @@ class WebDialogRenderer(WebRenderer[DialogView]):
             accept=accept,
         )
 
-    def _button_html(self, event: str, text: str, classes: str, disabled: str) -> Markup:
+    def _button_html(
+        self, event: str, text: str, classes: str, disabled: str, *, is_focused: bool
+    ) -> Markup:
         # the dialog's own `close`, not `cancel`: no dismissal posted on top of the answer
-        autofocus = " autofocus" if event == "accept" else ""
+        autofocus = " autofocus" if is_focused else ""
         return Markup(
             '<button type="button" class="{classes}" hx-post="/widget/{widget_id}"'
             """ hx-vals='{{"event": "{event}"}}'"""
@@ -149,7 +163,7 @@ class WebFormDialogRenderer(WebDialogRenderer):
         title_id = f"{self.widget_id}-title"
         text_id = f"{self.widget_id}-text"
         disabled = "" if self.is_enabled else " disabled"
-        reject = self._button_html("reject", view.reject_text, "btn", disabled)
+        reject = self._button_html("reject", view.reject_text, "btn", disabled, is_focused=False)
         cancel = (
             Markup(
                 ' hx-post="/widget/{}" hx-trigger="cancel"'
