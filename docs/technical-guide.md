@@ -1227,30 +1227,31 @@ settings, add the two environments.
 
 To release a version, for example 0.3.0:
 
-1. Try it on TestPyPI: in the repository's Actions, run the Release workflow on `main`. It
-   publishes a development version. setuptools-scm numbers it after the last tag, with its
-   next patch version, such as `0.2.1.dev12` after `v0.2.0`: only the tag gives the
-   release's version. Install it in a new environment, its dependencies from PyPI, and run
-   the quickstart:
-
-   ```bash
-   pip install --index-url https://test.pypi.org/simple/ \
-     --extra-index-url https://pypi.org/simple/ "composeui[web]==0.2.1.dev12"
-   ```
-2. On `main`, give the version's entry in `CHANGELOG.md` its date
+1. On `main`, give the version's entry in `CHANGELOG.md` its date
    (`## [0.3.0] - 2026-11-20`), and set the `composeui-version` of the agent skill and its
    text to the minor version (`0.3`).
-3. Tag `main`'s commit, and push the tag. Name the commit: a pull request is squash-merged,
-   so its branch's commit is not in `main`'s history, and a tag on it would leave the next
-   development versions counting from the previous tag.
+2. Tag `main`'s commit, and push the tag. Name the commit: a pull request's merge makes a new
+   commit, so its branch's commit is not in `main`'s history, and a tag on it would leave the
+   next development versions counting from the previous tag.
 
    ```bash
    git fetch origin
    git tag -a v0.3.0 -m v0.3.0 origin/main
    git push origin v0.3.0
    ```
+3. In the run of the Release workflow, approve the deployment to `testpypi`, then the one to
+   `pypi` (Review deployments). Each environment asks for a reviewer.
 
 The tag runs the tests again, then builds the package. Before it publishes, the workflow
 checks that the build's version is the tag's, and that `CHANGELOG.md` has a dated entry for
-it; the tests check the skill's version. Then it publishes to PyPI, and creates the tag's
-GitHub release, with the changelog entry as its notes and the built files.
+it; the tests check the skill's version. Then it publishes to TestPyPI. On Python 3.9 and
+3.13, it installs the version from there with the `web` extra, takes its dependencies from
+PyPI, imports each module of `composeui.core` and runs `composeui --help`. Only then does it
+publish to PyPI, and create the tag's GitHub release, with the changelog entry as its notes
+and the built files. TestPyPI keeps a version that is already there, so a rerun of the tag
+does not fail on it.
+
+A manual run of the Release workflow, in the repository's Actions, is a dry run: it stops
+after the install from TestPyPI. It publishes a development version of the commit that it
+runs on. setuptools-scm numbers it after the last tag, with its next patch version, such as
+`0.2.1.dev12` after `v0.2.0`: only the tag gives the release's version.
