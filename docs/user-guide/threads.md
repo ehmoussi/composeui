@@ -54,12 +54,19 @@ them.
     of the values, and of the callbacks' argument. `Job[ResultT]` is a job without
     progress: its `ProgressT` is `None`.
   - A dropped job emits none of the values that still wait.
+  - On Qt and Textual, the values reported while the main thread is busy come to it
+    together. `job.progress` emits each one, and the reactive methods that they change run
+    once after them, not once per value. So a job can report often, such as after each file
+    that it copies. On the web, each value comes at once, in the job's thread.
   - `job.call_on_main_thread(callback)` runs any other callback on the main thread, in the
     same order and with the same rule for a dropped job.
 - **Canceling.** `job.cancel()`, or `jobs.cancel()` for all the jobs, asks the functions to
   stop. Python cannot stop a thread, so each function checks `job.is_canceled`, or waits with
   `job.sleep(seconds)`, which returns False once the job is canceled. The function still
   finishes, and `finished` emits what it returned.
+  - `job.raise_if_canceled()` raises `JobCanceledError` once the job is canceled. Call it
+    where the function can stop without a result, also in the helpers it calls. The job then
+    fails with `JobCanceledError`, which is logged as information only.
 
 To report rows processed, connect a callback right after starting the job:
 
@@ -95,6 +102,7 @@ loading state. Another view builds its own with `self.build_task(work)` (see
 `task.start(*args, **kwargs)` for each run. One `changed` signal reports starts, progress,
 success, failure, and resets on the main thread. After it, `finished` emits the result of a run
 that succeeds, and `failed` the exception of a run that fails, as the signals of a job do.
+`progress_reported` emits each progress value, after its `changed`.
 
 ```python
 from composeui.core.jobs import Job
@@ -157,9 +165,12 @@ assert main_view.status.text == "Done: 3 rows"
 - **One callback per outcome.** Connect `finished` to show a result, and `failed` to show an
   error. Their callbacks get the result or the exception, so they read no state. `changed`
   then only shows that a run is in progress. New, Open, and `jobs.drop()` emit neither.
-- **Callbacks and types.** The callbacks of `changed`, `finished`, and `failed` can ask for
-  `main_view` and `model`. The annotations of the function give the types of `result`,
-  `progress`, and the arguments of `start`.
+- **Each progress value.** `progress` holds only the last value, and `changed` also emits
+  for a start, a cancel, and an outcome. To use each value once, such as a chunk of output
+  that a `ConsoleView` appends, connect `progress_reported`: its callbacks get the value.
+- **Callbacks and types.** The callbacks of `changed`, `progress_reported`, `finished`, and
+  `failed` can ask for `main_view` and `model`. The annotations of the function give the
+  types of `result`, `progress`, and the arguments of `start`.
 - **The main thread.** Create a task and call its `start` on the main thread. From the
   function of a job, both raise `CalledInJobError`.
 - **Errors.** A task follows the [rules of a job](#how-jobs-behave) for failures and

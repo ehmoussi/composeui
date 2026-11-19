@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import collections
 import contextlib
 import functools
 import logging
@@ -14,7 +15,8 @@ from typing import TYPE_CHECKING, Any, Callable, Generic
 from typing_extensions import Concatenate, ParamSpec, TypeVar, TypeVarTuple, Unpack
 
 from composeui.core.model import RefusedError
-from composeui.core.reactivity import Source, check_change, follow
+from composeui.core.reactivity import Source, batch, check_change, follow
+from composeui.core.renderer import MainRenderer
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.translation import T
 
@@ -122,6 +124,12 @@ class Job(Generic[R, ProgressT]):
         """Wait `seconds`, in the job's thread; False if it was canceled meanwhile."""
         return not self._canceled.wait(seconds)
 
+    def raise_if_canceled(self) -> None:
+        """Raise `JobCanceledError` if the job was canceled: the function stops there."""
+        if self._canceled.is_set():
+            msg = "canceled"
+            raise JobCanceledError(msg)
+
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         """Call `callback` on the main thread, e.g. to show how far the function has gone.
 
@@ -134,7 +142,9 @@ class Job(Generic[R, ProgressT]):
         """Emit `progress` on the main thread, in order and before the job's outcome.
 
         Pass a count, percentage, message, or another application-defined value.
-        Dropped jobs do not emit queued progress, as with `call_on_main_thread`.
+        Dropped jobs do not emit queued progress, as with `call_on_main_thread`. On Qt and
+        Textual, the values reported while the main thread is busy are emitted together,
+        each one, and the reactive methods that they change run once after them.
         """
         self.call_on_main_thread(functools.partial(self.progress.emit, value))
 
@@ -143,8 +153,9 @@ class Task(Generic[R, P, ProgressT]):
     """A reusable worker with read-only loading state, built by `View.build_task` or `Jobs.task`.
 
     `changed` emits on the main thread when a run starts, reports progress, finishes,
-    fails, or is dropped. After it, `finished` emits a run's result, and `failed` its
-    exception, as a `Job`'s do. Their callbacks can ask for ``main_view`` and ``model``.
+    fails, or is dropped. After it, `progress_reported` emits each progress value,
+    `finished` a run's result, and `failed` its exception, as a `Job`'s do. Their callbacks
+    can ask for ``main_view`` and ``model``.
     Starting an already running task does nothing; `start_latest` replaces the run instead.
     Dropping the owner's jobs resets the task and discards queued progress and outcomes,
     as with ordinary jobs. Its state is an input of the `reactive` methods that read it.
@@ -167,6 +178,8 @@ class Task(Generic[R, P, ProgressT]):
         self._source = Source(lambda paths: paths.get(id(reference()), name))
         self.changed = SignalNoArgs()
         self.changed.connect(self._source.changed)
+        #: each progress value of the current run, on the main thread, once
+        self.progress_reported = Signal[ProgressT]()
         #: the result of a run that succeeded, on the main thread
         self.finished = Signal[R]()
         #: the exception of a run that failed, on the main thread
@@ -350,6 +363,7 @@ class Task(Generic[R, P, ProgressT]):
     def _report_progress(self, value: ProgressT) -> None:
         self._progress = value
         self.changed.emit()
+        self.progress_reported.emit(value)
 
     def _finish(self, result: R) -> None:
         self._job = None
@@ -450,6 +464,11 @@ class Jobs:
         # until then, so none waits forever or overtakes one queued before it
         self._handed_over = False
         self._results_lock = threading.Lock()
+        # what the jobs handed to a toolkit whose main thread hasn't called it yet, each with
+        # a drain posted; the first drain to run calls all those waiting
+        self._waiting: collections.deque[tuple[Job[Any, Any], Callable[[], None]]] = (
+            collections.deque()
+        )
         #: the blocks starting a study (`starting_study`), by thread: Textual's Open runs on a
         #: worker, while the main thread starts jobs of its own
         self._starting_study: dict[int, int] = {}
@@ -463,7 +482,7 @@ class Jobs:
         self._model = weakref.ref(model)
         self.running_changed.set_model(model)
         for task in self._live_tasks():
-            for signal in (task.changed, task.finished, task.failed):
+            for signal in (task.changed, task.progress_reported, task.finished, task.failed):
                 signal.set_model(model)
 
     def task(
@@ -483,6 +502,7 @@ class Jobs:
         task._jobs = self  # noqa: SLF001 (shared task lifecycle)
         name = task._name  # noqa: SLF001 (shared task lifecycle)
         self._bind_signal(task.changed, f"{name}.changed")
+        self._bind_signal(task.progress_reported, f"{name}.progress_reported")
         self._bind_signal(task.finished, f"{name}.finished")
         self._bind_signal(task.failed, f"{name}.failed")
         self._tasks[id(task)] = task
@@ -672,7 +692,7 @@ class Jobs:
             NotImplementedError,
             TypeError,
         ):
-            self._on_main_thread(functools.partial(self._abort, job))
+            self._on_main_thread(job, functools.partial(self._abort, job))
             raise
         except Exception as error:  # the app's code: whatever it raises, the job is over
             name = getattr(work, "__name__", "job")
@@ -682,11 +702,12 @@ class Jobs:
                 LOGGER.info("The job %s stopped: %s", name, error)
             else:
                 LOGGER.exception("The job %s failed", name)
-            self._on_main_thread(functools.partial(self._end, job, job.failed, error))
+            self._on_main_thread(job, functools.partial(self._end, job, job.failed, error))
         else:
-            self._on_main_thread(functools.partial(self._end, job, job.finished, result))
+            self._on_main_thread(job, functools.partial(self._end, job, job.finished, result))
 
-    def _on_main_thread(self, callback: Callable[[], None]) -> None:
+    def _on_main_thread(self, job: Job[Any, Any], callback: Callable[[], None]) -> None:
+        """Have `callback`, of `job`, called on the main thread, after those before it."""
         main_view = self._main_view()
         if main_view is None:
             return  # the app is gone
@@ -695,8 +716,50 @@ class Jobs:
             if renderer is None:
                 self._results.put(callback)
                 return
+            # the web calls each one at once, in the job's thread: drained, a job's callback
+            # could run in another's, inside its transaction. Textual, drained, calls them at
+            # once too until its loop runs: the few callbacks of the app's start can
+            drained = isinstance(renderer, MainRenderer) and renderer.draws_on_main_thread
+            if drained:
+                self._waiting.append((job, callback))
         # outside the lock: a web session's renderer takes the session's lock
-        renderer.post_on_main_thread(functools.partial(_as_main_thread, callback))
+        renderer.post_on_main_thread(
+            functools.partial(_as_main_thread, self._drain if drained else callback)
+        )
+
+    def _drain(self) -> None:
+        """Call, in order, all that the jobs handed over and the main thread hasn't called yet.
+
+        A burst of progress reports is called by the first of its drains, the others find
+        nothing left: the reactive methods run once after it. A study's job's callback runs
+        alone: its reactive methods must have run before `_deliver` takes the study as saved.
+        Each callback is taken from the queue as it's called: one that raises leaves the
+        next to the next drain, and a nested event loop's drain (a modal dialog) goes on in
+        order.
+        """
+        while True:
+            callback = self._take_waiting(study=True)
+            if callback is not None:
+                callback()
+                continue
+            callback = self._take_waiting(study=False)
+            if callback is None:
+                return  # none left
+            with batch():
+                while callback is not None:
+                    callback()
+                    callback = self._take_waiting(study=False)
+
+    def _take_waiting(self, *, study: bool) -> Callable[[], None] | None:
+        """Take the first callback waiting if its job is the study's, or isn't if not `study`."""
+        with self._results_lock:
+            if len(self._waiting) == 0:
+                return None
+            job, callback = self._waiting[0]
+            if job._is_the_study_s != study:  # noqa: SLF001 (the jobs' own bookkeeping)
+                return None
+            self._waiting.popleft()
+            return callback
 
     def hand_over_to(self, renderer: Renderer[Any, Any] | RendererContainer[Any]) -> None:
         """Hand the results queued before the main view was rendered to `renderer`, its own.
@@ -713,7 +776,7 @@ class Jobs:
             renderer.call_on_main_thread(callback)
 
     def _hand_over(self, job: Job[Any, Any], callback: Callable[[], None]) -> None:
-        self._on_main_thread(functools.partial(self._call, job, callback))
+        self._on_main_thread(job, functools.partial(self._call, job, callback))
 
     def _call(self, job: Job[Any, Any], callback: Callable[[], None]) -> None:
         """Call a job's `callback`, on the main thread; unless the job was dropped."""
