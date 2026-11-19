@@ -3,8 +3,13 @@
 The notable changes of each release of ComposeUI. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the versions follow
 [Semantic Versioning](https://semver.org/). Before 1.0, a minor version can break the API.
+The API is the names in the `__all__` of each module of `composeui.core`, which the
+[API reference](https://ehmoussi.github.io/composeui/api/) shows. The other names, those of the
+backends' modules included, can change in any release without an entry here.
 
 ## [Unreleased]
+
+## [0.4.0] - 2026-11-19
 
 ### Added
 
@@ -189,6 +194,13 @@ The notable changes of each release of ComposeUI. The format follows
 - The web builds the views of a page or a tab the first time it shows, as Qt does. A session of
   an app with many pages or tabs takes less memory, and its first page comes sooner: with 20 pages
   of 60 widgets, 518 KiB instead of 924 KiB, and 43 ms instead of 61 ms on the server.
+  Until then, the views of the page or tab have no web renderer (`renderer` is `None`).
+- The renderers of each backend moved to a module per family in its private `_renderers`
+  package, and the views to `composeui.core._views`. `composeui.core.view` still exports every
+  view. Each backend's `renderers` module maps the views' keys to the renderers, so an app that
+  imported a renderer from `webrenderer`, `qtrenderer` or `textualrenderer` imports it from
+  `renderers` (for example `composeui.webcore.renderers.WebButtonRenderer`). Import
+  `RendererType` from `composeui.core.registry`, not from `composeui.core.view`.
 - A view makes each of its signals the first time the app's code or a backend reads it, so the
   signals that nothing connects cost no memory. On the web, a session of an app with 20 pages of
   60 widgets takes 390 KiB instead of 518 KiB on Python 3.9, and 284 KiB instead of 411 KiB on
@@ -559,7 +571,8 @@ The first release on PyPI.
 - A skill for coding agents that write a ComposeUI app.
 - `composeui.__version__`, the version of the installed package.
 
-[Unreleased]: https://github.com/ehmoussi/composeui/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/ehmoussi/composeui/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/ehmoussi/composeui/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/ehmoussi/composeui/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/ehmoussi/composeui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ehmoussi/composeui/releases/tag/v0.1.0
