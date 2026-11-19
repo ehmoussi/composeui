@@ -48,6 +48,7 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
                 "kind": self._refresh_kind,
                 "accept_text": self._refresh_accept_text,
                 "reject_text": self._refresh_reject_text,
+                "is_destructive": self._refresh_is_destructive,
             }
         )
 
@@ -94,7 +95,7 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
         _show_dialog_text(rendered_object, view.title, value)
 
     def _refresh_kind(
-        self, _view: DialogView, rendered_object: QMessageBox, value: DialogKind
+        self, view: DialogView, rendered_object: QMessageBox, value: DialogKind
     ) -> None:
         assert self._accept_button is not None
         assert self._reject_button is not None
@@ -103,6 +104,23 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
         self._reject_button.setVisible(is_confirm)
         # Escape clicks it: the hidden reject button would otherwise answer a message
         rendered_object.setEscapeButton(self._escape_button if is_confirm else self._accept_button)
+        self._show_safe_button(rendered_object, kind=value, is_destructive=view.is_destructive)
+
+    def _refresh_is_destructive(
+        self, view: DialogView, rendered_object: QMessageBox, value: bool
+    ) -> None:
+        self._show_safe_button(rendered_object, kind=view.kind, is_destructive=value)
+
+    def _show_safe_button(
+        self, box: QMessageBox, *, kind: DialogKind, is_destructive: bool
+    ) -> None:
+        assert self._accept_button is not None
+        assert self._reject_button is not None
+        # the default button takes Enter, and the focus as the box opens
+        is_safe_first = is_destructive and kind is DialogKind.CONFIRM
+        box.setDefaultButton(self._reject_button if is_safe_first else self._accept_button)
+        # red like a `ButtonVariant.DANGER` button
+        self._accept_button.setStyleSheet("QPushButton { color: red; }" if is_safe_first else "")
 
     def _refresh_accept_text(
         self, _view: DialogView, _rendered_object: QMessageBox, value: str
@@ -132,6 +150,7 @@ class QtFormDialogRenderer(QtWidgetRenderer[OkCancelDialogView, QFormDialog]):
                 "title": self._refresh_dialog_title,
                 "text": self._refresh_text,
                 "kind": self._refresh_kind,
+                "is_destructive": self._refresh_kind,
                 "accept_text": self._refresh_accept_text,
                 "reject_text": self._refresh_reject_text,
                 "is_accept_enabled": self._refresh_is_accept_enabled,
@@ -174,7 +193,7 @@ class QtFormDialogRenderer(QtWidgetRenderer[OkCancelDialogView, QFormDialog]):
     def _refresh_kind(
         _view: OkCancelDialogView, _rendered_object: QFormDialog, _value: Any
     ) -> None:
-        pass  # always OK and Cancel: its view is confirmed or not
+        pass  # always OK and Cancel: its view is confirmed or not, and Enter submits it
 
     @staticmethod
     def _refresh_accept_text(

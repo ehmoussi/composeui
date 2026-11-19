@@ -62,6 +62,7 @@ class ComposeDialog(ModalScreen[Optional[bool]]):
         self.accept_button = Button(Content(view.accept_text), variant="primary", id="accept")
         self.reject_button = Button(Content(view.reject_text), id="reject")
         self.reject_button.display = view.kind is DialogKind.CONFIRM
+        self.show_safe_button(kind=view.kind, is_destructive=view.is_destructive)
         self.is_enabled = view.is_enabled
         #: closed by the app under another screen: it leaves once uncovered
         self.closed_while_covered = False
@@ -76,11 +77,25 @@ class ComposeDialog(ModalScreen[Optional[bool]]):
 
     def on_mount(self) -> None:
         self.set_enabled(is_enabled=self.is_enabled)
-        self.accept_button.focus()
+        self._focus_safe_button()
+
+    def _focus_safe_button(self) -> None:
+        # Enter presses the focused button: a destructive confirmation's mustn't lose anything
+        (self.reject_button if self.is_safe_first else self.accept_button).focus()
 
     def on_screen_resume(self) -> None:
         if self.closed_while_covered:
             self.dismiss(None)
+
+    def show_safe_button(self, *, kind: DialogKind, is_destructive: bool) -> None:
+        """Show the accepting button as dangerous, and focus the rejecting one, if destructive.
+
+        Only a destructive confirmation is. Before the screen is mounted, `on_mount` focuses.
+        """
+        self.is_safe_first = is_destructive and kind is DialogKind.CONFIRM
+        self.accept_button.variant = "error" if self.is_safe_first else "primary"
+        if self.is_mounted:  # as Qt's default button and the web's `autofocus` do
+            self._focus_safe_button()
 
     def set_enabled(self, *, is_enabled: bool) -> None:
         self.is_enabled = is_enabled

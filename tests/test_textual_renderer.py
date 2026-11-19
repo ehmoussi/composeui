@@ -4595,6 +4595,37 @@ async def test_a_dialog_opened_before_the_app_runs_shows_and_its_cancel_rejects(
 
 
 @pytest.mark.asyncio
+async def test_enter_rejects_a_destructive_confirmation_focused_on_its_safe_button() -> None:
+    view = DialogsMainView()
+    app = _app_of(view)
+    dialog = view.confirm_clear
+
+    async with app.run_test() as pilot:
+        dialog.open()
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ComposeDialog)
+        dialog.is_destructive = True  # while open, as Qt's and the web's move the focus too
+        await pilot.pause()
+        changed = (screen.accept_button.variant, screen.focused is screen.reject_button)
+        await pilot.press("escape")
+        await pilot.pause()
+
+        dialog.open()
+        await pilot.pause()
+        screen = app.screen
+        assert isinstance(screen, ComposeDialog)
+        opened = (screen.accept_button.variant, screen.focused is screen.reject_button)
+        await pilot.press("enter")
+        await pilot.pause()
+
+        assert changed == ("error", True)
+        assert opened == ("error", True)
+        assert not dialog.is_visible
+        assert view.name.text == "Ada"
+
+
+@pytest.mark.asyncio
 async def test_a_dialog_the_app_closes_under_another_screen_is_left_unanswered() -> None:
     view = DialogsMainView()
     app = _app_of(view)

@@ -89,6 +89,7 @@ from composeui.core.view import (
     ComboBoxView,
     ConsoleView,
     DateRangeInputView,
+    DialogKind,
     DialogView,
     DownloadedFile,
     EditRefusedError,
@@ -8435,6 +8436,58 @@ def test_disabling_a_page_disables_its_dialog_drawn_apart_from_it(
     # a stale page's answer is ignored, as a disabled dialog's own
     client.post(f"/widget/{dialog_id}", data={"event": "accept"})
     assert dialog.is_visible
+
+
+@pytest.mark.parametrize(
+    ("kind", "is_destructive", "focused", "accept_class"),
+    [
+        (DialogKind.CONFIRM, True, "reject", "btn-error"),
+        (DialogKind.CONFIRM, False, "accept", "btn-primary"),
+        (DialogKind.MESSAGE, True, "accept", "btn-primary"),  # its only button
+    ],
+)
+def test_a_destructive_confirmation_focuses_its_rejecting_button_on_the_web(
+    notes: tuple[TestClient, _NoteMainView],
+    kind: DialogKind,
+    *,
+    is_destructive: bool,
+    focused: str,
+    accept_class: str,
+) -> None:
+    """Enter presses the focused button: a destructive confirmation's mustn't accept."""
+    client, main_view = notes
+    dialog = main_view.pages.note.note
+    dialog.kind = kind
+    dialog.is_destructive = is_destructive
+    dialog.open()
+
+    element = _element(client.get("/inputs").text, _widget_id(dialog.renderer))
+    buttons = {
+        json.loads(attributes["hx-vals"] or "")["event"]: attributes
+        for tag, attributes in element.descendants
+        if tag == "button"
+    }
+    assert [event for event, attributes in buttons.items() if "autofocus" in attributes] == [
+        focused
+    ]
+    assert accept_class in (buttons["accept"]["class"] or "").split()
+
+
+@pytest.mark.parametrize("question", ["replace_file", "discard_changes"])
+def test_the_main_view_s_questions_before_losing_data_focus_cancel(
+    notes: tuple[TestClient, _NoteMainView], question: str
+) -> None:
+    client, main_view = notes
+    dialog: DialogView = getattr(main_view, question)
+    dialog.open()
+
+    element = _element(client.get("/inputs").text, _widget_id(dialog.renderer))
+    focused = [
+        attributes.get("hx-vals")
+        for tag, attributes in element.descendants
+        if tag == "button" and "autofocus" in attributes
+    ]
+    assert focused == ['{"event": "reject"}']
 
 
 def test_disabling_a_router_disables_its_pages_but_not_their_links(

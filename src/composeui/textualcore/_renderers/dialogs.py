@@ -42,6 +42,7 @@ class TextualDialogRenderer(Renderer[DialogView, DialogView]):
                 "kind": self._refresh_kind,
                 "accept_text": self._refresh_accept_text,
                 "reject_text": self._refresh_reject_text,
+                "is_destructive": self._refresh_is_destructive,
             }
         )
 
@@ -103,10 +104,17 @@ class TextualDialogRenderer(Renderer[DialogView, DialogView]):
             self.screen.text_label.update(value)
 
     def _refresh_kind(
-        self, _view: DialogView, _rendered_object: DialogView, value: DialogKind
+        self, view: DialogView, _rendered_object: DialogView, value: DialogKind
     ) -> None:
         if self.screen is not None:
             self.screen.reject_button.display = value is DialogKind.CONFIRM
+            self.screen.show_safe_button(kind=value, is_destructive=view.is_destructive)
+
+    def _refresh_is_destructive(
+        self, view: DialogView, _rendered_object: DialogView, value: bool
+    ) -> None:
+        if self.screen is not None:
+            self.screen.show_safe_button(kind=view.kind, is_destructive=value)
 
     def _refresh_accept_text(
         self, _view: DialogView, _rendered_object: DialogView, value: str
@@ -135,6 +143,7 @@ class TextualFormDialogRenderer(TextualDialogRenderer):
         self.form_screen: ComposeFormDialog | None = None
         self._refresh_dispatcher["is_accept_enabled"] = self._refresh_is_accept_enabled
         self._refresh_dispatcher["has_failing_check"] = self._refresh_has_failing_check
+        self._refresh_dispatcher["is_destructive"] = self._refresh_kind
 
     def render(self) -> None:
         if self._rendered_object is None:
