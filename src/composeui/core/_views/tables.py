@@ -853,7 +853,8 @@ class TableMixin:
     A column of `cell_widgets` shows a widget in each cell (see `CellWidget`). A check box,
     a combobox or a file path edits the cell. A button or a link emits `cell_clicked` with
     its row and column. A check box column's header can check or uncheck every shown row
-    (`check_all`), and each change is emitted as the user's edit.
+    (`check_all`), and each change is emitted as the user's edit. To give a cell a widget
+    that its row decides, override `cell_widget`.
 
     The user sorts the rows by a column of `sortable_columns` (`sort_column`, ascending
     unless `sort_descending`). The user also searches the text of `filterable_columns`
@@ -1032,7 +1033,7 @@ class TableMixin:
     cell_edited: Signal[int, int, str] = attrs.Factory(Signal[int, int, str])
     #: the widget in each cell of a column, by column: the app's setup, not study data
     cell_widgets: dict[int, CellWidget] = attrs.field(
-        factory=dict[int, CellWidget], metadata={OMIT: True}
+        factory=dict[int, CellWidget], on_setattr=_restyle, metadata={OMIT: True}
     )
     #: the texts of the web's list of the server's files, for a file path cell with
     #: `server_roots`, by what they're for (see `FILE_TEXTS`)
@@ -1115,7 +1116,12 @@ class TableMixin:
         return self.cell_styles.get((row, column), PLAIN_CELL)
 
     def cell_widget(self, row: int, column: int) -> Optional[CellWidget]:
-        """Get the widget of a cell, by its index in `rows`: its row's kind's for `path_by`."""
+        """Get the widget of a cell, by its index in `rows`: its row's kind's for `path_by`.
+
+        Every backend draws and edits a cell with the widget this gives. Override it to give
+        each row its own widget, e.g. a file or a folder by what the row holds. The tables
+        ask again when `rows` or `cell_widgets` change: set what it reads before them.
+        """
         widget = self.cell_widgets.get(column)
         if widget is None:
             return None

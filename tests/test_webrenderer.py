@@ -232,7 +232,7 @@ from tests.settingsdialog import NO_FOLDER, SettingsMainView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.studydialog import StudyDialogMainView
-from tests.studyfiles import StudyFileMainView, StudyFilesTableMainView
+from tests.studyfiles import StudyFileMainView, StudyFilesTableMainView, StudyPathsMainView
 from tests.tables import (
     CellWidgetsMainView,
     DataFilesTableMainView,
@@ -2948,6 +2948,79 @@ def test_a_table_s_path_by_kind_lists_the_study_as_each_row_s_kind_picks(
         }
         cell = _element(renderer.to_html(), f"{renderer.widget_id}-row-1")
         assert [tag for tag, _attributes in cell.descendants if tag == "button"] == []
+
+
+@pytest.fixture
+def study_paths(tmp_path: Path) -> Iterator[tuple[TestClient, StudyPathsMainView, Path]]:
+    """Serve a table whose `cell_widget` picks a file in its first row, a folder in its second.
+
+    Without roots, until a test gives the folder that it yields, with `beam/` and `beam.med`,
+    after a client and its main view.
+    """
+    (tmp_path / "beam").mkdir()
+    (tmp_path / "beam.med").write_text("")
+    views: list[StudyPathsMainView] = []
+
+    class StudyPathsApp(WebApplication[StudyPathsMainView]):
+        def setup_session(self, main_view: StudyPathsMainView) -> None:
+            main_view.status_bar.timeout = 0
+            views.append(main_view)
+
+    app = StudyPathsApp(build_main_view=StudyPathsMainView)
+    with _Browser(app.create_starlette_app()) as client:
+        client.get("/")
+        (view,) = views
+        yield client, view, tmp_path
+
+
+def test_a_table_s_cell_widget_of_each_row_lists_its_own_server_files(
+    study_paths: tuple[TestClient, StudyPathsMainView, Path],
+) -> None:
+    client, view, root = study_paths
+    renderer = view.inputs.renderer
+    assert isinstance(renderer, WebTableRenderer)
+
+    def post(event: str, **values: str) -> str:
+        response = client.post(f"/widget/{renderer.widget_id}", data={"event": event, **values})
+        return response.text
+
+    files_id = f"{renderer.widget_id}-files"
+    assert _find(client.get("/").text, files_id) is None  # nothing lists the server's files
+    # roots given, the rows as they were: the page, not drawn again, lacks the list, so the
+    # whole table brings it
+    view.inputs.show_paths(view.inputs.rows, folders=[1], roots=[root])
+    body = post("browse", row="0", column="1")
+    table = _swapped(body, renderer.widget_id)
+    assert any(a.get("id") == files_id for _tag, a in table.descendants)
+    assert _listed(body, renderer) == [("browse-folder", "beam"), ("browse-file", "beam.med")]
+    post("browse-file", name="beam.med")
+    # a page drawn since has it, closed, as for a column's widget
+    assert _find(client.get("/").text, files_id) is not None
+    # the rows are named alike: only the table's `cell_widget` tells them apart
+    body = post("browse", row="1", column="1")
+    assert _listed(body, renderer) == [("browse-folder", "beam")]
+    post("browse-choose")
+    assert view.inputs.rows == [["Mesh", str(root / "beam.med")], ["Mesh", str(root)]]
+
+
+def test_a_table_s_cell_widget_s_uploads_are_kept_while_their_cells_hold_them(
+    study_paths: tuple[TestClient, StudyPathsMainView, Path],
+) -> None:
+    client, view, _root = study_paths
+    table = view.inputs
+    table.show_paths(table.rows, folders=[])  # two files, uploaded
+    table_id = _widget_id(table.renderer)
+
+    for row in ("0", "1"):
+        response = client.post(
+            f"/widget/{table_id}/file",
+            data={"row": row, "column": "1"},
+            files={"file": (f"mesh{row}.med", b"1", "application/octet-stream")},
+        )
+        assert response.status_code == 200
+
+    # the second upload dropped no copy a cell holds, though no column declares one
+    assert [Path(cells[1]).exists() for cells in table.rows] == [True, True]
 
 
 def test_a_table_s_file_path_typed_outside_its_server_roots_is_refused(
@@ -8752,7 +8825,10 @@ def test_a_table_s_cell_widgets_post_their_edits_and_clicks() -> None:
         assert _element(page, f"{table_id}-cell-0-4").text == "doc"
         post("click_cell", row="1", column="3")
         post("click_cell", row="0", column="4")
-        # a stale page's posts: a role no longer editable, a click on a text cell
+        # a stale page's posts: text typed in a check box, a role no longer editable, a
+        # click on a text cell
+        for event in ("start_edit", "edit"):
+            post(event, row="0", column="0", text="maybe")
         table.editable_columns = [0]
         post("pick", row="1", column="2", text="Input")
         post("click_cell", row="0", column="1")

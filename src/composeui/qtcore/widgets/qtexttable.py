@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 from qtpy.QtCore import (
     QAbstractTableModel,
@@ -81,7 +81,8 @@ class QTextTableModel(QAbstractTableModel):
     editable; a link column's text looks like a link. Neither is typed in, nor is a
     button column; a combobox column is, through `QCellDelegate`'s editor, and a path
     column is, as a plain one. A `CellWidget.path_by` column's widget is that of each
-    row's kind: an edit changing the kind redraws the whole row.
+    row's kind: an edit changing the kind redraws the whole row. With `widget_of`, each
+    cell's widget is the one it gives instead, by row and column.
 
     A cell of `styles` has its background, its text black or white on it, and its mark
     before its text, named by its tooltip; a disabled one is never edited. The rows have
@@ -96,6 +97,8 @@ class QTextTableModel(QAbstractTableModel):
         self._rows: list[list[str]] = []
         self.editable_columns: list[int] = []
         self.cell_widgets: dict[int, CellWidget] = {}
+        #: the widget of each cell, by its row and column, instead of `cell_widgets`'
+        self.widget_of: Callable[[int, int], CellWidget | None] | None = None
         #: a check box drawn before a header, by column
         self.header_icons: dict[int, QIcon] = {}
         #: how the cells look, by row and column
@@ -106,6 +109,8 @@ class QTextTableModel(QAbstractTableModel):
 
     def widget(self, row: int, column: int) -> CellWidget | None:
         """Get a cell's widget: for `CellWidget.path_by`, that of its row's kind."""
+        if self.widget_of is not None:
+            return self.widget_of(row, column)
         widget = self.cell_widgets.get(column)
         return None if widget is None else widget.for_row(self._rows[row])
 
@@ -613,6 +618,10 @@ class QTextTableView(QTableView):
     def set_text(self, row: int, column: int, text: str) -> None:
         """Give a cell the text the user picked, emitted by `cell_edited` if it changed."""
         self._model.setData(self._model.index(row, column), text)
+
+    def set_widget_of(self, widget_of: Callable[[int, int], CellWidget | None]) -> None:
+        """Give each cell the widget `widget_of` gives, by its row and column."""
+        self._model.widget_of = widget_of
 
     def set_cell_widgets(self, widgets: dict[int, CellWidget]) -> None:
         self._model.cell_widgets = widgets

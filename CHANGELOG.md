@@ -9,6 +9,13 @@ backends' modules included, can change in any release without an entry here.
 
 ## [Unreleased]
 
+### Fixed
+
+- A table that overrides `cell_widget(row, column)` gets a widget per row on every backend.
+  Qt and Textual drew no "…" button for a widget that `cell_widgets` didn't declare, and
+  Space on Textual didn't toggle such a check box. On the web, its list of the server's
+  files didn't open, and an upload to its cell could be deleted after the next upload.
+
 ## [0.4.0] - 2026-11-19
 
 ### Added

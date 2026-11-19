@@ -148,7 +148,7 @@ from examples.pipecatalogue import PipeCatalogueMainView, PipeCatalogueModel
 from examples.pipecatalogue import PipeExpander as CataloguePipeExpander
 from examples.pipechart import MEASUREMENTS, PipeChartMainView
 from examples.pipeform import EdgeType, Material, PipeMainView
-from examples.studyinputs import PATH, StudyInputsMainView
+from examples.studyinputs import KIND, PATH, StudyInputsMainView
 from examples.textual_demo import TextualDemoMainView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, styled_site
@@ -177,7 +177,7 @@ from tests.settingsdialog import NO_FOLDER, SettingsMainView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.studydialog import StudyDialogMainView
-from tests.studyfiles import StudyFileMainView, StudyFilesTableMainView
+from tests.studyfiles import StudyFileMainView, StudyFilesTableMainView, StudyPathsMainView
 from tests.tables import (
     CellWidgetsMainView,
     DataFilesTableMainView,
@@ -186,6 +186,7 @@ from tests.tables import (
     GatedSource,
     MillionRowsMainView,
     MillionSource,
+    RequiredOptionsMainView,
     Room,
     RoomsDataMainView,
     SortedRoomsMainView,
@@ -2848,6 +2849,11 @@ async def test_a_table_s_path_by_kind_opens_the_picker_of_each_row_s_kind_from_t
     (study / "summary.txt").write_text("")
     view = StudyInputsMainView()
     view.show_study(study)
+    # a kind without a path widget: its path is typed only
+    view.files.cell_widgets = {
+        **view.files.cell_widgets,
+        KIND: CellWidget.combobox([*view.files.cell_widgets[KIND].options, "Notes"]),
+    }
     view.render(RendererType.TEXTUAL)
     assert isinstance(view.renderer, TextualMainRenderer)
     app = view.renderer.app
@@ -2889,6 +2895,15 @@ async def test_a_table_s_path_by_kind_opens_the_picker_of_each_row_s_kind_from_t
         await pilot.press("up", "enter")
         await pilot.pause()
         await browse(3, study / "totals")  # a new file: at once
+        # a kind without a widget: the path cell, drawn again, has no button
+        await pilot.click(table, offset=(widths[0] + 1, 4))
+        await pilot.pause()
+        await pilot.press("down", "down", "enter")
+        await pilot.pause()
+        assert (view.files.rows[3][KIND], str(table.get_cell_at(Coordinate(3, PATH)))) == (
+            "Notes",
+            "totals.txt",
+        )
 
     assert opened == [
         ("FileOpen", study / "inputs"),
@@ -2903,6 +2918,66 @@ async def test_a_table_s_path_by_kind_opens_the_picker_of_each_row_s_kind_from_t
         "inputs/materials",
         "summary.txt",
         "totals.txt",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_space_toggles_the_box_that_cell_widget_gives_the_cursor_row_only() -> None:
+    view = RequiredOptionsMainView()
+    app = _app_of(view)
+    assert isinstance(view.options.renderer, TextualWidgetRenderer)
+    box = view.options.renderer.widget
+    assert isinstance(box, ComposeFilterTable)
+    table = box.table
+
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        width = next(iter(table.columns.values())).get_render_width(table)
+        await pilot.click(table, offset=(width + 1, 2))  # the report's name: the cursor's row
+        await pilot.pause()
+        await pilot.press("space")
+        await pilot.pause()
+        # the mesh's row has no box: Space leaves it
+        await pilot.press("up", "space")
+        await pilot.pause()
+        assert view.options.rows == [["True", "Mesh"], ["True", "Report"]]
+        # no row left, the cursor still shown, as it stays when selecting several
+        view.options.selection_mode = SelectionMode.MULTIPLE
+        view.options.rows = []
+        await pilot.pause()
+        assert table.show_cursor
+        await pilot.press("space")
+        await pilot.pause()
+
+
+@pytest.mark.asyncio
+async def test_a_table_s_cell_widget_of_each_row_opens_its_own_picker(tmp_path: Path) -> None:
+    view = StudyPathsMainView()
+    view.inputs.show_paths(view.inputs.rows, folders=[1], roots=[tmp_path])
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    assert isinstance(view.inputs.renderer, TextualWidgetRenderer)
+    box = view.inputs.renderer.widget
+    assert isinstance(box, ComposeFilterTable)
+    table = box.table
+    picks = [("FileOpen", tmp_path / "beam.med"), ("SelectDirectory", tmp_path / "mat")]
+
+    async with app.run_test(size=(140, 40)) as pilot:
+        await pilot.pause()
+        width = next(iter(table.columns.values())).get_render_width(table)
+        for row, (picker, picked) in enumerate(picks):
+            await pilot.click(table, offset=(width + 1, row + 1))
+            await pilot.pause()
+            # the rows are named alike: only the table's `cell_widget` tells them apart
+            assert type(app.screen).__name__ == picker
+            app.screen.dismiss(picked)  # as the picker's Open or Select does
+            await pilot.pause()
+
+    assert view.inputs.rows == [
+        ["Mesh", str(tmp_path / "beam.med")],
+        ["Mesh", str(tmp_path / "mat")],
     ]
 
 
@@ -4363,7 +4438,7 @@ async def test_an_action_s_shortcut_icon_and_data_change_while_the_app_runs() ->
 
 
 @pytest.mark.asyncio
-async def test_a_check_all_box_leaves_its_column_once_a_plain_one() -> None:
+async def test_a_check_box_column_leaves_its_header_and_cells_once_a_plain_one() -> None:
     view = CellWidgetsMainView()
     view.render(RendererType.TEXTUAL)
     assert isinstance(view.renderer, TextualMainRenderer)
@@ -4376,13 +4451,17 @@ async def test_a_check_all_box_leaves_its_column_once_a_plain_one() -> None:
     def header() -> str:
         return str(next(iter(box.table.columns.values())).label)
 
+    def first_cell() -> str:
+        return str(box.table.get_cell_at(Coordinate(0, 0)))
+
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        boxed = header()
+        boxed = (header(), first_cell())
         view.variables.cell_widgets = {2: CellWidget.combobox(["Input", "Output"])}
         await pilot.pause()
 
-        assert (boxed, header()) == ("▣ Keep", "Keep")
+        # its cells too: drawn with the widgets the view holds
+        assert [boxed, (header(), first_cell())] == [("▣ Keep", "☑"), ("Keep", "True")]
 
 
 async def _click_laid_out(pilot: Pilot[Any], widget: Widget) -> None:

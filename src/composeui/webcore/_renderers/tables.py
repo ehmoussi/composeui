@@ -529,6 +529,8 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         self._server_files: _ServerFiles | None = None
         #: the file path cell the list of the server's files picks for
         self._files_cell: tuple[int, int] | None = None
+        #: whether the page has the list of the server's files, drawn with the whole table
+        self._has_files = False
         self._refresh_dispatcher.update(
             {
                 "headers": self._mark_dirty,
@@ -579,8 +581,11 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
 
     def _whole_html(self, *, oob: bool) -> Markup:
         grid = Markup(' role="grid" aria-multiselectable="true"') if self._is_multiple() else ""
-        has_files = any(
-            widget.kind.is_path and widget.server_roots for widget in self._path_widgets()
+        # a widget that `cell_widget` gave a cell since may have opened it: see `_mark_files`
+        is_open = self._server_files is not None and self._server_files.is_open
+        self._has_files = is_open or any(
+            widget is not None and widget.kind.is_path and widget.server_roots
+            for widget in self._path_widgets()
         )
         return Markup(
             '<div {root_attributes} class="flex flex-col gap-2">'
@@ -594,7 +599,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             grid=grid,
             head_html=self._head_html(),
             body_html=self._body_html(),
-            files_html=self._files_html() if has_files else "",
+            files_html=self._files_html() if self._has_files else "",
         )
 
     @property
@@ -604,11 +609,27 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             self._server_files = _ServerFiles(f"{self.widget_id}-files", self.widget_id)
         return self._server_files
 
-    def _path_widgets(self) -> Iterator[CellWidget]:
-        """Get the widgets of the columns, and those of a `CellWidget.path_by`'s kinds."""
+    def _path_widgets(self) -> Iterator[CellWidget | None]:
+        """Get the widgets of the columns, those of a `CellWidget.path_by`'s kinds, and the cells'.
+
+        The cells' are those of the rows shown, which `cell_widget` may give alone.
+        """
         for widget in self._view.cell_widgets.values():
             yield widget
             yield from widget.editors.values()
+        for row in self._view.shown_rows:
+            for column in range(len(self._view.headers)):
+                yield self._view.cell_widget(row, column)
+
+    def _mark_files(self, part: str) -> None:
+        """Mark a part of the list of the server's files, or the table if the page lacks it.
+
+        The page lacks it when only `cell_widget` gave a cell a widget that lists them.
+        """
+        if self._has_files:
+            self._mark_parts(part)
+        else:
+            self._mark_dirty(self._view, self.widget_id, self._view.rows)
 
     def _files_widget(self) -> CellWidget | None:
         """Get the widget of the cell the list of the server's files picks for, if still one.
@@ -796,7 +817,11 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         # cell, empty
         widths = [
             *self._editable_columns(),
-            *self._view.cell_widgets,
+            *(
+                column
+                for column in range(len(row), len(self._view.headers))
+                if self._view.cell_widget(index, column) is not None
+            ),
             *(column for shown, column in styles if shown == position),
         ]
         width = max(len(row), *(column + 1 for column in widths), 0)
@@ -842,8 +867,8 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
                 """ hx-vals='{{"event": "{event}", "row": "{row}", "column": "{column}"}}'"""
             ).format(widget_id=self.widget_id, event=event, row=row, column=column)
 
-        is_typed = column in self._editable_columns() and self.is_enabled and style.is_enabled
         widget = self._view.cell_widget(row, column)
+        is_typed = self._is_typed(column, widget) and self.is_enabled and style.is_enabled
         # a file path's, typed in, is a field while edited
         if (
             widget is not None
@@ -1036,11 +1061,10 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
     def file_paths(self) -> set[str]:
         """Get the texts of the file path cells, the paths whose uploads are kept."""
         return {
-            cells[column]
+            text
             for row, cells in enumerate(self._view.rows)
-            for column in self._view.cell_widgets
-            if column < len(cells)
-            and getattr(self._view.cell_widget(row, column), "kind", None) is CellKind.FILE_PATH
+            for column, text in enumerate(cells)
+            if getattr(self._view.cell_widget(row, column), "kind", None) is CellKind.FILE_PATH
         }
 
     def pick_file(self, cell: tuple[int, int] | None, path: Path | None) -> None:
@@ -1114,7 +1138,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             not row.isdigit()
             or int(row) not in self._view.shown_rows
             or not column.isdigit()
-            or int(column) not in self._editable_columns()
+            or not self._is_typed(int(column), self._view.cell_widget(int(row), int(column)))
             or not self._view.cell_style(int(row), int(column)).is_enabled
         ):
             return  # a cell a stale page still shows
@@ -1175,7 +1199,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         widget = self._files_widget()
         if widget is None:  # its column changed since: nothing to pick for
             files.move("browse-close", "", [], ())
-            self._mark_parts("files")
+            self._mark_files("files")
             return
         was_open = files.is_open
         picked = files.move(
@@ -1186,7 +1210,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             start=start,
         )
         # opened or closed: the dialog; else only its list, the dialog left open
-        self._mark_parts("files-list" if was_open == files.is_open else "files")
+        self._mark_files("files-list" if was_open == files.is_open else "files")
         if picked is not None:
             self._set_widget_cell(self._files_cell, widget.path_text(picked))
             # unlike a check box's, the cell doesn't show it yet
@@ -1233,6 +1257,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         if text == (cells[cell[1]] if cell[1] < len(cells) else ""):
             return
         rows = self._view.rows
+        widgets = self._row_widgets(cell[0])
         self._view.emit_cell_edited(*cell, text)
         # unless the app answered with its own rows, which it has marked to show
         if self._view.rows is rows:
@@ -1240,11 +1265,11 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
                 self._view.rows = replace_cell(rows, *cell, text)
             if len(self._check_all_columns()) > 0:
                 self._mark_parts("head")  # a check-all box follows its column's
-            if any(
-                widget.kind is CellKind.PATH_BY_KIND and widget.kind_column == cell[1]
-                for widget in self._view.cell_widgets.values()
-            ):
-                self._mark_parts("body")  # a path cell's widget follows the row's kind
+            if self._row_widgets(cell[0]) != widgets:
+                self._mark_parts("body")  # a cell's widget follows the edit, e.g. a kind's
+
+    def _row_widgets(self, row: int) -> list[CellWidget | None]:
+        return [self._view.cell_widget(row, column) for column in range(len(self._view.headers))]
 
     def _check_all(self, form: Mapping[str, str]) -> None:
         column = self._column(form, self._check_all_columns())
@@ -1267,21 +1292,16 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         self._view.cell_clicked.emit(*cell)
 
     def _editable_columns(self) -> list[int]:
-        """Get the `editable_columns` the table has a header for, and the user types in.
-
-        Those without a widget, and the paths.
-        """
-        widgets = self._view.cell_widgets
+        """Get the `editable_columns` the table has a header for."""
         return [
             column
             for column in self._view.editable_columns
             if 0 <= column < len(self._view.headers)
-            and (
-                column not in widgets
-                or widgets[column].kind.is_path
-                or widgets[column].kind is CellKind.PATH_BY_KIND
-            )
         ]
+
+    def _is_typed(self, column: int, widget: CellWidget | None) -> bool:
+        """Tell whether the user types in a cell of `column` with `widget`: a path, or none."""
+        return column in self._editable_columns() and (widget is None or widget.kind.is_path)
 
     def _is_multiple(self) -> bool:
         return self._view.selection_mode is SelectionMode.MULTIPLE

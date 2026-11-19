@@ -179,7 +179,7 @@ from tests.settingsdialog import NO_FOLDER, SettingsMainView
 from tests.sidebar import SidebarMainView
 from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.studydialog import StudyDialogMainView
-from tests.studyfiles import StudyFileMainView, StudyFilesTableMainView
+from tests.studyfiles import StudyFileMainView, StudyFilesTableMainView, StudyPathsMainView
 from tests.tables import (
     CellWidgetsMainView,
     DataFilesTableMainView,
@@ -3520,6 +3520,47 @@ def test_a_table_s_path_by_kind_opens_the_dialog_of_each_row_s_kind_from_the_stu
     assert len(asked) == 4
     assert model.flags(model.index(1, PATH)) & Qt.ItemFlag.ItemIsEditable
     assert view.files.rows[1][1:] == ["Notes", "inputs/materials"]
+
+
+def test_a_table_s_cell_widget_of_each_row_opens_its_own_dialog(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view = StudyPathsMainView()
+    view.inputs.show_paths(view.inputs.rows, folders=[1], roots=[tmp_path])
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(800, 400)
+    window.show()
+    qtbot.waitExposed(window)
+    table = _table(view.inputs)
+    asked: list[tuple[str, str]] = []
+
+    def ask(dialog: str, answer: str) -> Callable[..., object]:
+        def answered(*args: object, **_options: object) -> object:
+            asked.append((dialog, str(args[2])))
+            return answer if dialog == "folder" else (answer, "")
+
+        return answered
+
+    monkeypatch.setattr(
+        QFileDialog, "getOpenFileName", staticmethod(ask("file", str(tmp_path / "beam.med")))
+    )
+    monkeypatch.setattr(
+        QFileDialog, "getExistingDirectory", staticmethod(ask("folder", str(tmp_path / "mat")))
+    )
+
+    for row in range(2):
+        cell = table.visualRect(table.model().index(row, 1))
+        position = QPoint(cell.right() - 4, cell.center().y())
+        qtbot.mouseClick(table.viewport(), Qt.MouseButton.LeftButton, pos=position)
+
+    # the rows are named alike: only the table's `cell_widget` tells them apart
+    assert asked == [("file", str(tmp_path)), ("folder", str(tmp_path))]
+    assert view.inputs.rows == [
+        ["Mesh", str(tmp_path / "beam.med")],
+        ["Mesh", str(tmp_path / "mat")],
+    ]
 
 
 def test_a_table_s_file_path_is_picked_in_qt_s_dialog_or_typed(

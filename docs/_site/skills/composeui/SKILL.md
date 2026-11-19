@@ -205,6 +205,9 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   widget follows the kind the user picks. Read a cell's path with
   `table.cell_widget(row, column).path(text)`.
   See https://ehmoussi.github.io/composeui/user-guide/tables.html#paths-by-the-rows-kind
+- **Give each row its own cell widget by overriding `cell_widget(row, column)`** on a
+  `TableView` subclass, when no cell of the row tells which. Set what it reads before `rows`.
+  See https://ehmoussi.github.io/composeui/user-guide/tables.html#a-widget-per-row
 - **Give `allowed=AllowedUrls(hosts={...})` to `fill_from_url` for a URL from a user.** Without it,
   the import trusts the URL: any host, any redirect, and local files.
 - **Import a Parquet file with `fill_from_frame(table, frame)`**, from
