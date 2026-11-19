@@ -1,7 +1,8 @@
 name: Release
 
-# A version tag (`v0.1.0`) publishes that version to PyPI. A manual run publishes the
-# commit it runs on to TestPyPI, as a dry run: a development version, such as 0.1.dev12.
+# A version tag (`v0.1.0`) publishes that version to TestPyPI, installs it from there, then
+# publishes it to PyPI. A manual run stops after TestPyPI, as a dry run: it publishes the commit
+# it runs on as a development version, such as 0.1.dev12.
 on:
   push:
     tags: ["v*"]
@@ -75,7 +76,7 @@ jobs:
 
   pypi:
     if: github.event_name == 'push' && github.ref_type == 'tag'
-    needs: build
+    needs: [build, testpypi-install]
     runs-on: ubuntu-latest
     # Trusted Publishing: PyPI trusts this workflow and environment, no token is stored
     environment:
@@ -91,7 +92,6 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
 
   testpypi:
-    if: github.event_name == 'workflow_dispatch'
     needs: build
     runs-on: ubuntu-latest
     environment:
@@ -107,6 +107,59 @@ jobs:
       - uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
+          # a rerun of a tag, or a dry run of the tagged commit, finds its version there already
+          skip-existing: true
+
+  # the package as a user gets it: from the index, with its dependencies from PyPI
+  testpypi-install:
+    needs: testpypi
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.13"]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: astral-sh/setup-uv@v10.2.0
+      - name: Download the version from TestPyPI
+        # only ComposeUI: a dependency from TestPyPI could be anyone's upload
+        run: |
+          wheel=$(basename dist/*.whl)
+          version=$(echo "$wheel" | cut -d- -f2)
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          # TestPyPI's index can take a few minutes to list a new upload
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if uvx pip download --no-deps --only-binary :all: --dest testpypi \
+                --index-url https://test.pypi.org/simple/ "composeui==$version"; then
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::error::TestPyPI doesn't serve composeui $version"
+          exit 1
+      - name: Install it with its dependencies from PyPI
+        run: |
+          uv venv --python ${{ matrix.python-version }} env
+          uv pip install --python env "$(ls testpypi/composeui-*.whl)[web]"
+      - name: Import each module of the API and run the command
+        run: |
+          env/bin/python - "$VERSION" <<'PY'
+          import importlib
+          import pkgutil
+          import sys
+
+          import composeui
+          import composeui.core
+
+          if composeui.__version__ != sys.argv[1]:
+              raise SystemExit(f"installed {composeui.__version__}, built {sys.argv[1]}")
+          for module in pkgutil.iter_modules(composeui.core.__path__, "composeui.core."):
+              importlib.import_module(module.name)
+          importlib.import_module("composeui.webcore.webapplication")
+          PY
+          env/bin/composeui --help
 
   # the tag's GitHub release: its changelog entry, and the files PyPI has
   github-release:
