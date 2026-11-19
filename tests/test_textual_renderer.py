@@ -4250,7 +4250,14 @@ async def test_a_console_s_search_highlights_its_matches_and_keeps_the_current_o
         footer = [binding.description for (_, binding, *_rest) in app.active_bindings.values()]
         assert "Search" in footer
 
-        await pilot.press("slash", *"step 1")  # Step 1, then Step 10 to Step 19
+        await pilot.press("slash")
+        # the search takes focus once the app has run `/`: typed sooner, the keys go to the
+        # console, whose `s` saves
+        for _ in range(100):
+            if app.focused is box.search:
+                break
+            await pilot.pause(0.05)
+        await pilot.press(*"step 1")  # Step 1, then Step 10 to Step 19
         await pilot.pause()
         assert app.focused is box.search
         assert matches() == "1 of 11"
