@@ -7,7 +7,6 @@ import enum
 import functools
 from collections import deque
 from collections.abc import Callable
-from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -18,6 +17,7 @@ from typing import (
 
 import attrs
 
+from composeui.core import reactivity
 from composeui.core._views.base import OMIT, UI_TEXT, View, define_view
 from composeui.core._views.content import LogType, LogView, Validator
 from composeui.core._views.controls import DialogButtonView
@@ -31,6 +31,7 @@ from composeui.core.translation import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from pathlib import Path
 
     from typing_extensions import Unpack
 
@@ -44,6 +45,14 @@ class DialogKind(enum.Enum):
     CONFIRM = enum.auto()
 
 
+def _do_nothing() -> None:
+    """Go on with nothing: what a question not asked would do once answered."""
+
+
+#: the answers of a question not asked, or answered already: nothing goes on
+_NOT_ASKED = (_do_nothing, _do_nothing)
+
+
 @define_view
 class DialogView(View):
     """A modal message or confirmation, shown from `open` until the user answers.
@@ -51,6 +60,9 @@ class DialogView(View):
     Nothing waits for the answer, since a web request can't: it comes through
     `accepted` or `rejected`, once the dialog is closed. A dialog is what the app asks,
     not study data: never saved, loaded or reset.
+
+    `ask` opens it and calls a function of the app once it's answered, instead of a
+    callback of `accepted` that would need to know what the question was about.
 
     A confirmation that loses something once accepted, such as deleting files, sets
     `is_destructive`: the focus goes to the rejecting button, so Enter rejects, and the
@@ -70,6 +82,10 @@ class DialogView(View):
 
     accepted: SignalNoArgs = attrs.Factory(SignalNoArgs)
     rejected: SignalNoArgs = attrs.Factory(SignalNoArgs)
+    #: what accepting and rejecting call, while the question `ask` asked isn't answered
+    _asked: tuple[Callable[[], object], Callable[[], object]] = attrs.field(
+        default=_NOT_ASKED, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
@@ -77,20 +93,48 @@ class DialogView(View):
         self.is_visible = False
 
     def open(self) -> None:
-        """Show the dialog; its answer comes through `accepted` or `rejected`."""
+        """Show the dialog; its answer comes through `accepted` or `rejected`.
+
+        Opening a closed dialog forgets the functions of a question asked before it closed.
+        """
+        if not self.is_visible:
+            self._asked = _NOT_ASKED
         self.is_visible = True
+
+    def ask(
+        self, on_accept: Callable[[], object], on_reject: Optional[Callable[[], object]] = None
+    ) -> None:
+        """Open the dialog, and call `on_accept()` or `on_reject()` once the user answers.
+
+        Only the answer's function is called, once, before `accepted` or `rejected` fires.
+        A new `ask` before the answer replaces both. A button of the dialog's own that closes
+        it calls neither.
+        """
+        self.open()
+        self._asked = (on_accept, _do_nothing if on_reject is None else on_reject)
+
+    def forget(self) -> None:
+        """Close the dialog, if it's open, without calling what `ask` was given."""
+        self._asked = _NOT_ASKED  # `open` would drop them too: free what they hold now
+        self.is_visible = False
 
     def accept(self) -> None:
         """Close the dialog with its accepting answer; ignored unless it's open."""
         if self.is_visible:
-            self.is_visible = False
-            self.accepted.emit()
+            self._answer(0, self.accepted)
 
     def reject(self) -> None:
         """Close the dialog with its rejecting answer; ignored unless it's open."""
         if self.is_visible:
-            self.is_visible = False
-            self.rejected.emit()
+            self._answer(1, self.rejected)
+
+    def _answer(self, index: int, signal: SignalNoArgs) -> None:
+        self.is_visible = False
+        asked, self._asked = self._asked, _NOT_ASKED  # free what they hold once answered
+        # as if a callback of the signal: the reactive methods run once, after both
+        with reactivity.batch():
+            asked[index]()
+            signal.emit()
 
     def dismiss(self) -> None:
         """Close the dialog without a button (e.g. Escape): a confirmation is rejected.
@@ -115,15 +159,6 @@ class ReplaceFileDialogView(DialogView):
     kind: DialogKind = attrs.field(default=DialogKind.CONFIRM)
     accept_text: str = attrs.field(default=T("Replace"), metadata={UI_TEXT: True})
     is_destructive: bool = attrs.field(default=True)
-    #: the file to write and the function writing it, while the user hasn't answered
-    _pending: Optional[tuple[Path, Callable[[Path], object]]] = attrs.field(
-        default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
-    )
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.accepted.connect(self._write)
-        self.rejected.connect(self._forget)
 
     def save(
         self,
@@ -140,26 +175,11 @@ class ReplaceFileDialogView(DialogView):
         function, and closes the question if it writes at once.
         """
         if is_agreed or not (path.exists() or path.is_symlink()):
-            self._pending = None
-            self.is_visible = False  # a question still open is about another file
+            self.forget()  # a question still open is about another file
             write(path)
             return
-        self._pending = (path, write)
         self.text = translate_again(question, self._tr).format(name=path.name)
-        self.open()
-
-    def _write(self) -> None:
-        pending, self._pending = self._pending, None
-        if pending is not None:
-            path, write = pending
-            write(path)
-
-    def _forget(self) -> None:
-        self._pending = None
-
-
-def _do_nothing() -> None:
-    """Go on with nothing: what a question not asked would do once answered."""
+        self.ask(functools.partial(write, path))
 
 
 @define_view
@@ -177,38 +197,12 @@ class DiscardChangesDialogView(DialogView):
     )
     accept_text: str = attrs.field(default=T("Discard"), metadata={UI_TEXT: True})
     is_destructive: bool = attrs.field(default=True)
-    #: what goes on once the user agrees, while they haven't answered
-    _pending: Callable[[], object] = attrs.field(
-        default=_do_nothing, init=False, repr=False, eq=False, metadata={OMIT: True}
-    )
-
-    def __attrs_post_init__(self) -> None:
-        super().__attrs_post_init__()
-        self.accepted.connect(self._proceed)
-        self.rejected.connect(self._forget)
-
-    def ask(self, proceed: Callable[[], object]) -> None:
-        """Ask, and call `proceed()` once the user agrees; it replaces one not answered yet."""
-        self._pending = proceed
-        self.open()
-
-    def forget(self) -> None:
-        """Close the question, if it's open, and forget what would go on."""
-        self._pending = _do_nothing
-        self.is_visible = False
-
-    def _proceed(self) -> None:
-        pending, self._pending = self._pending, _do_nothing
-        pending()
-
-    def _forget(self) -> None:
-        self._pending = _do_nothing
 
 
 #: what Save asks before it replaces a study file changed on disk, its ``{name}`` the file's
 _CHANGED_ON_DISK_QUESTION = T("{name} changed on disk since it was opened. Replace it?")
 #: the answers of a `RestoreWorkDialogView` not asked, or answered already: nothing goes on
-_NOT_ASKED = (_do_nothing, _do_nothing, _do_nothing)
+_NOT_ASKED_RESTORE = (_do_nothing, _do_nothing, _do_nothing)
 #: the question `RestoreWorkDialogView` asks, its ``{time}`` the work's
 _RESTORE_WORK_QUESTION = T("The app closed without saving. Restore the unsaved work of {time}?")
 
@@ -226,15 +220,15 @@ class RestoreWorkDialogView(DialogView):
     reject_text: str = attrs.field(default=T("Discard"), metadata={UI_TEXT: True})
     #: what Restore, Discard and closing the question do, while the user hasn't answered
     _answers: tuple[Callable[[], object], Callable[[], object], Callable[[], object]] = attrs.field(
-        default=_NOT_ASKED, init=False, repr=False, eq=False, metadata={OMIT: True}
+        default=_NOT_ASKED_RESTORE, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.accepted.connect(functools.partial(self._answer, 0))
-        self.rejected.connect(functools.partial(self._answer, 1))
+        self.accepted.connect(functools.partial(self._restore_answer, 0))
+        self.rejected.connect(functools.partial(self._restore_answer, 1))
 
-    def ask(
+    def ask_restore(
         self,
         saved: str,
         *,
@@ -250,10 +244,10 @@ class RestoreWorkDialogView(DialogView):
     def dismiss(self) -> None:
         """Close the question without a button: the work waits for the next start."""
         self.is_visible = False
-        self._answer(2)
+        self._restore_answer(2)
 
-    def _answer(self, index: int) -> None:
-        answers, self._answers = self._answers, _NOT_ASKED
+    def _restore_answer(self, index: int) -> None:
+        answers, self._answers = self._answers, _NOT_ASKED_RESTORE
         answers[index]()
 
 

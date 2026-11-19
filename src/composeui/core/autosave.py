@@ -425,7 +425,7 @@ class Autosave:
         """
         if not self._folder.is_left:
             return
-        self._main_view.restore_work.ask(
+        self._main_view.restore_work.ask_restore(
             time.strftime("%Y-%m-%d %H:%M", time.localtime(self._folder.left_at)),
             restore=self._restore,
             discard=self._discard,

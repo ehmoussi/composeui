@@ -14,6 +14,9 @@ backends' modules included, can change in any release without an entry here.
 - `DialogView.is_destructive`: a confirmation that loses something once accepted puts the
   focus on its reject button, so Enter rejects it. Its accept button shows as dangerous, on
   Qt, Textual and the web.
+- `DialogView.ask(on_accept, on_reject=None)` opens a dialog and calls one of the functions
+  once the user answers, and `forget()` closes it without calling either. An app no longer
+  keeps what each confirmation is about in a field of its own.
 
 ### Changed
 

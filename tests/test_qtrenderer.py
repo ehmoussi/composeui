@@ -3112,7 +3112,7 @@ def _shown_buttons(box: QMessageBox) -> dict[str, QAbstractButton]:
 def test_escape_closes_the_restore_question_and_keeps_the_work_for_later(qtbot: QtBot) -> None:
     view = DialogsMainView()  # every main view has the question
     answers: list[str] = []
-    view.restore_work.ask(
+    view.restore_work.ask_restore(
         "2026-11-16 10:00",
         restore=lambda: answers.append("restore"),
         discard=lambda: answers.append("discard"),

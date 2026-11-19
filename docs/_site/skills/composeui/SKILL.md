@@ -303,6 +303,9 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
 - **Mark user-visible text for translation** with `T("...")` or `self.tr("...")`
   (`T` is in `composeui.core.view`).
   See https://ehmoussi.github.io/composeui/user-guide/translation.html
+- **Ask a confirmation with `dialog.ask(on_accept, on_reject=None)`**, not a field that
+  keeps what the dialog is about: it opens the dialog and calls one function once the user
+  answers. `dialog.forget()` closes it without calling either.
 - **Type a form dialog:** subclass `TypedFormDialogView[YourForm]` with
   `form: YourForm = attrs.Factory(YourForm)`. See
   https://ehmoussi.github.io/composeui/user-guide/organizing-the-window.html#form-dialogs

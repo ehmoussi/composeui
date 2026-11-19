@@ -8,13 +8,16 @@ from typing import TYPE_CHECKING, Optional
 import pytest
 
 from composeui.core.model import RefusedError
+from composeui.core.reactivity import reactive, start_reactions
 from composeui.core.view import (
     CONVERTER,
     DialogButtonView,
     DialogKind,
     DialogView,
     FormDialogView,
+    LabelView,
     LogType,
+    MainView,
     child,
     define_view,
 )
@@ -57,6 +60,145 @@ def test_only_an_open_dialog_answers() -> None:
     dialog.accept()
     dialog.reject()
     assert answers == ["accepted"]
+
+
+def _ask(dialog: DialogView, answers: list[str], name: str) -> None:
+    """Ask `dialog`, recording its answer in `answers` as ``name`` and whether it agreed."""
+    dialog.ask(lambda: answers.append(f"{name} agreed"), lambda: answers.append(f"{name} refused"))
+
+
+@pytest.mark.parametrize(
+    ("answer", "expected"),
+    [
+        ("accept", ["delete agreed", "accepted"]),
+        ("reject", ["delete refused", "rejected"]),
+        ("dismiss", ["delete refused", "rejected"]),
+    ],
+)
+def test_a_question_asked_calls_its_answer_once_before_the_signal(
+    answer: str, expected: list[str]
+) -> None:
+    dialog = DialogView(kind=DialogKind.CONFIRM)
+    answers = _answers(dialog)
+    _ask(dialog, answers, "delete")
+    assert dialog.is_visible
+
+    getattr(dialog, answer)()
+    dialog.open()  # opened again, but not asked
+    dialog.accept()
+
+    assert not dialog.is_visible
+    assert answers == [*expected, "accepted"]
+
+
+def test_a_question_asked_without_a_rejecting_function_rejects_with_nothing_more() -> None:
+    dialog = DialogView(kind=DialogKind.CONFIRM)
+    answers = _answers(dialog)
+    dialog.ask(lambda: answers.append("delete agreed"))
+    dialog.reject()
+    assert answers == ["rejected"]
+
+
+def test_a_new_question_replaces_the_one_not_answered_and_forget_drops_it() -> None:
+    dialog = DialogView(kind=DialogKind.CONFIRM)
+    answers: list[str] = []
+    _ask(dialog, answers, "close")
+    _ask(dialog, answers, "delete")
+    dialog.open()  # already open: still the same question
+    dialog.accept()
+    assert answers == ["delete agreed"]
+
+    _ask(dialog, answers, "run")
+    dialog.forget()
+    assert not dialog.is_visible
+    dialog.open()
+    dialog.accept()
+    assert answers == ["delete agreed"]
+
+
+def test_opening_a_dialog_closed_without_an_answer_drops_its_question() -> None:
+    dialog = DialogView(kind=DialogKind.CONFIRM)
+    answers: list[str] = []
+    _ask(dialog, answers, "delete")
+    dialog.is_visible = False  # closed by the app
+    dialog.open()
+    dialog.accept()
+    assert answers == []
+
+
+def test_an_answer_that_asks_again_keeps_its_new_question() -> None:
+    dialog = DialogView(kind=DialogKind.CONFIRM)
+    answers: list[str] = []
+    dialog.ask(lambda: _ask(dialog, answers, "and delete"))
+    dialog.accept()
+    assert dialog.is_visible
+    dialog.accept()
+    assert answers == ["and delete agreed"]
+
+
+def test_an_ok_cancel_question_is_answered_only_once_it_closes() -> None:
+    """A failing check or a refusal keeps the dialog open: the question still waits."""
+    view = SettingsMainView()
+    dialog = view.settings
+    answers: list[str] = []
+    is_refused = [True]
+    dialog.accepting.connect(functools.partial(_refuse, dialog, is_refused=is_refused))
+    _ask(dialog, answers, "save")
+
+    _clear_folder(dialog)
+    dialog.accept()  # the check fails
+    dialog.content.folder.text = "results"
+    dialog.accept()  # the model refuses
+    assert dialog.is_visible
+    assert answers == []
+    is_refused[0] = False
+    dialog.accept()
+    assert answers == ["save agreed"]
+
+
+def test_a_dialog_s_own_closing_button_drops_the_question() -> None:
+    dialog = SettingsDialog()
+    answers: list[str] = []
+    _ask(dialog, answers, "save")
+    dialog.apply.click()  # answers without closing: the question still waits
+    dialog.discard.click()
+    assert not dialog.is_visible
+    dialog.open()
+    dialog.accept()
+    dialog.open()
+    dialog.reject()
+    assert answers == []
+
+
+@define_view
+class AskingView(MainView):
+    """Asks before it fills a city's name, which a reactive method summarizes."""
+
+    name: LabelView = child(LabelView)
+    city: LabelView = child(LabelView)
+    confirm: DialogView = child(DialogView, kind=DialogKind.CONFIRM)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        #: each summary `summarize` made; not a field: the test's record
+        self.summaries: list[str] = []
+
+    @reactive
+    def summarize(self) -> None:
+        self.summaries.append(f"{self.name.text} in {self.city.text}")
+
+
+def test_an_answer_s_changes_run_a_reactive_method_once_after_it() -> None:
+    view = AskingView()
+    start_reactions(view)
+
+    def fill() -> None:
+        view.name.text = "Ada"
+        view.city.text = "London"
+
+    view.confirm.ask(fill)
+    view.confirm.accept()
+    assert view.summaries == [" in ", "Ada in London"]
 
 
 def test_a_dialog_is_neither_saved_nor_loaded(tmp_path: Path) -> None:

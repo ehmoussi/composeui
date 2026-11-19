@@ -416,6 +416,15 @@ class AppMainView(MainView):
 Escape, or closing the window of the dialog, rejects a confirmation. It accepts a message,
 which has only one answer.
 
+When the answer must know what the dialog asked, call `ask(on_accept, on_reject=None)`
+instead of `open()`, for example
+`self.confirm_delete.ask(functools.partial(delete_folder, folder))`. The dialog opens. Once
+the user answers, it calls `on_accept()` or `on_reject()`, before `accepted` or `rejected`
+emits. It calls only one of them, and only once. A new `ask` before the answer replaces
+both functions. `forget()` closes the dialog without calling either, for example when the
+study closes. A [button of the dialog's own](#buttons-and-checks-of-a-dialog) that closes it
+also calls neither.
+
 A confirmation that loses something once accepted, such as deleting files, sets
 `is_destructive`. The focus then goes to the reject button, so Enter rejects the dialog.
 The accept button shows as dangerous: red on Qt, Textual and the web. A message and a form
