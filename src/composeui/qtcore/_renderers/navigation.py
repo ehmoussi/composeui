@@ -321,7 +321,8 @@ class QtMainRenderer(
                 assert toolbar is not None
                 assert stack is not None
                 rendered_object.addToolBar(toolbar)
-                central_layout.addWidget(stack)
+                # the window's spare height, for its pages: each scrolls once too tall
+                central_layout.addWidget(stack, 1)
             else:
                 _add_content_widget(central_layout, child_view)
         central_layout.addStretch()

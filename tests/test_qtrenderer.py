@@ -172,7 +172,7 @@ from tests.maps import MapMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.markup import MARKUP, MarkupMainView
 from tests.metrics import JobsMainView
-from tests.pages import InputsPage, PagesMainView
+from tests.pages import InputsPage, NotesMainView, PagesMainView
 from tests.partial import PartialMainView, UnregisteredView
 from tests.ranges import FIRST_DAY, RangesMainView
 from tests.settingsdialog import NO_FOLDER, SettingsMainView
@@ -713,6 +713,71 @@ def test_markdown_takes_the_spare_height_of_the_window(qtbot: QtBot) -> None:
     # it scrolls within itself: down to the status bar, no empty space under it
     browser_bottom = browser.mapTo(window, browser.rect().bottomLeft()).y()
     assert window.statusBar().geometry().top() - browser_bottom < 30
+
+
+def test_a_page_s_markdown_takes_the_spare_height_of_the_window(qtbot: QtBot) -> None:
+    view = PipeMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    assert isinstance(window, QMainWindow)
+    qtbot.addWidget(window)
+    window.resize(800, 600)
+    window.show()
+    qtbot.waitExposed(window)
+    view.pages.navigate("help")
+    browser = _widget(view.pages.help.help)
+    # its page, under the pages' toolbar, down to the status bar: no empty space under it
+    qtbot.waitUntil(
+        lambda: (
+            window.statusBar().geometry().top()
+            - browser.mapTo(window, browser.rect().bottomLeft()).y()
+            < 30
+        )
+    )
+
+
+def test_a_window_asks_for_its_page_s_size_and_scrolls_a_wider_page(qtbot: QtBot) -> None:
+    view = PipeMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    page = _widget(view.pages.inputs)
+    assert isinstance(page, QScrollArea)
+    column = page.widget()
+    assert column is not None
+
+    # room for the whole page, as without scrolling: Qt opens a window at its size hint, up
+    # to a share of the screen
+    assert window.sizeHint().height() > column.sizeHint().height()
+    # narrower than its fields: they scroll sideways, rather than being cut on the right
+    view.minimum_width = 100
+    window.resize(100, window.height())
+    qtbot.waitUntil(page.horizontalScrollBar().isVisible)
+
+
+def test_a_page_taller_than_the_window_scrolls_rather_than_squeezing_its_views(
+    qtbot: QtBot,
+) -> None:
+    view = NotesMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(800, 480)
+    window.show()
+    qtbot.waitExposed(window)
+    expander = _widget(view.router.notes.notes)
+    assert isinstance(expander, QExpander)
+    notes = _widget(view.router.notes.notes.notes)
+
+    expander.header.click()
+
+    # every line shown, as on the web: the page grows past the window, and scrolls
+    qtbot.waitUntil(lambda: notes.height() == notes.sizeHint().height())
+    page = _widget(view.router.notes)
+    assert isinstance(page, QScrollArea)
+    assert page.verticalScrollBar().isVisible()
 
 
 def test_a_row_holding_a_list_and_a_tree_takes_the_spare_height_of_the_window(

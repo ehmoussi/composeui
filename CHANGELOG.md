@@ -28,6 +28,11 @@ backends' modules included, can change in any release without an entry here.
   files didn't open, and an upload to its cell could be deleted after the next upload.
 - On the web, sorting a table without a filter bar no longer sends a count of its rows that
   the page has no place for. The browser logged an `htmx:oobErrorNoTarget` error each time.
+- On Qt, a page taller than the window scrolls, as on Textual and the web. Before, Qt
+  squeezed its views: an expanded `ExpanderView` cut its lines, and a table in it could shrink
+  to one row. A page wider than the window scrolls sideways. A page in a `Router` also fills
+  the window's height now. A view that scrolls within itself, such as a `MarkdownView`,
+  reaches the bottom of the window.
 
 ## [0.4.0] - 2026-11-19
 

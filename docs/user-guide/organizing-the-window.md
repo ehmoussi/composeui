@@ -46,6 +46,9 @@ The page shown is navigation, not study data: saving, opening, and New leave it 
 Qt docks the toolbar as a `QToolBar`. Textual shows a row of buttons at the top. The web puts the
 toolbar in the page header, with a web address per page.
 
+A page taller than the window scrolls on every backend, and its views keep their height. On
+Qt, a page wider than the window also scrolls sideways.
+
 Qt and the web build a page the first time it shows, and the web sends only the shown page. So
 an app with many pages starts as fast as one with a few, and on the web each session builds only
 the pages that its user opens. A page shows every change that code made to its views before it
