@@ -9815,6 +9815,23 @@ def test_the_search_swaps_the_body_and_the_count_never_its_field(
     assert "No rows match the filters" in body
 
 
+def test_a_table_sorted_without_a_filter_bar_swaps_no_count(
+    sorted_rooms: _SortedRooms,
+) -> None:
+    # the bar is hidden, without a count: htmx would find no element to swap one into
+    notes = sorted_rooms.view.notes
+    notes.sortable_columns = [0]
+    sorted_rooms.client.get("/")  # the page draws its headers sortable
+    notes_id = _widget_id(notes.renderer)
+    response = sorted_rooms.client.post(
+        f"/widget/{notes_id}", data={"event": "sort", "column": "0"}
+    )
+    assert response.status_code == 200
+    body = _swapped(response.text, f"{notes_id}-body").text
+    assert body.index("Busy") < body.index("Calm")
+    assert _find(response.text, f"{notes_id}-count") is None
+
+
 def test_the_filter_editor_adds_a_filter_as_a_chip_or_says_why_it_can_t(
     sorted_rooms: _SortedRooms,
 ) -> None:
