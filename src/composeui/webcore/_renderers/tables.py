@@ -190,6 +190,9 @@ class WebFilterBarRenderer(WebRenderer[TView]):
         for part, inside in self._parts_inside.items():
             if part in parts:
                 parts.difference_update(inside)
+        if len(self._filterable_columns()) == 0:
+            # a hidden bar draws no count: htmx would find no element to swap it into
+            parts.discard("count")
         # the bar last: it may hold the element that sent the request, which htmx swaps
         # nothing more from once it's gone
         renders: dict[str, Callable[..., Markup]] = {
