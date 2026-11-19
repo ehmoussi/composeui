@@ -42,6 +42,7 @@ from composeui.qtcore._renderers.forms import _widget_of
 from composeui.qtcore.qtrenderer import QtWidgetRenderer
 from composeui.qtcore.widgets.qconsole import QConsoleBox
 from composeui.qtcore.widgets.qexpander import QExpander
+from composeui.qtcore.widgets.qpagearea import QPageArea
 from composeui.qtcore.widgets.qsourcetable import QDataFilterTable
 from composeui.qtcore.widgets.qsplitter import QComposeSplitter
 
@@ -87,9 +88,11 @@ def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
         # its router's, maybe while open, which another parent would hide
         if widget.parentWidget() is None:
             _set_dialog_parent(view, widget, layout.parentWidget())
-    elif isinstance(view, (FormView, PageView)) and not isinstance(view, GroupFormView):
-        # a plain form insets its rows with its own layout's margins, and a page its views;
-        # a page holding a view that scrolls within itself takes the spare height, for it
+    elif isinstance(view, PageView):
+        # it scrolls within itself: it takes the spare height, and insets its own views
+        layout.addWidget(widget, 1)
+    elif isinstance(view, FormView) and not isinstance(view, GroupFormView):
+        # a plain form insets its rows with its own layout's margins
         inner = widget.layout()
         expands = inner is not None and bool(inner.expandingDirections() & Qt.Orientation.Vertical)
         layout.addWidget(widget, 1 if expands else 0)
@@ -116,18 +119,19 @@ def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
         layout.addLayout(inset, 1 if expands else 0)
 
 
-class QtPageRenderer(QtWidgetRenderer[PageView, QWidget]):
-    """A page's views in a column, laid out like the window's own."""
+class QtPageRenderer(QtWidgetRenderer[PageView, QPageArea]):
+    """A page's views in a column, laid out like the window's own, scrolling if too big."""
 
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = QWidget()
-            layout = QVBoxLayout(self._rendered_object)
+            column = QWidget()
+            layout = QVBoxLayout(column)
             # the window's layout already insets the page
             layout.setContentsMargins(0, 0, 0, 0)
             for view in self._view.content_views:
                 _add_content_widget(layout, view)
             layout.addStretch()
+            self._rendered_object = QPageArea(column)
             self.refresh()
 
 

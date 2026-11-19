@@ -1,4 +1,4 @@
-"""Two pages under a router, shared by the core and backend tests of pages."""
+"""Pages under routers, shared by the core and backend tests of pages."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ from attrs import Factory
 
 from composeui.core.view import (
     ButtonView,
+    ExpanderView,
     InputView,
     LabelView,
     MainView,
@@ -13,6 +14,7 @@ from composeui.core.view import (
     PageWidth,
     ProgressBarView,
     Router,
+    child,
     define_view,
 )
 
@@ -73,3 +75,32 @@ class WidePageMainView(MainView):
     extension = ".wide"
 
     results: ResultsPage = Factory(ResultsPage)
+
+
+@define_view
+class NotesExpander(ExpanderView):
+    notes: LabelView = child(LabelView, text="\n".join(f"Note {number}" for number in range(40)))
+
+
+@define_view
+class NotesPage(PageView):
+    route = "notes"
+    page_title = "Notes"
+
+    #: taller than the window once expanded
+    notes: NotesExpander = child(NotesExpander, title="Notes")
+
+
+@define_view
+class NotesRouter(Router):
+    notes: NotesPage = Factory(NotesPage)
+
+
+@define_view
+class NotesMainView(MainView):
+    """A page that gets taller than the window."""
+
+    app_title = "Notes"
+    extension = ".notes"
+
+    router: NotesRouter = Factory(NotesRouter)
