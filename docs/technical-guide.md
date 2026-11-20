@@ -864,12 +864,12 @@ The web's `--reload` is uvicorn's, which restarts the server process. The web ap
 watchfiles not to poll where the system reports the changes. Its sessions outlive the
 processes: the process that `run` starts makes a scratch directory and a key that signs
 the session cookies, and gives both to the server's processes through environment
-variables. Each process saves its sessions as it stops, in its lifespan's end
-(`SessionStore.save_all`, with `save_reloaded_state`). The next takes them as sessions on disk,
-and opens one when its cookie comes back, under the same id, as it wakes an idle session (see
-[Order and sessions](#order-and-sessions)). Its pages ask
-`GET /reload` every second, naming the process that served them (`reload_poller`):
-another process answers with `HX-Refresh`.
+variables. Each process takes the key out of its environment before it runs the app's code, so that
+the programs that the app starts don't inherit it. Each process saves its sessions as it stops, in
+its lifespan's end (`SessionStore.save_all`, with `save_reloaded_state`). The next takes them as
+sessions on disk, and opens one when its cookie comes back, under the same id, as it wakes an idle
+session (see [Order and sessions](#order-and-sessions)). Its pages ask `GET /reload` every second,
+naming the process that served them (`reload_poller`): another process answers with `HX-Refresh`.
 
 ## Add a widget
 
