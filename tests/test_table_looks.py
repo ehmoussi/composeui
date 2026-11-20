@@ -45,29 +45,47 @@ def test_checking_every_row_leaves_a_disabled_cell_as_it_is() -> None:
     table = StyledTablesMainView().points
     # the disabled unchecked cell doesn't count: every other one is checked
     assert table.column_checked(4) is True
+    applied: list[tuple[int, int, str, str]] = []
+    table.cell_edit_applied.connect(
+        lambda row, column, text: applied.append((row, column, text, table.rows[row][column]))
+    )
     table.check_all(4, is_checked=False)
     assert [row[4] for row in table.rows] == ["False", "False", "False"]
+    # each edit once its row holds it
+    assert applied == [(0, 4, "False", "False"), (2, 4, "False", "False")]
     table.check_all(4, is_checked=True)
     assert [row[4] for row in table.rows] == ["True", "False", "True"]
     assert table.is_cell_editable(0, 4)
     assert not table.is_cell_editable(1, 4)
 
 
-def _sorting_table() -> TableView:
-    """Get a table whose app sorts its rows by the second column on every edit."""
+def _sorting_table(signal: str) -> TableView:
+    """Get a table whose app sorts its rows by the second column on every edit's `signal`."""
     table = TableView(rows=[["false", "b"], ["false", "a"]], editable_columns=[0])
 
     def sort(row: int, column: int, text: str) -> None:
         table.rows = sorted(replace_cell(table.rows, row, column, text), key=lambda r: r[1])
 
-    table.cell_edited.connect(sort)
+    getattr(table, signal).connect(sort)
     return table
 
 
-def test_checking_every_row_reaches_each_record_when_a_callback_sorts_the_rows() -> None:
-    table = _sorting_table()
+@pytest.mark.parametrize(
+    ("signal", "applied"),
+    [
+        ("cell_edited", []),  # rows answering each edit: none of the user's is applied
+        ("cell_edit_applied", [0, 0]),  # sorted once applied: "a" comes first, then "b"
+    ],
+)
+def test_checking_every_row_reaches_each_record_when_a_callback_sorts_the_rows(
+    signal: str, applied: list[int]
+) -> None:
+    table = _sorting_table(signal)
+    emitted: list[int] = []
+    table.cell_edit_applied.connect(lambda row, _column, _text: emitted.append(row))
     table.check_all(0, is_checked=True)
     assert table.rows == [["True", "a"], ["True", "b"]]
+    assert emitted == applied
 
 
 def test_checking_every_row_ends_when_a_callback_refuses_each_edit() -> None:
@@ -79,9 +97,11 @@ def test_checking_every_row_ends_when_a_callback_refuses_each_edit() -> None:
         raise EditRefusedError
 
     table.cell_edited.connect(refuse)
+    applied: list[int] = []
+    table.cell_edit_applied.connect(lambda row, _column, _text: applied.append(row))
     table.check_all(0, is_checked=True)
     assert table.rows == [["false", "b"], ["false", "a"]]
-    assert edited == [0, 1]
+    assert (edited, applied) == ([0, 1], [])
 
 
 def test_a_cell_s_text_is_black_or_white_whichever_reads_on_its_background() -> None:

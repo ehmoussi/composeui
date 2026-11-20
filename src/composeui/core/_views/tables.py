@@ -849,6 +849,9 @@ class TableMixin:
     else as it was (the edit refused). Raising `EditRefusedError` refuses the edit too,
     and the rows stay as they are, e.g. when the model refused the new text and changed
     nothing. A `RefusedError` caught by `View.refusing` in the callback does the same.
+    To read the edited rows instead, connect `cell_edit_applied`: it emits the row, the
+    column and the cell's text once `rows` holds the edit, and not for an edit refused or
+    answered with other rows.
 
     A column of `cell_widgets` shows a widget in each cell (see `CellWidget`). A check box,
     a combobox or a file path edits the cell. A button or a link emits `cell_clicked` with
@@ -1031,6 +1034,8 @@ class TableMixin:
     row_activated: Signal[int] = attrs.Factory(Signal[int])
     editable_columns: list[int] = attrs.Factory(list[int])
     cell_edited: Signal[int, int, str] = attrs.Factory(Signal[int, int, str])
+    #: `rows` holds the user's edit: its row, its column and the cell's text
+    cell_edit_applied: Signal[int, int, str] = attrs.Factory(Signal[int, int, str])
     #: the widget in each cell of a column, by column: the app's setup, not study data
     cell_widgets: dict[int, CellWidget] = attrs.field(
         factory=dict[int, CellWidget], on_setattr=_restyle, metadata={OMIT: True}
@@ -1201,38 +1206,74 @@ class TableMixin:
                 continue
             tried[cells] += 1
             edits_left -= 1
-            rows = self.rows
-            self.emit_cell_edited(row, column, text)
-            if self.rows is not rows:  # another row may now be at any position
+            edited = self._edit_cell(row, column, text, self._assign_edited)
+            # unless the rows are the edit's, another row may now be anywhere: the
+            # callbacks of `cell_edited` or `cell_edit_applied` answered with their own
+            if edited is None or self.rows is not edited:
                 positions, position, seen = list(self.shown_rows), 0, Counter()
-                continue
-            # as edited, for the selection to stay on its row
-            self._edited_rows = replace_cell(rows, row, column, text)
-            try:
-                self.rows = self._edited_rows
-            finally:
-                self._edited_rows = None
 
-    def emit_cell_edited(self, row: int, column: int, text: str) -> None:
+    def edit_cell(
+        self,
+        row: int,
+        column: int,
+        text: str,
+        assign: Optional[Callable[[list[list[str]]], None]] = None,
+    ) -> bool:
+        """Emit the user's edit, apply it unless its callbacks answered, and say if it applied.
+
+        `assign` sets `rows` to the edited rows: a renderer's, which its widget already
+        shows. Once `rows` holds the edit, `cell_edit_applied` emits it.
+        """
+        return self._edit_cell(row, column, text, assign or self._assign_edited) is not None
+
+    def _edit_cell(
+        self, row: int, column: int, text: str, assign: Callable[[list[list[str]]], None]
+    ) -> Optional[list[list[str]]]:
+        """Edit the cell as `edit_cell` does, and get the rows holding the edit, if applied."""
+        rows = self.rows
+        if not self.emit_cell_edited(row, column, text):
+            if self.rows is not rows:  # refused, or answered with the callbacks' rows
+                return None
+            assign(replace_cell(rows, row, column, text))
+        edited = self.rows
+        # most tables' isn't connected: don't make it
+        emit_if_made(cast("View", self), "cell_edit_applied", row, column, edited[row][column])
+        return edited
+
+    def _assign_edited(self, rows: list[list[str]]) -> None:
+        # as edited, for the selection to stay on its row
+        self._edited_rows = rows
+        try:
+            self.rows = rows
+        finally:
+            self._edited_rows = None
+
+    def emit_cell_edited(self, row: int, column: int, text: str) -> bool:
         """Emit `cell_edited` for the user's edit, `rows` still holding the old text.
 
         Rows its callbacks assign keep the edited row selected as `TableMixin` says.
-        Renderers call it; applying the edit afterwards is theirs.
+        Return whether the view applied the edit itself, as a `RecordTableView` does:
+        else `edit_cell` applies it.
         """
         self._edited_rows = replace_cell(self.rows, row, column, text)
         token = _editing_cell.set(True)
         try:
-            self._emit_edit(row, column, text)
+            return self._emit_edit(row, column, text)
         except EditRefusedError:
             # the rows answering the edit, as when a callback puts them back itself
             self.rows = [list(cells) for cells in self.rows]
+            return False
         finally:
             _editing_cell.reset(token)
             self._edited_rows = None
 
-    def _emit_edit(self, row: int, column: int, text: str) -> None:
-        """Emit the edit's signals, `_edited_rows` holding the rows as it leaves them."""
+    def _emit_edit(self, row: int, column: int, text: str) -> bool:
+        """Emit the edit's signals, `_edited_rows` holding the rows as it leaves them.
+
+        Return whether the view applied the edit itself.
+        """
         self.cell_edited.emit(row, column, text)
+        return False
 
     def loadable(self, name: str, value: Any) -> Any:
         """Get the part of a saved sort or filters (`name`) the table's columns still take."""
@@ -1513,7 +1554,7 @@ class RecordTableView(TableView, Generic[RecordT]):
         assert column < len(self.columns)
         return _sort_value(getattr(self.records[row], self.columns[column].field))
 
-    def _emit_edit(self, row: int, column: int, text: str) -> None:
+    def _emit_edit(self, row: int, column: int, text: str) -> bool:
         old = self.records[row]
         name = self.columns[column].field
         field_type: Any = attrs.fields_dict(attrs.resolve_types(type(old)))[name].type
@@ -1535,8 +1576,10 @@ class RecordTableView(TableView, Generic[RecordT]):
         records, rows = self.records, self.rows
         super()._emit_edit(row, column, text)
         self.record_edited.emit(old, new)
-        if self.records is records and self.rows is rows:
-            self.records = [*records[:row], new, *records[row + 1 :]]
+        if self.records is not records or self.rows is not rows:
+            return False
+        self.records = [*records[:row], new, *records[row + 1 :]]
+        return True
 
 
 @attrs.frozen
