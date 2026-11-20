@@ -8,12 +8,13 @@ from typing_extensions import Protocol
 
 from composeui.core._views.tables import SourceTableByPosition
 from composeui.core.renderer import ViewLike
-from composeui.core.view import CellKind, SelectionMode, replace_cell
+from composeui.core.view import CellKind, SelectionMode
 from composeui.textualcore.textualrenderer import TextualWidgetRenderer
 from composeui.textualcore.widgets.composefiltertable import ComposeFilterTable
 from composeui.textualcore.widgets.composesourcetable import ComposeDataFilterTable
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from composeui.core.signal import Signal
@@ -220,7 +221,13 @@ class TableViewLike(ViewLike, Protocol):
     header_groups: list[HeaderGroup]
     row_headers: list[str]
 
-    def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
+    def edit_cell(
+        self,
+        row: int,
+        column: int,
+        text: str,
+        assign: Callable[[list[list[str]]], None] | None = None,
+    ) -> bool: ...
     def cell_widget(self, row: int, column: int) -> CellWidget | None: ...
     def mark_text(self, mark: NodeMark) -> str: ...
     def shown_cell_styles(self) -> dict[tuple[int, int], CellStyle]: ...
@@ -433,14 +440,15 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeFilterTab
         self._view.selection_changed.emit(rows)
 
     def _update_cell(self, position: int, column: int, text: str) -> None:
-        rows, row = self._view.rows, self._view.shown_rows[position]
-        self._view.emit_cell_edited(row, column, text)
-        if self._view.rows is rows:
-            with self.stop_refresh():
-                self._view.rows = replace_cell(rows, row, column, text)
+        self._view.edit_cell(self._view.shown_rows[position], column, text, self._assign_rows)
         assert self._rendered_object is not None
         # a check-all box follows its column's
         self._refresh_checked_columns(self._view, self._rendered_object)
+
+    def _assign_rows(self, rows: list[list[str]]) -> None:
+        """Set the user's edit in `rows`, which the widget already shows."""
+        with self.stop_refresh():
+            self._view.rows = rows
 
     def _click_cell(self, position: int, column: int) -> None:
         self._view.cell_clicked.emit(self._view.shown_rows[position], column)

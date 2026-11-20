@@ -3313,10 +3313,12 @@ def test_double_clicking_an_editable_cell_edits_it_keeping_the_selection(qtbot: 
     edited: list[tuple[int, int, str, list[str]]] = []
 
     def record(row: int, column: int, text: str) -> None:
-        # the row as it was: the edit is applied once the callbacks have run
+        # the row as it was: the edit is applied once the callbacks have run, then the row
+        # as `cell_edit_applied` finds it
         edited.append((row, column, text, view.places.rows[row]))
 
     view.places.cell_edited.connect(record)
+    view.places.cell_edit_applied.connect(record)
 
     def edit(row: int, column: int, text: str) -> None:
         center = table.visualRect(model.index(row, column)).center()
@@ -3333,7 +3335,7 @@ def test_double_clicking_an_editable_cell_edits_it_keeping_the_selection(qtbot: 
     # the harbour's row is short of its note: the edit fills it
     edit(1, 1, "Busy")
     assert view.places.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
-    assert edited == [(1, 1, "Busy", ["Harbour"])]
+    assert edited == [(1, 1, "Busy", ["Harbour"]), (1, 1, "Busy", ["Harbour", "Busy"])]
     # its row moved nowhere: it stays selected
     assert view.places.selected_rows == [1]
     assert [index.row() for index in table.selectionModel().selectedRows()] == [1]
@@ -3362,7 +3364,13 @@ def test_double_clicking_an_editable_cell_edits_it_keeping_the_selection(qtbot: 
     center = table.visualRect(model.index(0, 0)).center()
     qtbot.mouseDClick(table.viewport(), Qt.MouseButton.LeftButton, pos=center)
     assert table.state() is not QAbstractItemView.State.EditingState
-    assert [edit[:3] for edit in edited] == [(1, 1, "Busy"), (0, 1, "Windy"), (1, 1, "Foggy")]
+    # each edit, and the one applied again once its row held it
+    assert [edit[:3] for edit in edited] == [
+        (1, 1, "Busy"),
+        (1, 1, "Busy"),
+        (0, 1, "Windy"),
+        (1, 1, "Foggy"),
+    ]
 
 
 def test_a_double_click_or_enter_activates_a_table_row_unless_it_edits(qtbot: QtBot) -> None:

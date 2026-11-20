@@ -11,6 +11,9 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `TableView.cell_edit_applied` emits the row, the column and the cell's text once the table
+  holds the user's edit. `cell_edited` emits before, while the table still holds the old text.
+  The new signal doesn't emit for an edit refused or answered with other rows.
 - `DialogView.is_destructive`: a confirmation that loses something once accepted puts the
   focus on its reject button, so Enter rejects it. Its accept button shows as dangerous, on
   Qt, Textual and the web.

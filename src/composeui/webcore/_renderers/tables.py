@@ -24,7 +24,6 @@ from composeui.core.view import (
     NodeMark,
     SelectionMode,
     as_pattern,
-    replace_cell,
 )
 from composeui.webcore._renderers.files import _PATH_KINDS, _FilesTexts, _ServerFiles
 from composeui.webcore.changes import _DIRTY
@@ -79,7 +78,13 @@ class TableViewLike(ViewLike, Protocol):
     row_headers: list[str]
 
     def refusing(self, message: str) -> contextlib.AbstractContextManager[None]: ...
-    def emit_cell_edited(self, row: int, column: int, text: str) -> None: ...
+    def edit_cell(
+        self,
+        row: int,
+        column: int,
+        text: str,
+        assign: Callable[[list[list[str]]], None] | None = None,
+    ) -> bool: ...
     def mark_text(self, mark: NodeMark) -> str: ...
     def shown_cell_styles(self) -> dict[tuple[int, int], CellStyle]: ...
     def is_checked(self, row: int, column: int) -> bool: ...
@@ -1161,12 +1166,8 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             if text.strip() != "" and not is_within_roots(path, widget.server_roots):
                 self._refuse_path(path)
                 return
-        rows = self._view.rows
-        self._view.emit_cell_edited(*cell, text)
         # unless the app answered with its own rows, which it has marked to show
-        if self._view.rows is rows:
-            with self.stop_refresh():
-                self._view.rows = replace_cell(rows, *cell, text)
+        self._view.edit_cell(*cell, text, self._assign_rows)
 
     def _refuse_path(self, path: Path) -> None:
         """Keep a file path cell's text, typed outside its roots, and say why."""
@@ -1259,17 +1260,18 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         cells = self._view.rows[cell[0]]
         if text == (cells[cell[1]] if cell[1] < len(cells) else ""):
             return
-        rows = self._view.rows
         widgets = self._row_widgets(cell[0])
-        self._view.emit_cell_edited(*cell, text)
         # unless the app answered with its own rows, which it has marked to show
-        if self._view.rows is rows:
-            with self.stop_refresh():
-                self._view.rows = replace_cell(rows, *cell, text)
+        if self._view.edit_cell(*cell, text, self._assign_rows):
             if len(self._check_all_columns()) > 0:
                 self._mark_parts("head")  # a check-all box follows its column's
             if self._row_widgets(cell[0]) != widgets:
                 self._mark_parts("body")  # a cell's widget follows the edit, e.g. a kind's
+
+    def _assign_rows(self, rows: list[list[str]]) -> None:
+        """Set the user's edit in `rows`, which the widget already shows."""
+        with self.stop_refresh():
+            self._view.rows = rows
 
     def _row_widgets(self, row: int) -> list[CellWidget | None]:
         return [self._view.cell_widget(row, column) for column in range(len(self._view.headers))]

@@ -2643,10 +2643,12 @@ async def test_f2_or_a_double_click_edits_a_row_s_editable_cells_keeping_the_sel
     edited: list[tuple[int, int, str, list[str]]] = []
 
     def record(row: int, column: int, text: str) -> None:
-        # the row as it was: the edit is applied once the callbacks have run
+        # the row as it was: the edit is applied once the callbacks have run, then the row
+        # as `cell_edit_applied` finds it
         edited.append((row, column, text, view.places.rows[row]))
 
     view.places.cell_edited.connect(record)
+    view.places.cell_edit_applied.connect(record)
 
     def cells() -> list[list[str]]:
         return [[str(cell) for cell in table.get_row_at(row)] for row in range(table.row_count)]
@@ -2663,7 +2665,7 @@ async def test_f2_or_a_double_click_edits_a_row_s_editable_cells_keeping_the_sel
         await pilot.pause()
         assert view.places.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
         assert cells() == [["Lake", "Calm"], ["Harbour", "Busy"]]
-        assert edited == [(1, 1, "Busy", ["Harbour"])]
+        assert edited == [(1, 1, "Busy", ["Harbour"]), (1, 1, "Busy", ["Harbour", "Busy"])]
         # its row moved nowhere: it stays selected
         assert view.places.selected_rows == [1]
 
@@ -2680,8 +2682,7 @@ async def test_f2_or_a_double_click_edits_a_row_s_editable_cells_keeping_the_sel
         await pilot.press("ctrl+a", *"Windy", "escape")
         await pilot.pause()
         assert not isinstance(app.screen, ComposeRowEditor)
-        assert view.places.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
-        assert edited == [(1, 1, "Busy", ["Harbour"])]
+        assert (view.places.rows, len(edited)) == ([["Lake", "Calm"], ["Harbour", "Busy"]], 2)
 
         # the app answers with its rows sorted by note: the cursor follows the lake
         def answer(row: int, column: int, text: str) -> None:

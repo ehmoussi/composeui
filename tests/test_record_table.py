@@ -71,15 +71,21 @@ def test_an_edit_emits_the_records_then_shows_the_new_one_still_selected(
     table.selected_rows = [1]
     emitted: list[tuple[Room, Room, list[Room]]] = []
     table.record_edited.connect(lambda old, new: emitted.append((old, new, table.records)))
+    applied: list[tuple[int, int, str, list[Room]]] = []
+    table.cell_edit_applied.connect(
+        lambda row, column, text: applied.append((row, column, text, table.records))
+    )
     hall, kitchen = table.records
 
-    table.emit_cell_edited(1, column, text)
+    assert table.edit_cell(1, column, text)
 
     # emitted while the table still holds the old record
     assert emitted == [(kitchen, edited, [hall, kitchen])]
     assert table.records == [hall, edited]
     assert table.rows[1] == cells
     assert table.selected_record == edited
+    # then once it holds the new one, with the cell's text as the record shows it
+    assert applied == [(1, column, cells[column], [hall, edited])]
 
 
 def test_records_the_app_assigns_answer_an_edit_keeping_its_record_selected(
@@ -92,10 +98,13 @@ def test_records_the_app_assigns_answer_an_edit_keeping_its_record_selected(
         table.records = sorted([new, table.records[1]], key=lambda room: room.name)
 
     table.record_edited.connect(sort_by_name)
-    table.emit_cell_edited(0, 0, "Pantry")
+    applied: list[int] = []
+    table.cell_edit_applied.connect(lambda row, _column, _text: applied.append(row))
+    assert not table.edit_cell(0, 0, "Pantry")
 
     assert [room.name for room in table.records] == ["Kitchen", "Pantry"]
     assert table.selected_record == Room("Pantry", 18)
+    assert applied == []  # the app's records, not the user's edit
 
 
 @pytest.mark.parametrize(("column", "text"), [(1, "warm"), (2, "2.5"), (3, "yes")])
@@ -106,10 +115,12 @@ def test_a_cell_that_doesn_t_parse_refuses_the_edit_and_says_why(
     records, rows = table.records, table.rows
     emitted: list[Room] = []
     table.record_edited.connect(lambda _old, new: emitted.append(new))
+    applied: list[int] = []
+    table.cell_edit_applied.connect(lambda row, _column, _text: applied.append(row))
 
-    table.emit_cell_edited(1, column, text)
+    assert not table.edit_cell(1, column, text)
 
-    assert (table.records, table.rows, emitted) == (records, rows, [])
+    assert (table.records, table.rows, emitted, applied) == (records, rows, [], [])
     header = table.headers[column]
     assert main_view.status_bar.message == f'{header}: "{text}" isn\'t a valid value'
     # in the app's language too
@@ -236,10 +247,13 @@ def test_a_column_s_widgets_edit_its_records_and_check_every_shown_row() -> None
     # checking every shown row edits each record, the selection staying on its row
     edited: list[Variable] = []
     table.record_edited.connect(lambda _old, new: edited.append(new))
+    applied: list[tuple[int, int, str]] = []
+    table.cell_edit_applied.connect(lambda row, column, text: applied.append((row, column, text)))
     table.filters = {1: "!Width"}
     table.selected_rows = [0]
     table.check_all(0, is_checked=True)
     assert edited == [Variable("Length", Role.OUTPUT, is_kept=True)]
+    assert applied == [(0, 0, "True")]
     assert [variable.is_kept for variable in table.records] == [True, True, False]
     assert (table.column_checked(0), table.is_checked(2, 0)) == (True, False)
     assert table.selected_rows == [0]

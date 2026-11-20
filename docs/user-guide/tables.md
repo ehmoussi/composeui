@@ -29,6 +29,11 @@ runs: RecordTableView[Run] = child(
   the new record.
 - **Refused edits.** When a cell does not parse, the table refuses the edit and says why in the
   status bar.
+- **After an edit.** `record_edited`, and `cell_edited` on any table, emit before the table
+  holds the edit, so that a callback can refuse it or assign other rows. To read the new
+  records, connect `cell_edit_applied`: it emits the row, the column, and the cell's text once
+  the table holds the edit. It does not emit for a refused edit, or when a callback assigned
+  the rows or the records.
 
 The study saves and loads the records by their type. So build the table as
 `RecordTableView[Run]`, or subclass it.

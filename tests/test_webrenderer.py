@@ -8733,6 +8733,10 @@ def places() -> Iterator[_Places]:
 
 def test_editing_a_cell_swaps_in_its_field_until_its_text_is_posted(places: _Places) -> None:
     table, table_id = places.table, places.table_id
+    applied: list[tuple[int, int, str, list[str]]] = []
+    table.cell_edit_applied.connect(
+        lambda row, column, text: applied.append((row, column, text, table.rows[row]))
+    )
     page = places.client.get("/").text
     # only the notes are editable, the harbour's too though its row is short of it
     assert _editable_cells(page, table_id) == 2
@@ -8744,6 +8748,8 @@ def test_editing_a_cell_swaps_in_its_field_until_its_text_is_posted(places: _Pla
     body = places.post("edit", "1", "1", "Busy").text
     assert table.rows == [["Lake", "Calm"], ["Harbour", "Busy"]]
     assert places.edited == [(1, 1, "Busy", ["Harbour"])]
+    # then the row holds the edit
+    assert applied == [(1, 1, "Busy", ["Harbour", "Busy"])]
     # the row moved nowhere: it stays selected
     assert table.selected_rows == [1]
     # the cell is text again
@@ -8900,6 +8906,10 @@ def test_a_table_s_cell_widgets_post_their_edits_and_clicks() -> None:
         events: list[tuple[int, ...] | tuple[int, int, str]] = []
         table.cell_edited.connect(lambda row, column, text: events.append((row, column, text)))
         table.cell_clicked.connect(lambda row, column: events.append((row, column)))
+        applied: list[tuple[int, int, str]] = []
+        table.cell_edit_applied.connect(
+            lambda row, column, _text: applied.append((row, column, table.rows[row][column]))
+        )
 
         def post(event: str, **values: str) -> str:
             return str(client.post(f"/widget/{table_id}", data={"event": event, **values}).text)
@@ -8915,7 +8925,7 @@ def test_a_table_s_cell_widgets_post_their_edits_and_clicks() -> None:
 
         # a check box's change: only the check-all box follows, the box itself not swapped
         body = post("check", row="1", column="0", checked="on")
-        assert table.rows[1][0] == "True"
+        assert applied == [(1, 0, "True")]
         _swapped(body, f"{table_id}-head")
         assert "checked" in _element(body, f"{table_id}-check-all-0").attributes
         assert _find(body, f"{table_id}-cell-1-0") is None
