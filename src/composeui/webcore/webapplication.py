@@ -370,6 +370,9 @@ def create_reloaded_starlette_app() -> Starlette:
     app built inline, connected or configured by the program's `main()` comes back just
     as it was.
     """
+    # first: the programs that the app starts, as soon as it runs, inherit the environment,
+    # and may show it to a user. The next process gets the key from the reloader's.
+    secret_key = os.environ.pop(_SIGNING_VARIABLE)
     kind, _, name = os.environ[_RELOAD_ENTRY_VARIABLE].partition(":")
     spec = (
         importlib.util.find_spec(name)
@@ -402,7 +405,7 @@ def create_reloaded_starlette_app() -> Starlette:
         raise RuntimeError(msg)
     return apps[0].create_starlette_app(
         saved_sessions=Path(os.environ[_SAVED_SESSIONS_VARIABLE]),
-        secret_key=os.environ[_SIGNING_VARIABLE],
+        secret_key=secret_key,
     )
 
 

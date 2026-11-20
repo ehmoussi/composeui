@@ -5769,6 +5769,40 @@ def test_reload_serves_the_app_a_script_builds_again(
     assert 'id="cui-reload"' in page
 
 
+def test_a_program_that_a_reloaded_app_starts_doesn_t_get_the_cookie_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # the program could show its environment to a user, e.g. in a console
+    seen = tmp_path / "seen.txt"
+    script = tmp_path / "hello.py"
+    script.write_text(
+        "import subprocess, sys\n"
+        "subprocess.run([sys.executable, '-c', 'import os, sys;"
+        ' open(sys.argv[1], "w").write(os.environ.get("COMPOSEUI_WEB_COOKIE_SIGNING", ""))\','
+        f" {str(seen)!r}], check=True)\n" + _HELLO_SCRIPT
+    )
+    program = types.ModuleType("__main__")
+    program.__file__ = str(script)
+    monkeypatch.setitem(sys.modules, "__main__", program)
+    monkeypatch.setattr("sys.argv", ["hello", "--reload"])
+    _restore_reload_variables(monkeypatch)
+    keys: list[str] = []
+
+    def serve(app: str, **_: Any) -> None:
+        keys.append(os.environ["COMPOSEUI_WEB_COOKIE_SIGNING"])
+        # what uvicorn's reloaded process does with it, without spawning one
+        with _Browser(import_from_string(app)()) as client:
+            assert client.get("/").status_code == 200
+
+    monkeypatch.setattr("composeui.webcore.webapplication.uvicorn.run", serve)
+
+    WebApplication(build_main_view=HelloMainView).run()
+
+    (key,) = keys
+    assert key != ""  # the reloaded process had it
+    assert seen.read_text() == ""
+
+
 def test_reload_refuses_a_program_it_can_t_run_again(monkeypatch: pytest.MonkeyPatch) -> None:
     # e.g. `python -c`: neither a module nor a script
     monkeypatch.setitem(sys.modules, "__main__", types.ModuleType("__main__"))

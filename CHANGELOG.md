@@ -48,6 +48,9 @@ backends' modules included, can change in any release without an entry here.
   to one row. A page wider than the window scrolls sideways. A page in a `Router` also fills
   the window's height now. A view that scrolls within itself, such as a `MarkdownView`,
   reaches the bottom of the window.
+- On the web with `--reload`, a program that the app starts no longer inherits the key that
+  signs the session cookies. A program that showed its environment to a user, for example in a
+  `ConsoleView`, showed the key.
 
 ## [0.4.0] - 2026-11-19
 
