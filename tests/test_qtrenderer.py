@@ -172,7 +172,14 @@ from tests.maps import MapMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.markup import MARKUP, MarkupMainView
 from tests.metrics import JobsMainView
-from tests.pages import InputsPage, NotesMainView, PagesMainView
+from tests.pages import (
+    ColumnsMainView,
+    DocumentSidebarMainView,
+    DocumentTabMainView,
+    InputsPage,
+    NotesMainView,
+    PagesMainView,
+)
 from tests.partial import PartialMainView, UnregisteredView
 from tests.ranges import FIRST_DAY, RangesMainView
 from tests.settingsdialog import NO_FOLDER, SettingsMainView
@@ -778,6 +785,72 @@ def test_a_page_taller_than_the_window_scrolls_rather_than_squeezing_its_views(
     page = _widget(view.router.notes)
     assert isinstance(page, QScrollArea)
     assert page.verticalScrollBar().isVisible()
+
+
+def test_a_column_on_a_short_page_is_as_tall_as_its_views(qtbot: QtBot) -> None:
+    view = ColumnsMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(1100, 800)
+    window.show()
+    qtbot.waitExposed(window)
+    page = view.router.header
+    header, name = _widget(page.header), _widget(page.name)
+    # the page's spare height goes under its views, not between its header and the field
+    assert header.height() == header.sizeHint().height()
+    header_bottom = header.mapTo(window, header.rect().bottomLeft()).y()
+    assert name.mapTo(window, name.rect().topLeft()).y() - header_bottom < 20
+
+
+@pytest.mark.parametrize(
+    ("main_view_type", "document_of"),
+    [
+        (DocumentTabMainView, lambda view: view.tabs.document.help),
+        (DocumentSidebarMainView, lambda view: view.side.help),
+    ],
+    ids=["tab", "sidebar"],
+)
+def test_a_document_takes_the_spare_height_of_its_tab_or_sidebar(
+    qtbot: QtBot, main_view_type: type[MainView], document_of: Callable[[Any], View]
+) -> None:
+    view = main_view_type()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(1100, 800)
+    window.show()
+    qtbot.waitExposed(window)
+    browser = _widget(document_of(view))
+    # it scrolls within itself: down to the bottom of the column holding it
+    column = browser.parentWidget()
+    assert column is not None
+    qtbot.waitUntil(lambda: column.height() - browser.geometry().bottom() < 15)
+
+
+def test_a_column_s_document_takes_the_spare_height_while_shown(qtbot: QtBot) -> None:
+    view = ColumnsMainView()
+    document = view.router.help.help.help
+    document.is_visible = False
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(1100, 800)
+    window.show()
+    qtbot.waitExposed(window)
+    view.router.navigate("help")
+    column, browser = _widget(view.router.help.help), _widget(document)
+
+    # hidden when the page was built: the column is as tall as its title
+    qtbot.waitUntil(lambda: column.height() == column.sizeHint().height())
+    # shown: it scrolls within itself, down to the window's bottom
+    document.is_visible = True
+    qtbot.waitUntil(
+        lambda: window.height() - browser.mapTo(window, browser.rect().bottomLeft()).y() < 40
+    )
+    # hidden again: the column gives the height back
+    document.is_visible = False
+    qtbot.waitUntil(lambda: column.height() == column.sizeHint().height())
 
 
 def test_a_row_holding_a_list_and_a_tree_takes_the_spare_height_of_the_window(

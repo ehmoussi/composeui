@@ -36,6 +36,7 @@ from composeui.qtcore._renderers.containers import (
 from composeui.qtcore._renderers.content import QtStatusBarRenderer
 from composeui.qtcore._renderers.files import _file_filters
 from composeui.qtcore.qtrenderer import QtWidgetRenderer
+from composeui.qtcore.widgets.qcolumnlayout import QColumnLayout
 from composeui.qtcore.widgets.qplaintext import plain_tool_tip
 from composeui.qtcore.widgets.qsidebar import QSidebar
 
@@ -310,7 +311,7 @@ class QtMainRenderer(
     @staticmethod
     def _add_child_widgets(view: MainView, rendered_object: QMainWindow) -> None:
         central_widget = QWidget()
-        central_layout = QVBoxLayout()
+        central_layout = QColumnLayout()
         central_widget.setLayout(central_layout)
         for child_view in view.children_views:
             if QtMainRenderer._add_window_part(child_view, rendered_object):
@@ -321,11 +322,11 @@ class QtMainRenderer(
                 assert toolbar is not None
                 assert stack is not None
                 rendered_object.addToolBar(toolbar)
-                # the window's spare height, for its pages: each scrolls once too tall
-                central_layout.addWidget(stack, 1)
+                # it takes the window's spare height, for its pages: each scrolls once too tall
+                central_layout.addWidget(stack)
             else:
                 _add_content_widget(central_layout, child_view)
-        central_layout.addStretch()
+        central_layout.add_spare_space()
         central_layout.update()
         rendered_object.setCentralWidget(central_widget)
 

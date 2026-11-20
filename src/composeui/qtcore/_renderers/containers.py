@@ -40,6 +40,7 @@ from composeui.core.view import (
 )
 from composeui.qtcore._renderers.forms import _widget_of
 from composeui.qtcore.qtrenderer import QtWidgetRenderer
+from composeui.qtcore.widgets.qcolumnlayout import QColumnLayout
 from composeui.qtcore.widgets.qconsole import QConsoleBox
 from composeui.qtcore.widgets.qexpander import QExpander
 from composeui.qtcore.widgets.qpagearea import QPageArea
@@ -78,8 +79,12 @@ def _set_dialog_parent(dialog: View, widget: QWidget, parent: QWidget | None) ->
     widget.setVisible(dialog.is_visible)
 
 
-def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
-    """Add `view`'s widget to a column of content: a window's, or a page's."""
+def _add_content_widget(layout: QColumnLayout, view: View) -> None:
+    """Add `view`'s widget to a column of content: a window's, a page's, a tab's or a sidebar's.
+
+    A view that grows taller, such as one scrolling within itself or a row or a column
+    holding one, takes the column's height to spare (see `QColumnLayout`).
+    """
     widget = _widget_of(view)
     if widget is None:
         return
@@ -88,14 +93,9 @@ def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
         # its router's, maybe while open, which another parent would hide
         if widget.parentWidget() is None:
             _set_dialog_parent(view, widget, layout.parentWidget())
-    elif isinstance(view, PageView):
-        # it scrolls within itself: it takes the spare height, and insets its own views
-        layout.addWidget(widget, 1)
-    elif isinstance(view, FormView) and not isinstance(view, GroupFormView):
-        # a plain form insets its rows with its own layout's margins
-        inner = widget.layout()
-        expands = inner is not None and bool(inner.expandingDirections() & Qt.Orientation.Vertical)
-        layout.addWidget(widget, 1 if expands else 0)
+    elif isinstance(view, (PageView, FormView)) and not isinstance(view, GroupFormView):
+        # a page insets its own views, and a plain form its rows, with its layout's margins
+        layout.addWidget(widget)
     else:
         # inset like a plain form's rows
         inset = QVBoxLayout()
@@ -108,15 +108,7 @@ def _add_content_widget(layout: QVBoxLayout, view: View) -> None:
             inset.addWidget(widget, alignment=Qt.AlignmentFlag.AlignLeft)
         else:
             inset.addWidget(widget)
-        # a document, a list or a tree scrolls within itself, and so does a row holding one:
-        # it takes the column's spare height, ahead of the spacer under the views
-        inner = widget.layout()
-        expands = isinstance(widget, _SCROLLING_WIDGETS) or (
-            isinstance(view, HorizontalView)
-            and inner is not None
-            and bool(inner.expandingDirections() & Qt.Orientation.Vertical)
-        )
-        layout.addLayout(inset, 1 if expands else 0)
+        layout.addLayout(inset)
 
 
 class QtPageRenderer(QtWidgetRenderer[PageView, QPageArea]):
@@ -125,12 +117,12 @@ class QtPageRenderer(QtWidgetRenderer[PageView, QPageArea]):
     def render(self) -> None:
         if self._rendered_object is None:
             column = QWidget()
-            layout = QVBoxLayout(column)
+            layout = QColumnLayout(column)
             # the window's layout already insets the page
             layout.setContentsMargins(0, 0, 0, 0)
             for view in self._view.content_views:
                 _add_content_widget(layout, view)
-            layout.addStretch()
+            layout.add_spare_space()
             self._rendered_object = QPageArea(column)
             self.refresh()
 
@@ -171,7 +163,7 @@ class QtVerticalRenderer(QtWidgetRenderer[VerticalView, QWidget]):
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QWidget()
-            layout = QVBoxLayout(self._rendered_object)
+            layout = QColumnLayout(self._rendered_object)
             # the row holding the column already insets it
             layout.setContentsMargins(0, 0, 0, 0)
             for view in self._view.children_views:
@@ -179,7 +171,7 @@ class QtVerticalRenderer(QtWidgetRenderer[VerticalView, QWidget]):
                 if widget is not None:
                     layout.addWidget(widget)
             # height to spare, next to a taller view, goes below the views, not between them
-            layout.addStretch()
+            layout.add_spare_space()
             self.refresh()
 
 
@@ -272,7 +264,7 @@ class QtExpanderRenderer(QtWidgetRenderer[ExpanderView, QExpander]):
 class QtListRenderer(QtWidgetRenderer["ListView[Any]", QScrollArea]):
     """The records' views one above the other, added, moved and removed as they change.
 
-    In a scroll area taking the column's spare height (see `_add_content_widget`): the
+    In a scroll area taking the column's spare height (see `QColumnLayout`): the
     window keeps its height however many records there are.
     """
 
@@ -362,12 +354,12 @@ class QtTabPageRenderer(QtWidgetRenderer[TabPage, QWidget]):
         # built apart, then shown with the tab: added to the tab, maybe on screen already,
         # each view would only show at the event loop's next turn
         content = QWidget()
-        content_layout = QVBoxLayout(content)
+        content_layout = QColumnLayout(content)
         for view in self._view.children_views:
             view.render(RendererType.QT)
             _add_content_widget(content_layout, view)
         # height to spare goes below the views, not between them
-        content_layout.addStretch()
+        content_layout.add_spare_space()
         layout.addWidget(content)
         content.show()
 

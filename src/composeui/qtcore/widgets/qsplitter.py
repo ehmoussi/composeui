@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 from qtpy.QtCore import Qt
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import QPainter, QPalette
-from qtpy.QtWidgets import QSplitter, QSplitterHandle
+from qtpy.QtWidgets import QSizePolicy, QSplitter, QSplitterHandle
 
 if TYPE_CHECKING:
     from qtpy.QtGui import QKeyEvent, QMouseEvent, QPaintEvent
@@ -64,6 +64,14 @@ class QComposeSplitter(QSplitter):
 
     #: the user dropped a handle they dragged, or moved one with a key
     moved_by_user = QtSignal()
+
+    def __init__(self, orientation: Qt.Orientation) -> None:
+        super().__init__(orientation)
+        # its panes are as tall as it: it takes a column's height to spare, as a view
+        # scrolling within itself does
+        policy = self.sizePolicy()
+        policy.setVerticalPolicy(QSizePolicy.Policy.Expanding)
+        self.setSizePolicy(policy)
 
     def createHandle(self) -> QSplitterHandle:  # noqa: N802
         return QSplitterBorder(self.orientation(), self)
