@@ -10,8 +10,8 @@ view.
 
 ## Label
 
-A `LabelView` shows a line of read-only `text`, for example a caption or a result. Code sets
-the text. The user cannot edit it.
+A `LabelView` shows read-only `text`, for example a caption or a result. Code sets the text.
+The user cannot edit it. Each line break (`\n`) in the text starts a new line, on every backend.
 
 ```python
 from composeui.core.view import LabelView, child

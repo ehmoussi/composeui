@@ -190,7 +190,7 @@ rows only.
   is `None` or one of `values`. `value_changed` reports the user's choice. A `None` value
   selects nothing, unless `None` is one of `values`: then it selects that choice, such as
   the "All" of a filter, `{"All regions": None, "North": "north"}`.
-- **A [`LabelView`](widgets.md#label)** shows a line of read-only text, for example a result.
+- **A [`LabelView`](widgets.md#label)** shows read-only text, for example a result.
 - **The [status bar](#the-status-bar)** of the main view shows a short message, for
   example the result of a form.
 
