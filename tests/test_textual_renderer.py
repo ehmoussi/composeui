@@ -2457,6 +2457,31 @@ async def test_pressing_the_button_runs_what_its_view_connects() -> None:
 
 
 @pytest.mark.asyncio
+async def test_a_long_label_wraps_to_its_page_s_width_rather_than_widening_it() -> None:
+    view = PagesMainView()
+    view.router.results.total.text = " ".join(["A sentence longer than the screen is wide."] * 8)
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        view.router.navigate("results")
+        await pilot.pause()
+        assert isinstance(view.router.results.total.renderer, TextualWidgetRenderer)
+        label = view.router.results.total.renderer.widget
+        assert isinstance(view.router.results.renderer, TextualWidgetRenderer)
+        page = view.router.results.renderer.widget
+        assert label is not None
+        assert page is not None
+
+        # every word in view, on several lines: no sideways scroll to read the end of the text
+        assert label.region.height > 1
+        assert label.region.right <= page.region.right
+        assert page.max_scroll_x == 0
+
+
+@pytest.mark.asyncio
 async def test_a_confirmation_is_a_modal_screen_answered_with_its_buttons() -> None:
     view = DialogsMainView()
     view.confirm_clear.open()  # before the app runs: shown once it does

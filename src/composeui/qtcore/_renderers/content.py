@@ -38,6 +38,8 @@ class QtLabelRenderer(QtWidgetRenderer[LabelViewLike, QLabel]):
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = plain_label()
+            # a long line wraps to its page's width, as on the web, rather than widening the page
+            self._rendered_object.setWordWrap(True)
             self.refresh()
 
     @staticmethod

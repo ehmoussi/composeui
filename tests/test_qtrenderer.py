@@ -787,6 +787,27 @@ def test_a_page_taller_than_the_window_scrolls_rather_than_squeezing_its_views(
     assert page.verticalScrollBar().isVisible()
 
 
+def test_a_long_label_wraps_to_its_page_s_width_rather_than_widening_it(qtbot: QtBot) -> None:
+    view = PagesMainView()
+    view.router.results.total.text = " ".join(["A sentence longer than the window is wide."] * 8)
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(800, 480)
+    window.show()
+    qtbot.waitExposed(window)
+    view.router.navigate("results")
+    page = _widget(view.router.results)
+    assert isinstance(page, QScrollArea)
+    label = _widget(view.router.results.total)
+    assert isinstance(label, QLabel)
+
+    # every word in view, on several lines: no sideways scroll to read the end of the text
+    qtbot.waitUntil(lambda: label.height() >= 2 * label.fontMetrics().height())
+    assert page.horizontalScrollBar().maximum() == 0
+    assert label.mapTo(page, label.rect().topRight()).x() <= page.viewport().width()
+
+
 def test_a_column_on_a_short_page_is_as_tall_as_its_views(qtbot: QtBot) -> None:
     view = ColumnsMainView()
     view.render(RendererType.QT)

@@ -42,6 +42,11 @@ backends' modules included, can change in any release without an entry here.
 
 ### Fixed
 
+- A `LabelView` wraps a long line to the width of its page on every backend, and breaks a
+  word longer than a line, such as a path. Before, a long line on Qt and Textual, and a long
+  word on the web, widened the page, which scrolled sideways and hid the end of the text. On
+  Qt, a window with a long label can now open narrower, down to `MainView.minimum_width`
+  (720 px by default), with the label wrapped. Set `minimum_width` to open it wider.
 - A text field's `text_changed` and `text_edited` report the user's changes only, on every
   backend. On Textual, text or a value that code set in a text, number, date or path field
   emitted both, as if the user had typed it. On Qt, a date set by code emitted
