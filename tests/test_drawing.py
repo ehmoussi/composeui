@@ -13,6 +13,7 @@ from attrs import Factory, evolve
 from hypothesis import given
 from hypothesis import strategies as st
 from rich.cells import cell_len
+from typing_extensions import override
 
 from composeui.core.model import InvalidStateError
 from composeui.core.registry import RendererType
@@ -1198,12 +1199,15 @@ class _Elements(HTMLParser):
         self.elements: list[tuple[str, dict[str, str]]] = []
         self.texts: list[str] = []
 
+    @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self.elements.append((tag, {name: value or "" for name, value in attrs}))
 
+    @override
     def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self.handle_starttag(tag, attrs)
 
+    @override
     def handle_data(self, data: str) -> None:
         self.texts.append(data)
 

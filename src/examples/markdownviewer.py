@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Optional
 
 import attrs
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.application import run
 from composeui.core.view import (
@@ -42,6 +43,7 @@ class MarkdownViewerMainView(MainView):
     #: the file the document shows, None before the first one; not study data
     _shown: Optional[Path] = attrs.field(default=None, init=False, metadata={OMIT: True})
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.markdown_file.placeholder = self.tr("The path of a Markdown file")
@@ -50,10 +52,12 @@ class MarkdownViewerMainView(MainView):
         self.markdown_file.reload_clicked.connect(self._reload)
         self.document.text = self.tr("Open a Markdown file: type its path, or pick it with *…*.")
 
+    @override
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--markdown", type=Path, metavar="FILE", help="Show the Markdown FILE.")
 
+    @override
     def apply_arguments(self, args: argparse.Namespace) -> None:
         if args.markdown is not None:
             self.markdown_file.text = str(args.markdown)

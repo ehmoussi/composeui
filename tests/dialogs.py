@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.view import (
     ActionView,
@@ -19,6 +20,7 @@ from composeui.core.view import (
 class EditMenu(Menu):
     clear: ActionView = Factory(ActionView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = "Edit"
@@ -28,6 +30,7 @@ class EditMenu(Menu):
 
 @define_view
 class ClearDialog(DialogView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.kind = DialogKind.CONFIRM
@@ -45,6 +48,7 @@ class DialogsMainView(MainView):
     name: LabelView = Factory(LabelView)
     confirm_clear: ClearDialog = Factory(ClearDialog)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.name.text = "Ada"

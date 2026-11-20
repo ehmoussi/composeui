@@ -6,6 +6,7 @@ import functools
 from typing import TYPE_CHECKING
 
 import attrs
+from typing_extensions import override
 
 from composeui.core.translation import T
 from composeui.core.view import (
@@ -38,15 +39,18 @@ class PipeExpander(ExpanderView):
 
 @define_view
 class PipeList(ListView[Pipe]):
+    @override
     def build_item(self, item: Pipe) -> View:
         view = PipeExpander(title=item.name)
         self.update_item(view, item)
         view.delete.clicked.connect(functools.partial(self._delete, item.name))
         return view
 
+    @override
     def item_key(self, item: Pipe) -> Hashable:
         return item.name
 
+    @override
     def update_item(self, view: View, item: Pipe) -> bool:
         assert isinstance(view, PipeExpander)
         view.length.text = f"Length: {item.length:g} m"
@@ -67,6 +71,7 @@ class PipesMainView(MainView):
     add: ButtonView = child(ButtonView, text="Add a pipe")
     pipes: PipeList = attrs.Factory(PipeList)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.add.clicked.connect(self._add)

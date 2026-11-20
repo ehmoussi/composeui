@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Optional
 
 from qtpy.QtCore import Qt, QUrl
 from qtpy.QtCore import Signal as QtSignal
@@ -15,6 +15,7 @@ from composeui.qtcore.widgets.qplaintext import plain_label
 
 if TYPE_CHECKING:
     from qtpy.QtGui import QResizeEvent
+    from qtpy.QtQuick import QQuickItem
 
 
 class _MapCanvas(QQuickWidget):
@@ -60,7 +61,7 @@ class QMap(QWidget):
     @property
     def root(self) -> Any:
         """Get the map's QML root after loading its component."""
-        root = self.map.rootObject()
+        root: Optional[QQuickItem] = self.map.rootObject()  # None when the QML failed
         if root is None:
             message = "; ".join(error.toString() for error in self.map.errors())
             message = f"Cannot load the Qt Location map: {message}"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.application import run
 from composeui.core.registry import RendererType
@@ -16,6 +17,7 @@ from composeui.core.view import (
 
 @define_view
 class NameRowView(LabelRowInputView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Name"
@@ -29,6 +31,7 @@ class NameRowView(LabelRowInputView):
 
 @define_view
 class SizeRowView(LabelRowFloatInputView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Size"
@@ -38,6 +41,7 @@ class SizeRowView(LabelRowFloatInputView):
 
 @define_view
 class ShapeRowView(LabelRowRadioGroupView[str]):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Shape"
@@ -50,6 +54,7 @@ class DemoFormView(GroupFormView):
     size: SizeRowView = Factory(SizeRowView)
     shape: ShapeRowView = Factory(ShapeRowView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = "Demo"
@@ -62,6 +67,7 @@ class TextualDemoMainView(MainView):
 
     form: DemoFormView = Factory(DemoFormView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.form.shape.value_changed.connect(self._display_shape_status)

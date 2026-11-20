@@ -16,6 +16,7 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from typing_extensions import override
 
 from composeui.core._views.content import follow_match
 from composeui.core.view import find_in_lines
@@ -183,7 +184,8 @@ class QSearchField(QLineEdit):
 
     stepped = Signal(bool)
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+    @override
+    def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             self.stepped.emit(bool(event.modifiers() & Qt.KeyboardModifier.ShiftModifier))
         elif event.key() == Qt.Key.Key_Escape:

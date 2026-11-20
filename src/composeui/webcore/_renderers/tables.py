@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any, Callable, ClassVar, Final
 
 import attrs
 from markupsafe import Markup, escape
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core._views.files import is_within_roots
 from composeui.core._views.tables import PLAIN_CELL, SourceTableByPosition, split_pattern
@@ -183,6 +183,7 @@ class WebFilterBarRenderer(WebRenderer[TView]):
     def _whole_html(self, *, oob: bool) -> Markup:
         """Render the whole table, its bar and its parts."""
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         parts, self._dirty_parts = self._dirty_parts, set()
         is_whole, self._is_whole_dirty = self._is_whole_dirty or not oob or not parts, False
@@ -210,6 +211,7 @@ class WebFilterBarRenderer(WebRenderer[TView]):
             render(oob=True) for part, render in renders.items() if part in parts
         )
 
+    @override
     def _mark_dirty(self, view: TView, rendered_object: str, value: Any) -> None:
         self._is_whole_dirty = True
         super()._mark_dirty(view, rendered_object, value)
@@ -570,15 +572,18 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         self._mark_dirty(view, rendered_object, value)
 
     @property
+    @override
     def _filtered(self) -> FilteredLike:
         return self._view
 
+    @override
     def _count_text(self) -> str:
         shown, total = len(self._view.shown_rows), len(self._view.rows)
         if shown == total:
             return ""
         return self._view.filter_texts.get("count", "").format(shown=shown, total=total)
 
+    @override
     def _own_parts(self) -> dict[str, Callable[..., Markup]]:
         return {
             "head": self._head_html,
@@ -587,6 +592,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             "files-list": self._files_list_html,
         }
 
+    @override
     def _whole_html(self, *, oob: bool) -> Markup:
         grid = Markup(' role="grid" aria-multiselectable="true"') if self._is_multiple() else ""
         # a widget that `cell_widget` gave a cell since may have opened it: see `_mark_files`
@@ -1087,6 +1093,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         # the picker only uploaded: the cell shows the path once swapped back
         self._mark_dirty(self._view, self.widget_id, self._view.rows)
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event in ("start_edit", "edit"):
             self._edit(event, form)
@@ -1374,6 +1381,7 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
 
     #: its `dispatch` decides by event: a disabled table still scrolls and is read
     @property
+    @override
     def takes_events(self) -> bool:
         return True
 
@@ -1416,9 +1424,11 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
         )
 
     @property
+    @override
     def _filtered(self) -> FilteredLike:
         return self._by_position
 
+    @override
     def _count_text(self) -> str:
         return self._view.count_text
 
@@ -1429,9 +1439,11 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
 
     _parts_inside = MappingProxyType({**_BAR_PARTS_INSIDE, "frame": ("rows",)})
 
+    @override
     def _own_parts(self) -> dict[str, Callable[..., Markup]]:
         return {"frame": self._frame_html, "rows": self._rows_html, "copied": self._copied_html}
 
+    @override
     def _whole_html(self, *, oob: bool) -> Markup:
         return Markup(
             '<div {root_attributes} class="flex flex-col gap-2">{bar_html}'
@@ -1447,6 +1459,7 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
             export=self._view.texts.get("export", ""),
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         # a scroll only reads: a disabled table still shows the rows scrolled to
         if not self.is_enabled and event != "scroll":

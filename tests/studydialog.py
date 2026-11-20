@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 
 import attrs
+from typing_extensions import override
 
 from composeui.core.view import (
     ButtonView,
@@ -34,6 +35,7 @@ class OpenStudyDialog(ContentDialogView[FolderView]):
 
     content: FolderView = attrs.Factory(FolderView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = "Open a study"
@@ -53,6 +55,7 @@ class OpenStudyDialog(ContentDialogView[FolderView]):
         (row,) = self.content.entries.selected_rows
         return str(PurePosixPath(self.content.folder.text) / self.content.entries.rows[row][0])
 
+    @override
     def accept(self) -> None:
         if self.is_accept_enabled and self.selected in FOLDERS:
             self.show(self.selected)
@@ -75,6 +78,7 @@ class StudyDialogMainView(MainView):
     study: LabelView = child(LabelView, text="No study")
     open_dialog: OpenStudyDialog = attrs.Factory(OpenStudyDialog)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.open.clicked.connect(self.open_dialog.open)

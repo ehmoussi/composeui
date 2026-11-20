@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.view import (
     CellWidget,
@@ -62,6 +63,7 @@ class StudyFilesTableMainView(MainView):
 
     inputs: TableView = Factory(TableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.inputs.headers = ["Input", "File"]
@@ -86,6 +88,7 @@ class StudyPathsTableView(TableView):
         self._folders, self._roots = tuple(folders), tuple(roots)
         self.rows = rows
 
+    @override
     def cell_widget(self, row: int, column: int) -> Optional[CellWidget]:
         if column != 1:
             return None
@@ -103,6 +106,7 @@ class StudyPathsMainView(MainView):
 
     inputs: StudyPathsTableView = Factory(StudyPathsTableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.inputs.headers = ["Input", "Path"]

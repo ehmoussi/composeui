@@ -7,6 +7,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from markupsafe import Markup
+from typing_extensions import override
 
 from composeui.core._views.actions import (
     ExitAppAction,
@@ -98,6 +99,7 @@ class WebMenuRenderer(WebRenderer[Menu]):
             }
         )
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         oob_attribute = Markup(' hx-swap-oob="true"') if oob else ""
         has_save = any(isinstance(child, SaveAction) for child in self._view.children_views)
@@ -194,11 +196,13 @@ class WebActionRenderer(WebRenderer[ActionView]):
         if isinstance(view, PickFileAction):
             self._refresh_dispatcher["extensions"] = self._mark_dirty  # the picker's types
 
+    @override
     def _mark_dirty(self, view: ActionView, rendered_object: str, value: Any) -> None:
         # e.g. the entry of a page outside a router: no element on the page to swap
         if self._is_shown:
             super()._mark_dirty(view, rendered_object, value)
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         self._is_shown = True
         if self.placement is Placement.OMITTED:
@@ -399,6 +403,7 @@ class WebActionRenderer(WebRenderer[ActionView]):
             label=label,
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         # `is_enabled`: an action of a disabled toolbar is disabled with it
         if event != "triggered" or not self.is_enabled:
@@ -434,6 +439,7 @@ class WebSeparatorRenderer(WebRenderer[SeparatorAction]):
         #: set by its toolbar: a bar between buttons rather than a menu's line
         self.is_in_toolbar = False
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         if self.is_in_toolbar:
             return Markup(
@@ -454,6 +460,7 @@ class WebToolBarRenderer(WebRenderer[ToolBar]):
         super().__init__(view)
         self._refresh_dispatcher.update({"title": self._mark_dirty})
 
+    @override
     def render(self) -> None:
         super().render()
         self._adopt(self._view.children_views)
@@ -464,6 +471,7 @@ class WebToolBarRenderer(WebRenderer[ToolBar]):
             elif isinstance(child.renderer, WebSeparatorRenderer):
                 child.renderer.is_in_toolbar = True
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         items = _between_items(
             [

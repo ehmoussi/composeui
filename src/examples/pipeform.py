@@ -6,6 +6,7 @@ import enum
 from pathlib import Path
 
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.application import run
 from composeui.core.view import (
@@ -35,6 +36,7 @@ from composeui.core.view import (
 
 @define_view
 class DimensionInputView(LabelRowFloatInputView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.value = 20.0
@@ -48,6 +50,7 @@ class PipeDimensionView(GroupFormView):
     width: DimensionInputView = Factory(DimensionInputView)
     half_length: DimensionInputView = Factory(DimensionInputView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.radius.label = self.tr("Radius")
@@ -68,6 +71,7 @@ class EdgeType(enum.Enum):
 
 @define_view
 class EdgeTypeView(LabelRowRadioGroupView[EdgeType]):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = self.tr("Edge Type")
@@ -85,6 +89,7 @@ class Material(enum.Enum):
 
 @define_view
 class MaterialView(LabelRowComboBoxView[Material]):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = self.tr("Material")
@@ -94,6 +99,7 @@ class MaterialView(LabelRowComboBoxView[Material]):
 
 @define_view
 class InsulatedView(LabelRowCheckBoxView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = self.tr("Insulation")
@@ -105,6 +111,7 @@ class ChamferDimensionView(GroupFormView):
     height: DimensionInputView = Factory(DimensionInputView)
     width: DimensionInputView = Factory(DimensionInputView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = self.tr("Chamfer")
@@ -116,6 +123,7 @@ class ChamferDimensionView(GroupFormView):
 class FilletDimensionView(GroupFormView):
     radius: DimensionInputView = Factory(DimensionInputView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = self.tr("Fillet")
@@ -124,6 +132,7 @@ class FilletDimensionView(GroupFormView):
 
 @define_view
 class PipeNameRowView(LabelRowInputView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = self.tr("Name")
@@ -136,6 +145,7 @@ class PipeNameRowView(LabelRowInputView):
 
 @define_view
 class CommentRowView(LabelRowTextAreaView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = self.tr("Comment")
@@ -159,6 +169,7 @@ class PipeFormView(FormView):
 
     comment: CommentRowView = Factory(CommentRowView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.insulation_thickness.label = self.tr("Insulation Thickness")
@@ -283,6 +294,7 @@ class PipePagesView(Router):
 class PipeMenu(Menu):
     reset_dimensions: ActionView = Factory(ActionView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = self.tr("Pipe")
@@ -292,6 +304,7 @@ class PipeMenu(Menu):
 
 @define_view
 class ResetDimensionsDialog(DialogView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.kind = DialogKind.CONFIRM
@@ -312,6 +325,7 @@ class PipeMainView(MainView):
     pages: PipePagesView = Factory(PipePagesView)
     confirm_reset: ResetDimensionsDialog = Factory(ResetDimensionsDialog)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         pipe_form = self.pages.inputs.pipe_form

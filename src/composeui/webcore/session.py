@@ -91,6 +91,12 @@ def _saved_uploads(file: Path) -> Path | None:
     return path if is_ours and path.is_dir() and not path.is_symlink() else None
 
 
+def _holds_upload(view: object) -> bool:
+    # an `object`: from Python 3.13, mypy finds the `__replace__` of attrs' `View` and
+    # mixin incompatible, so a view that is both looks impossible to it
+    return isinstance(view, FileUploadMixin) and view.file is not None
+
+
 class WebSession(RenderTarget):
     """A session's view tree, rendered once and then driven by its browser's requests."""
 
@@ -200,8 +206,7 @@ class WebSession(RenderTarget):
                 or any(dialog.is_visible for dialog in dialogs_in(main_view))
                 or any(view.source is not source for view, source in self._loaded_sources)
                 or any(
-                    (isinstance(view, FileUploadMixin) and view.file is not None)
-                    or (isinstance(view, ConsoleView) and view.text != "")
+                    _holds_upload(view) or (isinstance(view, ConsoleView) and view.text != "")
                     for view in _views(main_view)
                 )
                 or not main_view.can_hibernate()

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import ClassVar, Optional
 
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.view import (
     DialogView,
@@ -25,10 +26,12 @@ class Size(enum.Enum):
 
 @define_view
 class SizeRowView(LabelRowComboBoxView[Size]):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.value = Size.LARGE
 
+    @override
     def retranslate(self) -> None:
         super().retranslate()
         self.label = self.tr("Size")
@@ -37,11 +40,13 @@ class SizeRowView(LabelRowComboBoxView[Size]):
 
 @define_view
 class NameRowView(LabelRowInputView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.set_validator(self._check_name, self.text_edited)
         self.run_validator()
 
+    @override
     def retranslate(self) -> None:
         super().retranslate()
         self.label = self.tr("Name")
@@ -55,6 +60,7 @@ class ShapeFormView(GroupFormView):
     name: NameRowView = Factory(NameRowView)
     size: SizeRowView = Factory(SizeRowView)
 
+    @override
     def retranslate(self) -> None:
         super().retranslate()
         self.title = self.tr("Shape")
@@ -64,6 +70,7 @@ class ShapeFormView(GroupFormView):
 
 @define_view
 class RemoveDialog(DialogView):
+    @override
     def retranslate(self) -> None:
         super().retranslate()
         self.accept_text = self.tr("Remove")
@@ -71,6 +78,7 @@ class RemoveDialog(DialogView):
 
 @define_view
 class DiscardDialog(DialogView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         # set outside `retranslate`: the app doesn't translate it

@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, cast
 from urllib.parse import urlsplit
 
 import pytest
+from typing_extensions import override
 
 pytest.importorskip("starlette")
 pytest.importorskip("playwright.sync_api")
@@ -115,6 +116,7 @@ _NAME_HELP = "As you'd like to be greeted"
 
 
 class _BrowserHelloApp(HelloApp):
+    @override
     def setup_session(self, main_view: HelloMainView) -> None:
         main_view.status_bar.timeout = _MESSAGE_TIMEOUT
         # the name's field then described by its help and its log, its name still "Name"
@@ -157,6 +159,7 @@ class _QuickTasksApp(WebApplication[TaskMainView]):
     def __init__(self) -> None:
         super().__init__(build_main_view=TaskMainView)
 
+    @override
     def setup_session(self, main_view: TaskMainView) -> None:
         main_view.config.min_duration.value = main_view.config.max_duration.value = 1
 
@@ -218,6 +221,7 @@ class _MillionApp(WebApplication[MillionRowsMainView]):
     def __init__(self) -> None:
         super().__init__(build_main_view=MillionRowsMainView)
 
+    @override
     def setup_session(self, main_view: MillionRowsMainView) -> None:
         main_view.status_bar.timeout = 0
 
@@ -256,6 +260,7 @@ class _PlacesApp(WebApplication[EditableTableMainView]):
     def __init__(self) -> None:
         super().__init__(build_main_view=EditableTableMainView)
 
+    @override
     def setup_session(self, main_view: EditableTableMainView) -> None:
         main_view.status_bar.timeout = 0
         places = main_view.places
@@ -304,6 +309,7 @@ def rooms_base_url() -> Iterator[str]:
     """
 
     class RoomsApp(WebApplication[SortedRoomsMainView]):
+        @override
         def setup_session(self, main_view: SortedRoomsMainView) -> None:
             def count(rows: list[int]) -> None:
                 main_view.notes.rows = [[f"{len(rows)} selected"]]
@@ -444,6 +450,7 @@ class _PipesApp(WebApplication[PipesMainView]):
     def __init__(self) -> None:
         super().__init__(build_main_view=PipesMainView)
 
+    @override
     def setup_session(self, main_view: PipesMainView) -> None:
         main_view.pipes.items = PIPES
 
@@ -974,6 +981,7 @@ def test_a_stream_downloads_as_it_s_written_and_one_cut_midway_fails(browser: Br
         sink.write(b"end")
 
     class StreamApp(WebApplication[ReportMainView]):
+        @override
         def setup_session(self, main_view: ReportMainView) -> None:
             main_view.report = StreamContent(write)
 
@@ -1540,6 +1548,7 @@ class _BusyDialogsApp(WebApplication[DialogsMainView]):
     def __init__(self) -> None:
         super().__init__(build_main_view=DialogsMainView)
 
+    @override
     def setup_session(self, main_view: DialogsMainView) -> None:
         main_view.confirm_clear.is_enabled = False
 
@@ -2659,6 +2668,7 @@ class _SwappingMainView(MainView):
     change: ButtonView = child(ButtonView, text="Change")
     answer: LabelView = child(LabelView, text="0")
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.change.clicked.connect(lambda: setattr(self.answer, "text", "1"))
@@ -2726,6 +2736,7 @@ class _TwoAnswersMainView(MainView):
     second: ButtonView = child(ButtonView, text="Second")
     answer: LabelView = child(LabelView, text="none")
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.first.clicked.connect(lambda: setattr(self.answer, "text", "first"))

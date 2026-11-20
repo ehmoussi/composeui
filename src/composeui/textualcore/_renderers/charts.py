@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core import chartimage
 from composeui.core.renderer import ViewLike
@@ -57,6 +57,7 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeChart()

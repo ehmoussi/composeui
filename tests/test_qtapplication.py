@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from typing_extensions import override
 
 pytest.importorskip("qtpy.QtWidgets")
 
@@ -15,6 +16,7 @@ class _LoggedModel(Model):
     def __init__(self) -> None:
         self.closed = False
 
+    @override
     def close(self) -> None:
         self.closed = True
 

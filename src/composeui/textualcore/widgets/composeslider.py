@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Optional
 from rich.text import Text
 from textual.binding import Binding, BindingType
 from textual.widget import Widget
+from typing_extensions import override
 
 from composeui.core.signal import Signal
 from composeui.core.view import DRAG_REPORT_DELAY_MS, SliderMixin
@@ -135,6 +136,7 @@ class ComposeSlider(DragReportMixin, can_focus=True):
         self.first, self.step, self.last, self.position = first, step, last, position
         self.refresh()
 
+    @override
     def render(self) -> RenderResult:
         width = self._track_width()
         if width <= 0:
@@ -202,6 +204,7 @@ class ComposeSlider(DragReportMixin, can_focus=True):
             else:
                 self._report()
 
+    @override
     def _report(self) -> None:
         self._drop_report()
         self.moved.emit(self.shown_value)

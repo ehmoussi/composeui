@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, ClassVar, Final
 from rich.style import Style
 from rich.text import Text
 from textual.widgets import Tree
+from typing_extensions import override
 
 from composeui.core.signal import Signal
 from composeui.core.view import NodeMark
@@ -102,6 +103,7 @@ class ComposeTree(Tree["TreePath"]):
             if node.data == selected:
                 self.move_cursor(node)
 
+    @override
     def render_label(
         self, node: TextualTreeNode[TreePath], base_style: Style, style: Style
     ) -> Text:

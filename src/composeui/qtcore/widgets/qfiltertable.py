@@ -16,6 +16,7 @@ from qtpy.QtWidgets import (
     QWidget,
     QWidgetItem,
 )
+from typing_extensions import override
 
 from composeui.core._views.tables import split_pattern
 from composeui.core.view import SEARCH_DELAY_MS, as_pattern
@@ -46,9 +47,11 @@ class QFlowLayout(QLayout):
         self._spacing = spacing
         self.setContentsMargins(QMargins(0, 0, 0, 0))
 
-    def addItem(self, item: QLayoutItem) -> None:  # noqa: N802
+    @override
+    def addItem(self, item: QLayoutItem) -> None:
         self._items.append(item)
 
+    @override
     def count(self) -> int:
         return len(self._items)
 
@@ -59,29 +62,37 @@ class QFlowLayout(QLayout):
         self._items.insert(index, QWidgetItem(widget))
         self.invalidate()
 
-    def itemAt(self, index: int) -> QLayoutItem | None:  # noqa: N802
+    @override
+    def itemAt(self, index: int) -> QLayoutItem | None:
         return self._items[index] if 0 <= index < len(self._items) else None
 
-    def takeAt(self, index: int) -> QLayoutItem | None:  # noqa: N802
+    @override
+    def takeAt(self, index: int) -> QLayoutItem | None:
         return self._items.pop(index) if 0 <= index < len(self._items) else None
 
-    def expandingDirections(self) -> Qt.Orientation:  # noqa: N802
+    @override
+    def expandingDirections(self) -> Qt.Orientation:
         return Qt.Orientation(0)
 
-    def hasHeightForWidth(self) -> bool:  # noqa: N802
+    @override
+    def hasHeightForWidth(self) -> bool:
         return True
 
-    def heightForWidth(self, width: int) -> int:  # noqa: N802
+    @override
+    def heightForWidth(self, width: int) -> int:
         return self._lay_out(QRect(0, 0, width, 0), move=False)
 
-    def setGeometry(self, rect: QRect) -> None:  # noqa: N802
+    @override
+    def setGeometry(self, rect: QRect) -> None:
         super().setGeometry(rect)
         self._lay_out(rect, move=True)
 
-    def sizeHint(self) -> QSize:  # noqa: N802
+    @override
+    def sizeHint(self) -> QSize:
         return self.minimumSize()
 
-    def minimumSize(self) -> QSize:  # noqa: N802
+    @override
+    def minimumSize(self) -> QSize:
         size = QSize()
         for item in self._items:
             size = size.expandedTo(item.minimumSize())
@@ -109,7 +120,8 @@ class _ValueEdit(QLineEdit):
 
     escaped = Signal()
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+    @override
+    def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Escape:
             self.escaped.emit()
             return
@@ -119,7 +131,8 @@ class _ValueEdit(QLineEdit):
 class _ChipButton(QToolButton):
     """A chip's text, which Enter clicks too, as Space does: the focus lands on a new one."""
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+    @override
+    def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
             self.click()
             return

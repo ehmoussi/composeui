@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from textual.content import Content
 from textual.widgets import ProgressBar
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core.renderer import ViewLike
 from composeui.core.view import (
@@ -58,6 +58,7 @@ class TextualSliderRenderer(TextualWidgetRenderer[SliderViewLike, ComposeSlider]
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeSlider()
@@ -148,6 +149,7 @@ class TextualRangeSliderRenderer(TextualWidgetRenderer[RangeSliderViewLike, Comp
             dict.fromkeys(("low_text", "high_text"), lambda _view, _rendered_object, _value: None)
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeRangeSlider()
@@ -213,6 +215,7 @@ class TextualCheckBoxRenderer(TextualWidgetRenderer[CheckBoxViewLike, ComposeChe
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeCheckBox()
@@ -257,6 +260,7 @@ class TextualButtonRenderer(TextualWidgetRenderer[ButtonViewLike, ComposeButton]
             {"text": self._refresh_text, "variant": self._refresh_variant}
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeButton()
@@ -302,6 +306,7 @@ class TextualDialogButtonRenderer(TextualButtonRenderer):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeButton()
@@ -335,6 +340,7 @@ class TextualProgressBarRenderer(TextualWidgetRenderer[ProgressBarViewLike, Prog
             {"value": self._refresh_value, "maximum": self._refresh_maximum}
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             # no time left: neither Qt nor the web estimates one

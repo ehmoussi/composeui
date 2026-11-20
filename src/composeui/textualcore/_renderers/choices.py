@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
 
 from textual.content import Content
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core.renderer import ViewLike
 from composeui.core.view import TreeView
@@ -48,6 +48,7 @@ class TextualRadioGroupRenderer(
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeRadioSet(self._view.values)
@@ -93,6 +94,7 @@ class TextualComboBoxRenderer(
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeComboBox(self._view.values)
@@ -174,6 +176,7 @@ class _TextualChoicesRenderer(
     def _make_widget(self) -> TChoicesWidget:
         return cast("TChoicesWidget", ComposeCheckList())
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = self._make_widget()
@@ -249,13 +252,16 @@ class TextualMultiComboBoxRenderer(_TextualChoicesRenderer[ComposeMultiComboBox]
         "count_text",
     )
 
+    @override
     @staticmethod
     def _check_list(widget: ComposeMultiComboBox) -> ComposeCheckList:
         return widget.check_list
 
+    @override
     def _make_widget(self) -> ComposeMultiComboBox:
         return ComposeMultiComboBox()
 
+    @override
     def _show(self, widget: ComposeMultiComboBox, shown: ChoicesShown) -> None:
         widget.check_list.show(shown)
         widget.title = shown.summary
@@ -276,6 +282,7 @@ class TextualTreeRenderer(TextualWidgetRenderer[TreeView, ComposeTree]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeTree()

@@ -9,7 +9,7 @@ from abc import abstractmethod
 from typing import TYPE_CHECKING, Any, NamedTuple, TypeVar, cast
 
 from markupsafe import Markup
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core._views.controls import RANGE_DASH
 from composeui.core._views.inputs import date_hint
@@ -37,6 +37,7 @@ TTextField = TypeVar("TTextField", bound=TextFieldViewLike)
 class _WebTextFieldRenderer(WebRenderer[TTextField]):
     """A text field posting debounced edits (`input`) and committed edits (`change`)."""
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         # `hx-swap="none"`: the field being typed in is never swapped back (it would
         # reset the caret); everything else arrives out of band. `queue all` keeps a
@@ -63,6 +64,7 @@ class _WebTextFieldRenderer(WebRenderer[TTextField]):
             disabled=disabled,
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event not in ("input", "change"):
             super().dispatch(event, form)
@@ -108,12 +110,15 @@ class WebInputRenderer(_WebTextFieldRenderer[InputViewLike]):
             }
         )
 
+    @override
     def _text(self) -> str:
         return self._view.text
 
+    @override
     def _posted_text(self) -> str:
         return self._view.text
 
+    @override
     def _apply_text(self, text: str) -> None:
         with self.stop_refresh():
             self._view.text = text
@@ -128,6 +133,7 @@ class WebTextAreaRenderer(WebInputRenderer):
 
     _role = "text_area"
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         disabled = "" if self.is_enabled else " disabled"
         return Markup(
@@ -149,6 +155,7 @@ class WebTextAreaRenderer(WebInputRenderer):
             text=self._text(),
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         # a form's encoding ends the lines with CRLF; the view's text with LF, as typed
         if "value" in form:
@@ -203,6 +210,7 @@ class _WebNumberFieldRenderer(_WebTextFieldRenderer[TNumberField]):
             return False
         return True
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event == "change" and not self._is_acceptable(form.get("value", "")):
             # no `editing_finished`, as Qt doesn't emit it for unacceptable text; the
@@ -216,12 +224,15 @@ class _WebNumberFieldRenderer(_WebTextFieldRenderer[TNumberField]):
         self._last_posted_text = None  # the server's value wins over what was typed
         self._mark_dirty(view, rendered_object, value)
 
+    @override
     def _text(self) -> str:
         return str(self._view.value) if self._view.value is not None else ""
 
+    @override
     def _posted_text(self) -> str:
         return self._last_posted_text if self._last_posted_text is not None else self._text()
 
+    @override
     def _apply_text(self, text: str) -> None:
         self._last_posted_text = text
         # transient invalid text while typing (e.g. "-", "1e"); ignore it
@@ -251,13 +262,16 @@ class WebFloatInputRenderer(_WebNumberFieldRenderer[FloatInputViewLike]):
         super().__init__(view)
         self._refresh_dispatcher["decimals"] = self._mark_dirty
 
+    @override
     @staticmethod
     def _parse(text: str) -> float:
         return float(text)
 
+    @override
     def _text(self) -> str:
         return self._view.shown_text(self._view.value, self._view.decimals)
 
+    @override
     def _extra_attributes(self) -> Markup:
         return Markup(' inputmode="decimal" pattern="{}"').format(_DECIMAL_PATTERN)
 
@@ -277,10 +291,12 @@ class WebIntInputRenderer(_WebNumberFieldRenderer[IntInputViewLike]):
 
     _role = "int_input"
 
+    @override
     @staticmethod
     def _parse(text: str) -> int:
         return int(text)
 
+    @override
     def _extra_attributes(self) -> Markup:
         return Markup(' inputmode="numeric" pattern="{}"').format(_INTEGER_PATTERN)
 
@@ -434,6 +450,7 @@ class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
             }
         )
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         view = self._view
         return _date_field_html(
@@ -444,6 +461,7 @@ class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
             self._row_attributes(),
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if not self.is_enabled or event not in ("input", "change", "pick"):
             super().dispatch(event, form)
@@ -552,6 +570,7 @@ class WebDateRangeInputRenderer(WebRenderer[DateRangeInputViewLike]):
             )
         )
 
+    @override
     def _mark_dirty(self, view: DateRangeInputViewLike, rendered_object: str, value: Any) -> None:
         self._is_whole_dirty = True
         self._last_posted_texts = [None, None]  # the server's dates win over what was typed
@@ -563,6 +582,7 @@ class WebDateRangeInputRenderer(WebRenderer[DateRangeInputViewLike]):
         self._dirty_parts.add(index)
         cast("dict[str, WebRenderer[Any]]", _DIRTY.get())[self.widget_id] = self
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         parts, self._dirty_parts = self._dirty_parts, set()
         is_whole, self._is_whole_dirty = self._is_whole_dirty or not oob or not parts, False
@@ -594,6 +614,7 @@ class WebDateRangeInputRenderer(WebRenderer[DateRangeInputViewLike]):
             Markup(' aria-label="{}"').format(text),
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         posted_end = form.get("end", "")
         if event not in ("input", "change", "pick") or posted_end not in ("0", "1"):

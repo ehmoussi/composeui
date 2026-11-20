@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing_extensions import override
+
 from composeui.core.view import (
     ButtonView,
     LabelView,
@@ -30,6 +32,7 @@ class MapMainView(MainView):
     move: ButtonView = child(ButtonView, text="Move map")
     clear: ButtonView = child(ButtonView, text="Clear points")
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.map.clicked.connect(self._clicked)
@@ -61,6 +64,7 @@ class MapMainView(MainView):
 class AutoMapMainView(MapMainView):
     map: MapView = child(MapView, title="Pickup locations", tiles=False)
 
+    @override
     def _move(self) -> None:
         self.map.points = [
             MapPoint(latitude=48.85, longitude=2.34),

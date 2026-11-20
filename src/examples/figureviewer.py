@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from matplotlib.figure import Figure
+from typing_extensions import override
 
 import composeui
 from composeui.core.application import run
@@ -61,6 +62,7 @@ class FigureViewerMainView(MainView):
     )
     wave: ImageView = child(ImageView, description="A damped wave")
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.drawing = self.jobs.task(draw_wave)

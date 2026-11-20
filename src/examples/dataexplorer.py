@@ -5,6 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, NamedTuple
 
+from typing_extensions import override
+
 from composeui.core.application import run
 from composeui.core.dashboard import DashboardView, read_frame, show_frame
 from composeui.core.reactivity import reactive
@@ -60,6 +62,7 @@ class DataExplorerMainView(DashboardView):
     summary: Summary = child(Summary, is_visible=False)
     table: SourceTableView = child(SourceTableView, is_visible=False)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         # a new file replaces the one being read, at once

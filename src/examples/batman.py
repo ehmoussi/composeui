@@ -12,6 +12,8 @@ from __future__ import annotations
 import math
 from typing import TYPE_CHECKING
 
+from typing_extensions import override
+
 from composeui.core import application
 from composeui.core.registry import RendererType
 from composeui.core.view import (
@@ -123,6 +125,7 @@ class BatmanMainView(MainView):
         ],
     )
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.chart.clicked.connect(self.show_click)

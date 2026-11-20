@@ -7,7 +7,7 @@ from typing import Any
 
 from qtpy.QtGui import QTextDocument
 from qtpy.QtWidgets import QApplication, QFileDialog, QLabel, QStatusBar, QTextBrowser
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core._views.content import image_content, line_styles_after, lines_after
 from composeui.core.renderer import ViewLike
@@ -35,6 +35,7 @@ class QtLabelRenderer(QtWidgetRenderer[LabelViewLike, QLabel]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = plain_label()
@@ -72,6 +73,7 @@ class QtImageRenderer(QtWidgetRenderer[ImageViewLike, QImageLabel]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QImageLabel()
@@ -108,6 +110,7 @@ class QtMarkdownRenderer(QtWidgetRenderer[MarkdownViewLike, QTextBrowser]):
         super().__init__(view)
         self._refresh_dispatcher.update({"text": self._refresh_text})
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QTextBrowser()
@@ -159,6 +162,7 @@ class QtConsoleRenderer(QtWidgetRenderer[ConsoleViewLike, QConsoleBox]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QConsoleBox()
@@ -250,6 +254,7 @@ class QtMetricRenderer(QtWidgetRenderer[MetricViewLike, QMetric]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QMetric()
@@ -301,6 +306,7 @@ class QtLogRenderer(QtWidgetRenderer[LogViewLike, QLabel]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = plain_label()
@@ -331,6 +337,7 @@ class QtStatusBarRenderer(QtWidgetRenderer[StatusBar, QStatusBar]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QStatusBar()

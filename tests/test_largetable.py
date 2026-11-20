@@ -178,7 +178,7 @@ def test_a_study_saves_the_search_without_the_readings(
 
 def test_a_click_on_a_header_in_qt_sorts_the_rendered_table(qtbot: QtBot) -> None:
     qt_widgets = pytest.importorskip("qtpy.QtWidgets")
-    renderer_type: type[QtWidgetRenderer] = pytest.importorskip(
+    renderer_type: type[QtWidgetRenderer[Any, Any]] = pytest.importorskip(
         "composeui.qtcore.qtrenderer"
     ).QtWidgetRenderer
     qt_core = pytest.importorskip("qtpy.QtCore")
@@ -189,7 +189,7 @@ def test_a_click_on_a_header_in_qt_sorts_the_rendered_table(qtbot: QtBot) -> Non
     model.readings.fill(ROWS)  # in the test's thread: no job to wait for
     renderer = main_view.renderer
     assert isinstance(renderer, renderer_type)
-    window = cast("QtWidgetRenderer", renderer).qt_object
+    window = cast("QtWidgetRenderer[Any, Any]", renderer).qt_object
     assert window is not None
     qtbot.addWidget(window)
     table = window.findChild(qt_widgets.QTableView)

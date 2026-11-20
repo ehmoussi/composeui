@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING
 from qtpy.QtCore import QRect, QSize, Qt
 from qtpy.QtGui import QPainter, QPixmap
 from qtpy.QtWidgets import QLabel, QSizePolicy
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from qtpy.QtGui import QPaintEvent
@@ -45,20 +46,24 @@ class QImageLabel(QLabel):
             return size
         return QSize(max(1, size.width() * self._height // size.height()), self._height)
 
-    def sizeHint(self) -> QSize:  # noqa: N802
+    @override
+    def sizeHint(self) -> QSize:
         return super().sizeHint() if self._image.isNull() else self._shown_size()
 
-    def minimumSizeHint(self) -> QSize:  # noqa: N802
+    @override
+    def minimumSizeHint(self) -> QSize:
         # the layout may shrink the image, as `paintEvent` does
         return super().minimumSizeHint() if self._image.isNull() else QSize(1, 1)
 
-    def heightForWidth(self, width: int) -> int:  # noqa: N802
+    @override
+    def heightForWidth(self, width: int) -> int:
         if self._image.isNull():
             return super().heightForWidth(width)
         size = self._shown_size()
         return min(size.height(), max(1, size.height() * width // size.width()))
 
-    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+    @override
+    def paintEvent(self, event: QPaintEvent) -> None:
         if self._image.isNull():
             super().paintEvent(event)
             return

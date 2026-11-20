@@ -15,6 +15,7 @@ import pytest
 from attrs import Factory
 from hypothesis import given
 from hypothesis import strategies as st
+from typing_extensions import override
 
 from composeui.core._views.tables import (
     SOURCE_TABLE_CACHE,
@@ -71,12 +72,14 @@ class CountingSource(ListSource[Sample]):
         self.orders = 0
         self.read: list[list[Hashable]] = []
 
+    @override
     def ordered_ids(
         self, sort: Optional[Sort], search: str, filters: Mapping[str, Filter]
     ) -> list[Hashable]:
         self.orders += 1
         return super().ordered_ids(sort, search, filters)
 
+    @override
     def cells(self, ids: Sequence[Hashable], columns: Sequence[str]) -> dict[Hashable, list[Any]]:
         self.read.append(list(ids))
         return super().cells(ids, columns)
@@ -466,6 +469,7 @@ def test_an_export_that_fails_partway_leaves_no_file(tmp_path: Path) -> None:
     class Failing(CountingSource):
         """Its second window of cells can't be read, e.g. its database closed meanwhile."""
 
+        @override
         def cells(
             self, ids: Sequence[Hashable], columns: Sequence[str]
         ) -> dict[Hashable, list[Any]]:
@@ -614,6 +618,7 @@ class _NarrowedSource(CountingSource):
         self.width = 4
 
     @property
+    @override
     def columns(self) -> Sequence[SourceColumn]:
         return super().columns[: self.width]
 
@@ -645,6 +650,7 @@ class _GatedCellsSource(CountingSource):
         super().__init__(samples)
         self.gate = threading.Event()
 
+    @override
     def cells(self, ids: Sequence[Hashable], columns: Sequence[str]) -> dict[Hashable, list[Any]]:
         if threading.current_thread() is not threading.main_thread():
             self.gate.wait(10)

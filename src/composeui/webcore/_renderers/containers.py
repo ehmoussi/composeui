@@ -8,6 +8,7 @@ from collections import deque
 from typing import TYPE_CHECKING, Any, TypeVar
 
 from markupsafe import Markup
+from typing_extensions import override
 
 from composeui.core._views.dialogs import dialogs_in
 from composeui.core.registry import RendererType
@@ -57,6 +58,7 @@ class _BuiltWhenShown(WebRenderer[TBuilt]):
     def _content_views(self) -> list[View]:
         """Get the views it shows, in order."""
 
+    @override
     def render(self) -> None:
         super().render()
         self._adopt(self._content_views())
@@ -93,9 +95,11 @@ class WebPageRenderer(_BuiltWhenShown[PageView]):
 
     _role = "page"
 
+    @override
     def _content_views(self) -> list[View]:
         return self._view.content_views
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         content = Markup("").join(
             _view_html(view)
@@ -124,10 +128,12 @@ class WebHorizontalRenderer(WebRenderer[HorizontalView]):
 
     _role = "horizontal"
 
+    @override
     def render(self) -> None:
         super().render()
         self._adopt(self._view.children_views)
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         stretched_views = self._view.stretched_views
         if not any(stretch > 0 for _, stretch in stretched_views):
@@ -165,10 +171,12 @@ class WebVerticalRenderer(WebRenderer[VerticalView]):
 
     _role = "vertical"
 
+    @override
     def render(self) -> None:
         super().render()
         self._adopt(self._view.children_views)
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         content = Markup("").join(
             _view_html(view) for view in self._view.children_views if _is_shown(view)
@@ -199,10 +207,12 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
             {"sizes": self._mark_dirty, "border_text": self._mark_dirty}
         )
 
+    @override
     def render(self) -> None:
         super().render()
         self._adopt(self._view.panes)
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         view = self._view
         is_vertical = view.orientation is Orientation.VERTICAL
@@ -263,6 +273,7 @@ class WebSplitterRenderer(WebRenderer[SplitterView]):
             "{}</div></div>"
         ).format(self._root_attributes(oob=oob), Markup("").join(cells))
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event != "resize":
             super().dispatch(event, form)
@@ -299,10 +310,12 @@ class WebExpanderRenderer(WebRenderer[ExpanderView]):
             {"title": self._mark_dirty, "is_expanded": self._mark_dirty}
         )
 
+    @override
     def render(self) -> None:
         super().render()
         self._adopt(self._view.children_views)
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         is_open = " open" if self._view.is_expanded else ""
         summary_attributes = (
@@ -332,6 +345,7 @@ class WebExpanderRenderer(WebRenderer[ExpanderView]):
             content=content,
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event != "toggle":
             super().dispatch(event, form)
@@ -363,6 +377,7 @@ class WebListRenderer(WebRenderer["ListView[Any]"]):
         self._is_whole = False
         self._refresh_dispatcher["item_views"] = self._refresh_item_views
 
+    @override
     def render(self) -> None:
         super().render()
         self._render_items(self._view.item_views)
@@ -382,6 +397,7 @@ class WebListRenderer(WebRenderer["ListView[Any]"]):
         content = _view_html(view)
         return Markup('<div id="{}">{}</div>').format(self._item_id(view), content)
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         views = self._view.item_views
         sent, self._sent = self._sent, list(views)
@@ -449,6 +465,7 @@ class WebListRenderer(WebRenderer["ListView[Any]"]):
                     self._target.renderers.pop(child.widget_id, None)
                     self._target.pending.pop(child.widget_id, None)
 
+    @override
     def _mark_dirty(self, view: ListView[Any], rendered_object: str, value: Any) -> None:
         self._is_whole = True
         super()._mark_dirty(view, rendered_object, value)
@@ -473,6 +490,7 @@ class WebTabPageRenderer(_BuiltWhenShown[TabPage]):
             }
         )
 
+    @override
     def _content_views(self) -> list[View]:
         return self._view.children_views
 
@@ -481,9 +499,11 @@ class WebTabPageRenderer(_BuiltWhenShown[TabPage]):
         """Whether this is the page of the tab shown, whose views are sent."""
         return not isinstance(self.parent, WebTabsRenderer) or self.parent.is_current(self)
 
+    @override
     def shows(self, _child: WebRenderer[Any]) -> bool:
         return self.is_current
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         content = Markup("").join(
             _view_html(view)
@@ -519,6 +539,7 @@ class WebTabsRenderer(WebRenderer[TabView]):
         super().__init__(view)
         self._refresh_dispatcher["current_index"] = self._refresh_current_index
 
+    @override
     def render(self) -> None:
         super().render()
         for tab in self._view.tabs:
@@ -537,6 +558,7 @@ class WebTabsRenderer(WebRenderer[TabView]):
         self._build(value)  # the view holds it once this returns
         self._mark_dirty(view, rendered_object, value)
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         current = self._view.current_index
         tabs: list[str] = []
@@ -590,6 +612,7 @@ class WebTabsRenderer(WebRenderer[TabView]):
             join2=Markup("").join(panels),
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event != "select":
             super().dispatch(event, form)
@@ -629,10 +652,12 @@ class WebGridRenderer(WebRenderer[GridView]):
 
     _role = "grid"
 
+    @override
     def render(self) -> None:
         super().render()
         self._adopt(self._view.children_views)
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         cells = Markup("").join(
             Markup(

@@ -42,6 +42,8 @@ backends' modules included, can change in any release without an entry here.
 
 ### Fixed
 
+- `View.refusing` and `OkCancelDialogView.refusing` tell mypy that they catch the refusal.
+  mypy no longer reports the code after the `with` block as unreachable.
 - A `LabelView` wraps a long line to the width of its page on every backend, and breaks a
   word longer than a line, such as a path. Before, a long line on Qt and Textual, and a long
   word on the web, widened the page, which scrolled sideways and hid the end of the text. On

@@ -18,6 +18,7 @@ import pytest
 from attrs import Factory, evolve
 from hypothesis import example, given, reject
 from hypothesis import strategies as st
+from typing_extensions import override
 
 from composeui.core._views.controls import MAX_SLIDER_STEPS
 from composeui.core._views.main import STATE_FORMAT, _is_omitted_type
@@ -88,6 +89,7 @@ if TYPE_CHECKING:
 # machinery can't handle a subscripted generic alias used as a field's own type.
 @define_view
 class _StrRadioGroupView(RadioGroupView[str]):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.values = {"a": "a", "b": "b"}
@@ -1068,6 +1070,7 @@ class _Edge(enum.Enum):
 
 @define_view
 class _EdgeComboBoxView(ComboBoxView[_Edge]):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.values = {"Round": _Edge.ROUND, "Sharp": _Edge.SHARP}
@@ -1075,6 +1078,7 @@ class _EdgeComboBoxView(ComboBoxView[_Edge]):
 
 @define_view
 class _SizeComboBoxView(ComboBoxView[float]):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.values = {"Small": 0.5, "Large": 2.0}
@@ -1171,6 +1175,7 @@ _BASES = {
 
 @define_view
 class _BasesView(MultiComboBoxView[_Base]):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.values = dict(_BASES)
@@ -1183,6 +1188,7 @@ class _BasesMainView(MainView):
 
     bases: _BasesView = Factory(_BasesView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.bases.selected = [_Base.B02598]
@@ -1294,6 +1300,7 @@ class _StudyMainView(MainView):
     note: InputView = Factory(InputView)
     heading: LabelView = Factory(LabelView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         # set up after construction, not attrs defaults: a reset must restore these too
@@ -1317,6 +1324,7 @@ class _RemarkStudyMainView(MainView):
 
     remark: InputView = Factory(InputView)
 
+    @override
     def migrate_state(self, data: Any, version: int) -> Any:
         if version < 2:
             data["remark"] = data.pop("note")
@@ -1778,9 +1786,11 @@ class ReadingsModel(Model):
     def __init__(self) -> None:
         self.readings: list[Reading] = []
 
+    @override
     def new(self) -> None:
         self.readings = [Reading("a", 1), Reading("b", 5), Reading("c", 9)]
 
+    @override
     def loaded(self) -> None:
         if not self.readings:  # an opened study's: the data the model would read from it
             self.new()
@@ -1794,6 +1804,7 @@ class ReadingsMainView(MainView):
     #: the readings above the threshold: its source is never saved, the app gives it again
     above: SourceTableView = Factory(SourceTableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.loaded.connect(self._show_above)

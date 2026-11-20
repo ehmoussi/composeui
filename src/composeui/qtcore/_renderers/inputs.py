@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, cast
 
 from qtpy.QtGui import QDoubleValidator
 from qtpy.QtWidgets import QAbstractSpinBox, QLineEdit, QSpinBox
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core._views.inputs import date_hint
 from composeui.core.renderer import ViewLike
@@ -45,6 +45,7 @@ class QtInputRenderer(QtWidgetRenderer[InputViewLike, QLineEdit]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QLineEdit()
@@ -87,6 +88,7 @@ class QtTextAreaRenderer(QtWidgetRenderer[InputViewLike, QTextArea]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QTextArea()
@@ -138,6 +140,7 @@ class QtFloatInputRenderer(QtWidgetRenderer[FloatInputViewLike, QLineEdit]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QLineEdit()
@@ -240,6 +243,7 @@ class QtIntInputRenderer(QtWidgetRenderer[IntInputViewLike, QSpinBox]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QSpinBox()
@@ -341,6 +345,7 @@ class QtDateInputRenderer(QtWidgetRenderer[DateInputViewLike, QDateField]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QDateField()
@@ -435,6 +440,7 @@ class QtDateRangeInputRenderer(QtWidgetRenderer[DateRangeInputViewLike, QDateRan
             )
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QDateRangeField()

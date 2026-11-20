@@ -28,6 +28,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import attrs
+from typing_extensions import override
 
 from composeui.core._views.base import _retranslate
 from composeui.core.translation import CATALOGS_DIR, load_catalog
@@ -57,6 +58,7 @@ class CatalogReport:
         """Tell whether every text is translated with its placeholders."""
         return not self.missing and not self.mismatched
 
+    @override
     def __str__(self) -> str:
         lines = [
             f"{self.path}: {len(self.missing)} missing, {len(self.mismatched)} with other "

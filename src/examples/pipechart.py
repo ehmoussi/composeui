@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any, Optional
 
 import attrs
 from attrs import Factory, evolve
+from typing_extensions import override
 
 from composeui.core import application
 from composeui.core.registry import RendererType
@@ -159,6 +160,7 @@ def measured_drops(diameter_mm: float, length: float, max_flow: float) -> Series
 
 @define_view
 class PositiveInputView(LabelRowFloatInputView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.minimum = 0
@@ -170,6 +172,7 @@ class PipeForm(GroupFormView):
     length: PositiveInputView = child(PositiveInputView, label="Length (m)", value=100)
     max_flow: PositiveInputView = child(PositiveInputView, label="Maximum Flow Rate (L/s)", value=2)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = "Pipe"
@@ -247,6 +250,7 @@ class MeasurementsTab(TabPage):
         row_headers=["Measurements Kept", "Mean Deviation (%)", "Largest Deviation (%)"],
     )
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         measured = self.table.column_index("measured")
@@ -301,6 +305,7 @@ class PipeChartMainView(MainView):
         """The curves' table, on its tab."""
         return self.results.curves_tab.table
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.buttons.add.clicked.connect(self.add_curve)
@@ -315,10 +320,12 @@ class PipeChartMainView(MainView):
         """The summary of the measurements kept, under them."""
         return self.results.measurements_tab.summary
 
+    @override
     def load_state_data(self, data: Any) -> None:
         super().load_state_data(data)
         self._show_measurements()  # their looks follow from them, never saved
 
+    @override
     def reset_state(self) -> None:
         super().reset_state()
         self._show_measurements()

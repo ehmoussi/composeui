@@ -14,6 +14,7 @@ from typing import (
 )
 
 import attrs
+from typing_extensions import override
 
 from composeui.core._views.base import (
     CONVERTER,
@@ -143,7 +144,8 @@ class ValuesGroupMixin(ChoicesMixin[TValue]):
                 self.value,
             )
             self.value = None
-        return notify_renderer(cast("View", self), attribute, values)
+        notified: dict[str, TValue] = notify_renderer(cast("View", self), attribute, values)
+        return notified
 
     value: Optional[TValue] = attrs.field(default=None, validator=[_check_value])
     values: dict[str, TValue] = attrs.field(
@@ -179,9 +181,11 @@ class ValuesGroupMixin(ChoicesMixin[TValue]):
             )
         return value
 
+    @override
     def saved_choice(self) -> Optional[str]:
         return self.serialize_value()
 
+    @override
     def load_choice(self, saved: Optional[str]) -> None:
         self.value = self.deserialize_value(saved)
 
@@ -364,10 +368,12 @@ class MultiValuesMixin(ChoicesMixin[TValue]):
         """
         return self.select_keys({key: is_checked for key, _label in self.shown_options})
 
+    @override
     def saved_choice(self) -> list[str]:
         return self.selected_keys
 
-    def load_choice(self, saved: list[str]) -> None:
+    @override
+    def load_choice(self, saved: object) -> None:
         if not isinstance(saved, list) or not all(isinstance(key, str) for key in saved):
             msg = f"{type(self).__name__}.selected must be a list of keys, not {saved!r}"
             raise TypeError(msg)  # a damaged study: refused before anything changes
@@ -408,6 +414,7 @@ class MultiComboBoxMixin(MultiValuesMixin[TValue]):
         """Get what the closed list shows of `selected`: their label, or how many they are."""
         return self.shown.summary
 
+    @override
     def _summary_once(self, name: str, value: Any, selected: list[TValue]) -> str:
         texts = {
             "empty_text": self.empty_text,

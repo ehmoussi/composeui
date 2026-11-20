@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import attrs
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.view import (
     ButtonView,
@@ -20,6 +21,7 @@ class TableAndButtonColumn(VerticalView):
     table: TableView = attrs.field(factory=TableView)
     button: ButtonView = attrs.field(factory=ButtonView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.table.headers = ["Short"]
@@ -31,6 +33,7 @@ class ColumnAndTableRow(HorizontalView):
     column: TableAndButtonColumn = Factory(TableAndButtonColumn)
     tall: TableView = attrs.field(factory=TableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.tall.headers = ["Tall"]

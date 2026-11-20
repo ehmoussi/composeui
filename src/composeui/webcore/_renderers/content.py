@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Final
 
 from markupsafe import Markup
+from typing_extensions import override
 
 from composeui.core.renderer import ViewLike
 from composeui.core.view import FormRowView, StatusBar
@@ -52,6 +53,7 @@ class WebMetricRenderer(WebRenderer[MetricViewLike]):
             }
         )
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         delta = self._view.delta
         badge = ""
@@ -98,6 +100,7 @@ class WebLabelRenderer(WebRenderer[LabelViewLike]):
         super().__init__(view)
         self._refresh_dispatcher.update({"text": self._mark_dirty, "role": self._mark_dirty})
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         tag, classes = _ROLE_MARKUP[self._view.role]
         # pre-line keeps the text's line breaks, as Qt and Textual do, and collapses its spaces;
@@ -168,6 +171,7 @@ class WebImageRenderer(WebRenderer[ImageViewLike]):
             }
         )
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         content = image_content(self._view.image)
         if content is None or _image_media_type(content) is None:
@@ -216,6 +220,7 @@ class WebMarkdownRenderer(WebRenderer[MarkdownViewLike]):
         super().__init__(view)
         self._refresh_dispatcher.update({"text": self._mark_dirty})
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         parser = MarkdownIt("commonmark", {"html": False}).enable("table")
         # markup the parser escaped itself: the text's own HTML is off
@@ -286,6 +291,7 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
             }
         )
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         sent, self._sent = self._sent, self._view.line_count
         is_whole, self._is_whole = self._is_whole, False
@@ -359,6 +365,7 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
         parts.append(Markup("{}").format(line[position:]))
         return Markup("").join(parts)
 
+    @override
     def _mark_dirty(self, view: ConsoleViewLike, rendered_object: str, value: Any) -> None:
         self._is_whole = True
         super()._mark_dirty(view, rendered_object, value)
@@ -396,6 +403,7 @@ class WebLogRenderer(WebRenderer[LogViewLike]):
             # reset its caret
             self._refresh_dispatcher["has_form_error"] = self._mark_dirty
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         attributes = self._root_attributes(oob=oob)
         if self._view.is_visible and self._view.log_message == "":
@@ -432,6 +440,7 @@ class WebStatusBarRenderer(WebRenderer[StatusBar]):
             }
         )
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         # docked like Qt/Textual's status bar; an empty message leaves a quiet empty line
         return Markup(

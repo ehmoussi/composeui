@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from hypothesis import example, given
 from hypothesis import strategies as st
+from typing_extensions import override
 
 from composeui.core.translation import CATALOGS_DIR, load_catalog
 from composeui.core.translationcheck import (
@@ -77,10 +78,12 @@ class _Recorded:
     def __init__(self, name: str, used: set[str]) -> None:
         self.name, self.used = name, used
 
+    @override
     def __format__(self, spec: str) -> str:
         self.used.add(self.name)
         return "x"
 
+    @override
     def __repr__(self) -> str:
         self.used.add(self.name)
         return "x"

@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from textual.app import App, ComposeResult
 from textual.content import Content
 from textual.widgets import Footer
+from typing_extensions import override
 
 from composeui.core._views.actions import OpenFileAction, SaveAction, SaveAsAction
 from composeui.core.renderer import Renderer, ViewLike
@@ -63,6 +64,7 @@ class _TextualNoopRenderer(Renderer[TNoopView, TNoopView]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = self._view
@@ -182,6 +184,7 @@ class TextualToolBarRenderer(TextualWidgetRenderer[ToolBar, ComposeToolbar]):
         super().__init__(view)
         self._refresh_dispatcher.update({"title": self._noop})
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             widgets: list[Widget] = []
@@ -266,6 +269,7 @@ class _ComposeUIApp(App[None]):
             with self._file_workers_lock:
                 self._file_workers -= 1
 
+    @override
     def compose(self) -> ComposeResult:
         yield self._root
         yield Footer()
@@ -281,6 +285,7 @@ class _ComposeUIApp(App[None]):
         for callback in self.mounted_callbacks:
             callback()
 
+    @override
     async def action_quit(self) -> None:
         """Quit as the Exit action does, as Textual's Ctrl+Q has priority over its key."""
         if self._view.has_file_menu:

@@ -8,6 +8,7 @@ from qtpy.QtCore import QRect, QSize, Qt
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import QPainter
 from qtpy.QtWidgets import QSlider, QStyle, QStyleOptionSlider
+from typing_extensions import override
 
 from composeui.core._views.controls import RANGE_DASH
 from composeui.core.view import SliderMixin
@@ -83,11 +84,13 @@ class QRangeSlider(QSlider):
         widest = max(metrics.horizontalAdvance(self._text_at(end)) for end in (0, self.maximum()))
         return 2 * widest + metrics.horizontalAdvance(RANGE_DASH)
 
-    def initStyleOption(self, option: QStyleOptionSlider) -> None:  # noqa: N802
+    @override
+    def initStyleOption(self, option: QStyleOptionSlider) -> None:
         super().initStyleOption(option)
         option.rect.setRight(option.rect.right() - self._slot_width() - _GAP)
 
-    def sizeHint(self) -> QSize:  # noqa: N802
+    @override
+    def sizeHint(self) -> QSize:
         size = super().sizeHint()
         return QSize(size.width() + self._slot_width() + _GAP, size.height())
 
@@ -104,7 +107,8 @@ class QRangeSlider(QSlider):
             QStyle.ComplexControl.CC_Slider, option, QStyle.SubControl.SC_SliderHandle, self
         )
 
-    def paintEvent(self, _event: QPaintEvent) -> None:  # noqa: N802
+    @override
+    def paintEvent(self, _event: QPaintEvent) -> None:
         painter = QPainter(self)
         style = self.style()
         option = self._option_at(self.minimum())
@@ -143,7 +147,8 @@ class QRangeSlider(QSlider):
             self.minimum(), self.maximum(), x - groove.x() - handle // 2, span
         )
 
-    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    @override
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() != Qt.MouseButton.LeftButton:
             event.ignore()
             return
@@ -161,18 +166,21 @@ class QRangeSlider(QSlider):
         self._move_active(position, is_drag=True)
         event.accept()
 
-    def mouseMoveEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    @override
+    def mouseMoveEvent(self, event: QMouseEvent) -> None:
         if self._is_dragging:
             self._move_active(self._position_at(event.position().toPoint().x()), is_drag=True)
         event.accept()
 
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    @override
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         self._is_dragging = False
         if self._report_timer.isActive():
             self._report()
         event.accept()
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+    @override
+    def keyPressEvent(self, event: QKeyEvent) -> None:
         key = Qt.Key(event.key())
         page = max(1, self.maximum() // 10)
         positions = (self.low, self.high)

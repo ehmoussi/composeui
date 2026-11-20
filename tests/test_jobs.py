@@ -12,6 +12,7 @@ import weakref
 from typing import TYPE_CHECKING, cast
 
 import pytest
+from typing_extensions import override
 
 from composeui.core.application import ModelApplication
 from composeui.core.jobs import CalledInJobError, JobCanceledError, starting_study
@@ -83,6 +84,7 @@ class _Panel(View):
     status: LabelView = child(LabelView)
     result: LabelView = child(LabelView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.loader = self.build_task(_double)
@@ -94,6 +96,7 @@ class _Panel(View):
 class _Row(View):
     status: LabelView = child(LabelView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.loader = self.build_task(_sleep_until_canceled)
@@ -102,6 +105,7 @@ class _Row(View):
 
 @define_view
 class _Rows(ListView[int]):
+    @override
     def build_item(self, item: int) -> View:
         return _Row()
 
@@ -523,6 +527,7 @@ def _report_each(
 
 @define_view
 class _CopyMainView(MainView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.copy = self.build_task(_report_each)

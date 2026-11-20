@@ -8,6 +8,7 @@ from textual.containers import Vertical
 from textual.coordinate import Coordinate
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Input, Label, OptionList
+from typing_extensions import override
 
 from composeui.core._views.files import with_extension
 from composeui.core._views.tables import PLAIN_CELL
@@ -73,6 +74,7 @@ class ComposeOptionPicker(ModalScreen[Optional[str]]):
         self.options = OptionList(*(Text(option) for option in options))
         self._highlighted = options.index(text) if text in options else 0
 
+    @override
     def compose(self) -> ComposeResult:
         yield self.options
 
@@ -116,6 +118,7 @@ class ComposeRowEditor(ModalScreen[Optional[dict[int, str]]]):
         self._headers = {column: header for column, (header, _text) in cells.items()}
         self._focused = focused
 
+    @override
     def compose(self) -> ComposeResult:
         with Vertical():
             for column, cell_input in self.inputs.items():
@@ -385,6 +388,7 @@ class ComposeTable(DataTable[Text]):
         elif chain == _DOUBLE_CLICK:
             self._edit(row, column)
 
+    @override
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if action == "edit_row":
             is_editable = any(
@@ -568,6 +572,7 @@ class ComposeTable(DataTable[Text]):
                 return moved, edited
         return None, edited
 
+    @override
     def action_select_cursor(self) -> None:
         if self._is_multiple and self.show_cursor:
             self._toggle(self.cursor_row)

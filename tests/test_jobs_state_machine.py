@@ -10,6 +10,7 @@ import attrs
 from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.stateful import Bundle, RuleBasedStateMachine, invariant, rule
+from typing_extensions import override
 
 from composeui.core.model import RefusedError
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable
@@ -181,6 +182,7 @@ class _JobsMachine(RuleBasedStateMachine):
     def running_changed_alternates(self) -> None:
         assert self.changes == [index % 2 == 0 for index in range(len(self.changes))]
 
+    @override
     def teardown(self) -> None:
         for run in self.all_runs:
             run.may_end.set()

@@ -38,7 +38,7 @@ from textual.containers import VerticalScroll
 from textual.coordinate import Coordinate
 from textual.geometry import Region
 from textual.screen import Screen
-from textual.widget import AwaitMount
+from textual.widget import AwaitMount, Widget
 from textual.widgets import (
     Button,
     Checkbox,
@@ -212,7 +212,6 @@ if TYPE_CHECKING:
     from textual.message import Message
     from textual.pilot import Pilot
     from textual.timer import Timer
-    from textual.widget import Widget
 
     from composeui.core.view import TableView, View
 
@@ -223,7 +222,7 @@ def _field_widget(
     assert isinstance(field_row_renderer, RendererContainer)
     field_renderer = field_row_renderer.get_renderer("field")
     assert isinstance(field_renderer, TextualWidgetRenderer)
-    assert field_renderer.widget is not None
+    assert isinstance(field_renderer.widget, Widget)
     return field_renderer.widget
 
 
@@ -951,7 +950,7 @@ def _textual_part(row: Any, part: str) -> Widget:
     assert isinstance(row.renderer, RendererContainer)
     renderer = row.renderer.get_renderer(part)
     assert isinstance(renderer, TextualWidgetRenderer)
-    assert renderer.widget is not None
+    assert isinstance(renderer.widget, Widget)
     return renderer.widget
 
 
@@ -1506,7 +1505,7 @@ async def test_buttons_with_no_share_pack_at_their_row_s_start_or_end() -> None:
 
     def widget(of: View) -> Widget:
         assert isinstance(of.renderer, TextualWidgetRenderer)
-        assert of.renderer.widget is not None
+        assert isinstance(of.renderer.widget, Widget)
         return of.renderer.widget
 
     async with app.run_test(size=(120, 40)) as pilot:
@@ -3322,7 +3321,7 @@ async def test_the_chart_draws_its_titles_and_series() -> None:
 
 
 class _PlotMonitor(Protocol):
-    label: list[str]
+    label: list[str | None]
     lines: list[bool]
     x: list[list[float]]
     y: list[list[float]]
@@ -4334,7 +4333,7 @@ async def test_a_large_table_s_key_exports_its_rows_as_csv(
 
 def _widget(view: View) -> Widget:
     assert isinstance(view.renderer, TextualWidgetRenderer)
-    assert view.renderer.widget is not None
+    assert isinstance(view.renderer.widget, Widget)
     return view.renderer.widget
 
 
@@ -6375,7 +6374,8 @@ def test_textual_image_asks_nothing_without_a_terminal_to_answer(
 
     def import_module(name: str) -> dict[str, Any]:
         imported.append(name)
-        return _fake_textual_image("sixel")[name]
+        module: dict[str, Any] = _fake_textual_image("sixel")[name]
+        return module
 
     _run_in_terminal(monkeypatch, stdin=stdin, stdout=stdout, sized=sized)
     monkeypatch.setattr(composeimage, "import_module", import_module)

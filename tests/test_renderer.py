@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from typing_extensions import override
 
 from composeui.core.renderer import (
     MissingRefreshAttributeFunctionError,
@@ -21,6 +22,7 @@ class _TextRenderer(Renderer[LabelView, list[str]]):
         super().__init__(view)
         self._refresh_dispatcher.update(dict.fromkeys(attributes, self._show))
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = []

@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from textual.containers import Vertical
 from textual.widgets import Label
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
@@ -47,6 +48,7 @@ class ComposeMetric(Vertical):
         self.badge = Label(classes="metric--badge", markup=False)
         self.badge.display = False
 
+    @override
     def compose(self) -> ComposeResult:
         yield self.label
         yield self.value

@@ -10,6 +10,7 @@ from textual.containers import Horizontal, Vertical
 from textual.geometry import Size
 from textual.widgets import Input, Label, Log
 from textual_fspicker import FileSave
+from typing_extensions import override
 
 from composeui.core._views.content import follow_match
 from composeui.core.signal import Signal
@@ -59,6 +60,7 @@ class _LineHighlighter(Highlighter):
         #: each line's styled parts, as the console's lines
         self.styles: list[LineStyles] = []
 
+    @override
     def highlight(self, text: Text) -> None:
         for start, end, style in self.styles[self.line]:  # one per line, as the lines
             text.stylize(_rich_style(style), start, end)
@@ -199,6 +201,7 @@ class ComposeConsole(Log):
             self.scroll_to(y=max(current[0] - self.size.height // 2, 0), animate=False)
         self.matches_changed.emit(self._current + 1 if matches else 0, len(matches))
 
+    @override
     def _render_line_strip(self, y: int, rich_style: Style) -> Strip:
         self._search.line = y
         return super()._render_line_strip(y, rich_style)
@@ -236,6 +239,7 @@ class ComposeConsoleBox(Vertical):
         self.search = Input()
         self.matches = Label(markup=False)
 
+    @override
     def compose(self) -> ComposeResult:
         with Horizontal():
             yield self.search
@@ -249,6 +253,7 @@ class ComposeConsoleBox(Vertical):
         self._bindings.bind("slash", "search", text)
         self.refresh_bindings()
 
+    @override
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if action in ("close_search", "step"):
             return self.has_class("-searching")

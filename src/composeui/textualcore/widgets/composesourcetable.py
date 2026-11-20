@@ -13,6 +13,7 @@ from textual.strip import Strip
 from textual.widgets import Static
 from textual_fspicker import FileSave, Filters
 from textual_fspicker.path_filters import Filter
+from typing_extensions import override
 
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.textualcore.widgets.composefiltertable import ComposeFilterBar
@@ -195,6 +196,7 @@ class ComposeSourceTable(ScrollView, can_focus=True):
     def on_resize(self, _event: events.Resize) -> None:
         self.virtual_size = Size(self._width(), self._table.row_count + 1)
 
+    @override
     def render_line(self, y: int) -> Strip:
         width = self._width()
         number_width = self._number_width()
@@ -282,6 +284,7 @@ class ComposeDataFilterTable(Vertical):
         self.empty = Static("", classes="empty", markup=False)
         self.empty.display = False
 
+    @override
     def compose(self) -> ComposeResult:
         yield self.bar
         yield self.table

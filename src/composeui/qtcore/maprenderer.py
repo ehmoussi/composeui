@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core.renderer import ViewLike
 from composeui.core.view import MapPoint, MapView
@@ -42,6 +42,7 @@ class QtMapRenderer(QtWidgetRenderer[MapViewLike, QMap]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             widget = self._rendered_object = QMap(self._view.user_agent, tiles=self._view.tiles)

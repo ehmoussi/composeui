@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core.renderer import ViewLike
 from composeui.textualcore._renderers.charts import MIN_CHART_ROWS, PIXELS_PER_ROW
@@ -34,6 +34,7 @@ class TextualDrawingRenderer(TextualWidgetRenderer[DrawingViewLike, ComposeDrawi
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeDrawing()

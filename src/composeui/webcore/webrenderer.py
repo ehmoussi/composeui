@@ -24,6 +24,7 @@ from typing import (
 )
 
 from markupsafe import Markup
+from typing_extensions import override
 
 from composeui.core.renderer import (
     NoRenderedObjectError,
@@ -120,6 +121,7 @@ class WebRenderer(Renderer[TView, str]):
             raise NoRenderedObjectError
         return self._rendered_object
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = f"cui-{id(self._view)}-{self._role}"
@@ -175,6 +177,7 @@ class WebRenderer(Renderer[TView, str]):
                     child.parent = self
                     self.children.append(child)
 
+    @override
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         call_in_session(self._target, callback)
 

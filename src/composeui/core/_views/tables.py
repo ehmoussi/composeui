@@ -31,6 +31,7 @@ from typing import (
 )
 
 import attrs
+from typing_extensions import override
 
 from composeui.core._views.base import (
     _BAD_STATE_ERRORS,
@@ -1364,6 +1365,7 @@ class TableView(TableMixin, View):
 
     _renderer_key = "table"
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         set_value(self, "shown_rows", self._shown())
@@ -1487,6 +1489,7 @@ class RecordTableView(TableView, Generic[RecordT]):
     #: the user edited a record: the old one, then the new one
     record_edited: Signal[RecordT, RecordT] = attrs.Factory(Signal[RecordT, RecordT])
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.columns = self.columns
@@ -1538,6 +1541,7 @@ class RecordTableView(TableView, Generic[RecordT]):
     def _cells(record: Any, columns: Sequence[Column]) -> list[str]:
         return [_cell_text(getattr(record, column.field)) for column in columns]
 
+    @override
     def _column_type(self, column: int) -> Any:
         """Get the type of the column's field, by which its cells sort and filter."""
         assert column < len(self.columns)  # a sort's, a filter's or a header's: one of them
@@ -1548,12 +1552,14 @@ class RecordTableView(TableView, Generic[RecordT]):
         field = fields.get(self.columns[column].field)
         return str if field is None else field.type
 
+    @override
     def _cell_value(self, row: int, column: int) -> Any:
         # the rows are the records' cells, under their columns
         assert row < len(self.records)
         assert column < len(self.columns)
         return _sort_value(getattr(self.records[row], self.columns[column].field))
 
+    @override
     def _emit_edit(self, row: int, column: int, text: str) -> bool:
         old = self.records[row]
         name = self.columns[column].field
@@ -2071,6 +2077,7 @@ class SourceTableView(View):
         default=False, init=False, repr=False, metadata={OMIT: True}
     )
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self._selected = set(self.selected_ids)

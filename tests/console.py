@@ -7,6 +7,8 @@ has ANSI colors, which its console shows.
 
 from __future__ import annotations
 
+from typing_extensions import override
+
 from composeui.core.view import ButtonView, ConsoleView, MainView, child, define_view
 
 #: the lines a run writes, before its progress line
@@ -22,6 +24,7 @@ class RunMainView(MainView):
     run: ButtonView = child(ButtonView, text="Run")
     output: ConsoleView = child(ConsoleView, max_lines=MAX_LINES)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.output.append("Ready <ok>\n")
@@ -47,6 +50,7 @@ class ColoredRunMainView(MainView):
     more: ButtonView = child(ButtonView, text="More")
     output: ConsoleView = child(ConsoleView, ansi_colors=True)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.output.append(COLORED)

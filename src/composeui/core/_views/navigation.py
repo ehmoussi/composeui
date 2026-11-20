@@ -8,6 +8,7 @@ from typing import (
 )
 
 import attrs
+from typing_extensions import override
 
 from composeui.core._views.base import OMIT, SESSION, UI_TEXT, View, define_view
 from composeui.core._views.containers import _ROUTE_PATTERN, PageView
@@ -36,6 +37,7 @@ class Router(View):
     #: a different page is shown, by its route
     route_changed: Signal[str] = attrs.Factory(Signal[str])
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         routes: set[str] = set()
@@ -81,6 +83,7 @@ class Router(View):
         if is_changed:
             self.route_changed.emit(route)
 
+    @override
     def _render_children(self, renderer_type: RendererType) -> None:
         if not renders_on_demand(renderer_type, "router"):
             super()._render_children(renderer_type)

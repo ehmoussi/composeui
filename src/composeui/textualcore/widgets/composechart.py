@@ -8,6 +8,7 @@ from textual.color import Color
 from textual_fspicker import FileSave, Filters
 from textual_fspicker.path_filters import Filter
 from textual_plotext import PlotextPlot
+from typing_extensions import override
 
 from composeui.core import chartimage
 from composeui.core.chartcolors import series_color
@@ -75,6 +76,7 @@ class ComposeChart(PlotextPlot):
         self._bindings.bind(SAVE_IMAGE_KEY, "save_image", text)
         self.refresh_bindings()
 
+    @override
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         if action == "save_image":
             return chartimage.is_available()  # matplotlib draws the image
@@ -98,6 +100,7 @@ class ComposeChart(PlotextPlot):
             path = path.with_name(f"{path.name}.pdf")
         self.image_path_chosen.emit(path)
 
+    @override
     def render(self) -> RenderResult:
         # the figure afresh at each render, from the attributes: building a figure with a
         # log scale takes the log of its data in place, so building it twice would take

@@ -14,6 +14,7 @@ import pytest
 from attrs import Factory
 from hypothesis import given, settings
 from hypothesis import strategies as st
+from typing_extensions import override
 
 from composeui.core._views.content import follow_match, line_styles_after
 from composeui.core._views.files import DOWNLOAD_CHUNK_SIZE, save_download
@@ -138,6 +139,7 @@ def test_a_page_s_icon_is_its_action_s() -> None:
 
 @define_view
 class _NamesList(ListView[str]):
+    @override
     def build_item(self, item: str) -> LabelView:
         return LabelView(text=item)
 
@@ -164,6 +166,7 @@ def test_a_tree_has_no_node_where_none_is() -> None:
 class _NameGroup(GroupFormView):
     name: RowInputView = Factory(RowInputView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.name.set_validator(lambda: "A name is needed" if self.name.text == "" else None)

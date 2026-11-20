@@ -356,7 +356,7 @@ def _on_one_clock(cell: nw.Expr, value: Any, time_zone: Optional[str]) -> tuple[
     return utc, value.astimezone(datetime.timezone.utc).replace(tzinfo=None)
 
 
-def _comparison(cell: nw.Expr, operator: FilterOperator, value: Any) -> nw.Expr:
+def _comparison(cell: nw.Expr, operator: FilterOperator, value: object) -> nw.Expr:
     if operator is FilterOperator.EQUAL:
         return cell == value
     if operator is FilterOperator.NOT_EQUAL:
@@ -707,7 +707,10 @@ def _validator_fails(validator: Any, column: _Column) -> Optional[nw.Series[Any]
     ):
         compare = _BOUNDS[validator.compare_op]
         # None fails: Python can't compare it
-        return ~(compare(column.values, validator.bound).fill_null(value=False) & ~column.missing)
+        in_bounds: nw.Series[Any] = ~(
+            compare(column.values, validator.bound).fill_null(value=False) & ~column.missing
+        )
+        return in_bounds
     return None
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core._views.tables import SourceTableByPosition
 from composeui.core.renderer import ViewLike
@@ -93,6 +93,7 @@ class TextualSourceTableRenderer(
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeDataFilterTable(self._view)
@@ -278,6 +279,7 @@ class TextualTableRenderer(TextualWidgetRenderer[TableViewLike, ComposeFilterTab
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeFilterTable()

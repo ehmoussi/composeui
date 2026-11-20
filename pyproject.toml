@@ -80,7 +80,10 @@ include = ["composeui*"]
 [dependency-groups]
 browser = ["playwright>=1.60.0"]
 dev = [
-    "httpx>=0.28.1",
+    # Starlette's test client: httpx2 replaces httpx, which is no longer maintained,
+    # but needs Python 3.11
+    "httpx>=0.28.1; python_version < '3.11'",
+    "httpx2>=2.16.2; python_version >= '3.11'",
     "hypothesis>=6.141.1",
     "mypy>=1.19.1",
     "pandas>=2.3.3",
@@ -120,11 +123,46 @@ plugins = ["composeui.mypy"]
 files = ["src/composeui", "src/examples", "tests"]
 always_false = ["PYQT5", "PYSIDE2", "PYQT6"]
 always_true = ["PYSIDE6"]
+strict = true
+# the typing tests check a snippet alone, which leaves the overrides below unused
+warn_unused_configs = false
+strict_bytes = true
+local_partial_types = true
+warn_unreachable = true
+disallow_any_unimported = true
+# pytest-qt leaves QtBot's key and mouse methods untyped, matplotlib its date helpers
+untyped_calls_exclude = ["matplotlib", "pytestqt"]
+enable_error_code = [
+    "deprecated",
+    "exhaustive-match",
+    "explicit-override",
+    "ignore-without-code",
+    "possibly-undefined",
+    "redundant-expr",
+    "redundant-self",
+    "truthy-bool",
+    "truthy-iterable",
+]
 
 [[tool.mypy.overrides]]
 # pyqtgraph ships no type hints: the chart widget is typed at its edges
 module = ["pyqtgraph", "pyqtgraph.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# the chart widget and its tests pass around pyqtgraph's untyped classes
+module = ["composeui.qtcore.widgets.qchart", "tests.test_qtrenderer"]
+disallow_any_unimported = false
+
+[[tool.mypy.overrides]]
+# a test asserts a view's value, changes the view, then asserts it again: mypy keeps the
+# first assert's narrowing, so the second looks unreachable or never equal. ty, which also
+# checks the tests, doesn't narrow on a class held in a variable: the cast it needs is
+# redundant for mypy
+module = ["tests.*"]
+warn_unreachable = false
+strict_equality = false
+disable_error_code = ["redundant-cast"]
 
 [tool.pyrefly]
 project-includes = ["tests/**/*.py"]

@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.view import MainView, MarkdownView, Menu, PickFileAction, child, define_view
 
@@ -21,6 +22,7 @@ class HelpMenu(Menu):
         PickFileAction, text="Open Help", extensions={"Markdown": (".md", ".markdown")}
     )
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = "Help"
@@ -35,6 +37,7 @@ class HelpMainView(MainView):
     help_menu: HelpMenu = Factory(HelpMenu)
     help: MarkdownView = Factory(MarkdownView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.help.text = "# Help\n\n- Open a study\n- Run it\n"

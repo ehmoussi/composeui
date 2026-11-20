@@ -5,9 +5,10 @@ from __future__ import annotations
 import gzip
 import threading
 from html.parser import HTMLParser
-from typing import TYPE_CHECKING, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import pytest
+from typing_extensions import override
 
 from composeui.core.application import ModelApplication
 from composeui.core.jobs import Job
@@ -43,6 +44,7 @@ class _VisibilityParser(HTMLParser):
         self.ids: set[str] = set()
         self.hidden_ids: set[str] = set()
 
+    @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
         element_id = attributes.get("id")
@@ -93,11 +95,11 @@ WidgetT = TypeVar("WidgetT")
 
 def _qt_object(renderer: object, widget_type: type[WidgetT]) -> WidgetT:
     """Get the Qt widget of `renderer`, checked to be a `widget_type`."""
-    renderer_type: type[QtWidgetRenderer] = pytest.importorskip(
+    renderer_type: type[QtWidgetRenderer[Any, Any]] = pytest.importorskip(
         "composeui.qtcore.qtrenderer"
     ).QtWidgetRenderer
     assert isinstance(renderer, renderer_type)
-    widget = cast("QtWidgetRenderer", renderer).qt_object
+    widget = cast("QtWidgetRenderer[Any, Any]", renderer).qt_object
     assert isinstance(widget, widget_type)
     return widget
 
@@ -206,7 +208,7 @@ def test_web_csv_commit_does_not_restart_the_running_loader(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     web = pytest.importorskip("composeui.webcore.webapplication")
-    renderer_type: type[WebRenderer] = pytest.importorskip(
+    renderer_type: type[WebRenderer[Any]] = pytest.importorskip(
         "composeui.webcore.webrenderer"
     ).WebRenderer
     testclient = pytest.importorskip("starlette.testclient")
@@ -254,7 +256,7 @@ def test_web_csv_commit_does_not_restart_the_running_loader(
 
         def widget_id_of(renderer: object) -> str:
             assert isinstance(renderer, renderer_type)
-            return cast("WebRenderer", renderer).widget_id
+            return cast("WebRenderer[Any]", renderer).widget_id
 
         def widget_id(child: View) -> str:
             return widget_id_of(child.renderer)

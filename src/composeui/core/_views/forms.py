@@ -12,6 +12,7 @@ from typing import (
 )
 
 import attrs
+from typing_extensions import override
 
 from composeui.core._views.base import OMIT, UI_TEXT, View, define_view, emit_if_made, view_fields
 from composeui.core._views.choices import (
@@ -85,11 +86,13 @@ class FormRowView(LogMixin, View):
         own_error = state["log_type"] is LogType.ERROR and state["log_message"] != ""
         return bool(state["has_form_error"]) or own_error
 
+    @override
     def _create_renderer(self, renderer_type: RendererType) -> None:
         renderers = self._create_row_renderers(renderer_type)
         if renderers is not None:
             self.renderer = RendererContainer(self, renderers)
 
+    @override
     @classmethod
     def _renderer_keys(cls) -> tuple[str, ...]:
         return () if cls._field_renderer_key is None else (cls._field_renderer_key, "log")
@@ -117,11 +120,13 @@ class FormLabelRowView(FormRowView):
     #: the "?" button's name for screen readers
     help_button_text: str = attrs.field(default=T("Help"), metadata={UI_TEXT: True})
 
+    @override
     @classmethod
     def _renderer_keys(cls) -> tuple[str, ...]:
         keys = super()._renderer_keys()
         return (*keys, "form_label") if len(keys) > 0 else ()
 
+    @override
     def _create_row_renderers(
         self, renderer_type: RendererType
     ) -> Optional[dict[str, Renderer[Any, Any]]]:
@@ -417,6 +422,7 @@ class FormView(View):
         factory=list, init=False, repr=False, metadata={OMIT: True}
     )
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.log_view.is_visible = False
@@ -459,6 +465,7 @@ class FormView(View):
         for signal in signals:
             signal.connect(self.validate)
 
+    @override
     def _check_again(self) -> None:
         if self.log_view.log_message != "":
             self.validate()

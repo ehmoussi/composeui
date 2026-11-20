@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.application import run
 from composeui.core.view import (
@@ -96,6 +97,7 @@ class StudyInputsMainView(MainView):
     resolved: LabelView = Factory(LabelView)
     summary: SummaryRow = Factory(SummaryRow)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.show_study(Path.cwd())
@@ -105,12 +107,14 @@ class StudyInputsMainView(MainView):
         self.summary.file.placeholder = self.tr("summary.txt")
         self.summary.save.clicked.connect(self.save_summary)
 
+    @override
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
             "--study", type=Path, metavar="FOLDER", help="Read the paths from FOLDER."
         )
 
+    @override
     def apply_arguments(self, args: argparse.Namespace) -> None:
         if args.study is not None:
             self.show_study(args.study)

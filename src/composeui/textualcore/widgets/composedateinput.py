@@ -12,6 +12,7 @@ from textual.screen import ModalScreen
 from textual.validation import ValidationResult, Validator
 from textual.widget import Widget
 from textual.widgets import Button
+from typing_extensions import override
 
 from composeui.core._views.inputs import ISO_DATE_FORMAT
 from composeui.core.signal import Signal
@@ -101,6 +102,7 @@ class ComposeMonth(Widget, can_focus=True):
         #: the user picked a day
         self.picked: Signal[datetime.date] = Signal()
 
+    @override
     def render(self) -> RenderResult:
         text = Text(no_wrap=True, overflow="crop")
         width = 7 * _CELL_WIDTH
@@ -207,6 +209,7 @@ class ComposeCalendar(ModalScreen[Optional[datetime.date]]):
         self.month = month
         month.picked.connect(self._dismiss_with)
 
+    @override
     def compose(self) -> ComposeResult:
         with Middle(), Center():
             yield self.month
@@ -228,6 +231,7 @@ class _DateValidator(Validator):
         super().__init__()
         self.field = field
 
+    @override
     def validate(self, value: str) -> ValidationResult:
         if value.strip() == "":
             return self.success()

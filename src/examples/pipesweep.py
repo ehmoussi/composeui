@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Optional
 
 import attrs
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.application import run
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable, as_parameters, table
@@ -115,6 +116,7 @@ def sweep(
 
 @define_view
 class PositiveInputView(LabelRowFloatInputView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.minimum = 0
@@ -134,6 +136,7 @@ class SweepForm(GroupFormView):
         LabelRowIntInputView, label=T("Radii"), value=17, minimum=2, maximum=100
     )
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = self.tr("Sweep")
@@ -228,6 +231,7 @@ class PipeSweepMainView(MainView):
         """The runs' table, on its tab."""
         return self.results.runs_tab.table
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         # the callbacks get the model through their `model` parameter

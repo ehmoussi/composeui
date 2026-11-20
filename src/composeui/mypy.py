@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 from mypy.nodes import AssignmentStmt, CallExpr, MemberExpr, RefExpr, TypeInfo
 from mypy.plugin import Plugin
 from mypy.plugins.attrs import attr_attrib_makers, attr_class_maker_callback, attr_define_makers
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -35,6 +36,7 @@ def _define_csv_row(ctx: ClassDefContext) -> bool:
 
 
 class _CSVPlugin(Plugin):
+    @override
     def get_class_decorator_hook_2(self, fullname: str) -> Callable[[ClassDefContext], bool] | None:
         return _define_csv_row if fullname == _DEFINE_ROW else None
 

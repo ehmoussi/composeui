@@ -6,6 +6,7 @@ import json
 from typing import TYPE_CHECKING, Any, Callable, TypeVar, cast
 
 from markupsafe import Markup
+from typing_extensions import override
 
 from composeui.core._views.choices import walk_tree
 from composeui.core.renderer import ViewLike
@@ -64,6 +65,7 @@ class _WebValuesRenderer(WebRenderer[ValuesViewLike[TValue]], Generic[TValue]):
             }
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event != "change":
             super().dispatch(event, form)
@@ -87,6 +89,7 @@ class WebRadioGroupRenderer(_WebValuesRenderer[TValue]):
     _role = "radio_group"
     is_labelable = False
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         selected = self._view.serialize_value()
         disabled = "" if self.is_enabled else " disabled"
@@ -119,6 +122,7 @@ class WebRadioGroupRenderer(_WebValuesRenderer[TValue]):
 class WebComboBoxRenderer(_WebValuesRenderer[TValue]):
     _role = "combobox"
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         selected = self._view.serialize_value()
         disabled = "" if self.is_enabled else " disabled"
@@ -192,6 +196,7 @@ class WebCheckListRenderer(WebRenderer[MultiValuesViewLike]):
         self._dirty_parts: set[str] = set()
         self._is_whole_dirty = False
 
+    @override
     def _mark_dirty(self, view: MultiValuesViewLike, rendered_object: str, value: Any) -> None:
         self._is_whole_dirty = True
         super()._mark_dirty(view, rendered_object, value)
@@ -202,6 +207,7 @@ class WebCheckListRenderer(WebRenderer[MultiValuesViewLike]):
         self._dirty_parts.update(parts)
         cast("dict[str, WebRenderer[Any]]", _DIRTY.get())[self.widget_id] = self
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         parts, self._dirty_parts = self._dirty_parts, set()
         is_whole, self._is_whole_dirty = self._is_whole_dirty or not oob or not parts, False
@@ -321,6 +327,7 @@ class WebCheckListRenderer(WebRenderer[MultiValuesViewLike]):
         """Render what a closed drop-down list shows: a check list has none."""
         return Markup()
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event == "toggle":
             with self.stop_refresh():
@@ -362,6 +369,7 @@ class WebMultiComboBoxRenderer(WebCheckListRenderer):
             {"empty_text": self._mark_dirty, "count_text": self._mark_dirty}
         )
 
+    @override
     def _whole_html(self, *, oob: bool) -> Markup:
         shown = self._view.shown
         return Markup(
@@ -374,6 +382,7 @@ class WebMultiComboBoxRenderer(WebCheckListRenderer):
             content=self._content_html(shown),
         )
 
+    @override
     def _summary_html(self, shown: ChoicesShown, *, oob: bool) -> Markup:
         # a div, not a button: daisyUI's dropdown opens as it takes the focus, which a
         # button doesn't take on every browser's click
@@ -417,6 +426,7 @@ class WebTreeRenderer(WebRenderer[TreeView]):
             }
         )
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         positions = {
             path: position for position, (path, _node) in enumerate(walk_tree(self._view.nodes))
@@ -528,6 +538,7 @@ class WebTreeRenderer(WebRenderer[TreeView]):
             ' hx-swap="none"'
         ).format(self.widget_id, json.dumps(values))
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         # a disabled tree can't be clicked: a post saying otherwise is refused
         if not self.is_enabled or event not in ("select", "toggle"):

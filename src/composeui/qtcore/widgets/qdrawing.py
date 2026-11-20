@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 from qtpy.QtCore import QPointF, QRectF, QSize, Qt
 from qtpy.QtGui import QBrush, QColor, QFontMetricsF, QPainter, QPalette, QPen, QPolygonF
 from qtpy.QtWidgets import QSizePolicy, QWidget
+from typing_extensions import override
 
 from composeui.core.view import (
     ArrowShape,
@@ -54,7 +55,8 @@ class QDrawing(QWidget):
         self.description = ""
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
-    def sizeHint(self) -> QSize:  # noqa: N802 (Qt's name)
+    @override
+    def sizeHint(self) -> QSize:
         return QSize(_DEFAULT_HEIGHT * 2, _DEFAULT_HEIGHT)
 
     def set_drawing(self) -> None:
@@ -64,7 +66,8 @@ class QDrawing(QWidget):
         self.setToolTip(plain_tool_tip(description))
         self.update()
 
-    def paintEvent(self, _event: QPaintEvent) -> None:  # noqa: N802 (Qt's name)
+    @override
+    def paintEvent(self, _event: QPaintEvent) -> None:
         bounds = DrawingView.shown_bounds(self.shapes, self.bounds)
         placement = DrawingView.placement(bounds, self.width(), self.height())
         painter = QPainter(self)

@@ -11,6 +11,7 @@ from textual.widgets import Button, Label
 from textual_fspicker import FileOpen, FileSave, SelectDirectory
 from textual_fspicker.parts import DirectoryNavigation
 from textual_fspicker.path_filters import Filter, Filters
+from typing_extensions import override
 
 from composeui.core._views.files import path_of_text, text_of_path, with_extension
 from composeui.core.signal import Signal, SignalNoArgs
@@ -42,7 +43,7 @@ def _entry_styles(navigation: DirectoryNavigation) -> DirectoryEntryStyling:
             _read_entry_styles, navigation
         )
     except RuntimeError:  # on the app's thread already, or the app has stopped
-        return _read_entry_styles(navigation)
+        styles = _read_entry_styles(navigation)
     return styles
 
 
@@ -137,6 +138,7 @@ class ReplaceFileScreen(ModalScreen[bool]):
         self.cancel_button = Button(cancel_text)
         self.replace_button = Button(replace_text, variant="warning")
 
+    @override
     def compose(self) -> ComposeResult:
         with Vertical():
             yield self.question

@@ -8,6 +8,8 @@ import os
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
 
+from typing_extensions import override
+
 from composeui.core.application import (
     Application,
     ModelApplication,
@@ -149,6 +151,7 @@ class TextualApplication(Application[MainViewT]):
         super().__init__(build_main_view=build_main_view)
         _add_arguments(self._parser)
 
+    @override
     def run(self) -> None:
         self._args = self._parse_arguments()
         _exec(self._args, self._start, self.main_view, None, self.render)
@@ -172,6 +175,7 @@ class TextualModelApplication(ModelApplication[MainViewT, ModelT]):
         )
         _add_arguments(self._parser)
 
+    @override
     def run(self) -> None:
         self._args = self._parse_arguments()
         _exec(self._args, self._start, self.main_view, self.model, self.render)

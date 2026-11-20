@@ -28,7 +28,7 @@ from typing import (
 
 import attrs
 import cattrs
-from typing_extensions import ParamSpec, dataclass_transform
+from typing_extensions import ParamSpec, dataclass_transform, override
 
 from composeui.core.jobs import Jobs, Task, _check_main_thread
 from composeui.core.model import Model, RefusedError
@@ -49,6 +49,7 @@ from composeui.core.translation import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
+    from contextlib import AbstractContextManager
     from typing import SupportsIndex
 
     from attrs import AttrsInstance
@@ -217,42 +218,55 @@ class FixedList(list[_ListItemT]):
         )
         raise TypeError(msg)
 
+    @override
     def append(self, _item: _ListItemT, /) -> NoReturn:
         self._refuse()
 
+    @override
     def extend(self, _items: Iterable[_ListItemT], /) -> NoReturn:
         self._refuse()
 
+    @override
     def insert(self, _index: SupportsIndex, _item: _ListItemT, /) -> NoReturn:
         self._refuse()
 
+    @override
     def pop(self, _index: SupportsIndex = -1, /) -> NoReturn:
         self._refuse()
 
+    @override
     def remove(self, _item: _ListItemT, /) -> NoReturn:
         self._refuse()
 
+    @override
     def clear(self) -> NoReturn:
         self._refuse()
 
+    @override
     def sort(self, *_args: Any, **_kwargs: Any) -> NoReturn:
         self._refuse()
 
+    @override
     def reverse(self) -> NoReturn:
         self._refuse()
 
+    @override
     def __setitem__(self, _index: Any, _value: Any, /) -> NoReturn:
         self._refuse()
 
+    @override
     def __delitem__(self, _index: Any, /) -> NoReturn:
         self._refuse()
 
-    def __iadd__(self, items: Iterable[_ListItemT], /) -> list[_ListItemT]:  # type: ignore[misc,override]
+    @override
+    def __iadd__(self, items: Iterable[_ListItemT], /) -> list[_ListItemT]:  # type: ignore[override]
         return [*self, *items]  # a new list, which `+=` then sets on the view
 
-    def __imul__(self, count: SupportsIndex, /) -> list[_ListItemT]:  # type: ignore[misc,override]
+    @override
+    def __imul__(self, count: SupportsIndex, /) -> list[_ListItemT]:  # type: ignore[override]
         return list(self) * count
 
+    @override
     def __reduce__(self) -> tuple[type[list[_ListItemT]], tuple[list[_ListItemT]]]:
         return (list, (list(self),))  # a copy, or a pickle, is a plain list
 
@@ -479,6 +493,16 @@ _P = ParamSpec("_P")
 _ViewT = TypeVar("_ViewT", bound="View")
 
 
+def catching_context(
+    func: Callable[_P, Iterator[None]],
+) -> Callable[_P, AbstractContextManager[None, bool]]:
+    """Make a context manager, as `contextlib.contextmanager`, that may catch the error.
+
+    Its type says so: mypy then knows that the code after the `with` block can run.
+    """
+    return cast("Callable[_P, AbstractContextManager[None, bool]]", contextlib.contextmanager(func))
+
+
 def child(cls: Callable[_P, _ViewT], /, *args: _P.args, **kwargs: _P.kwargs) -> _ViewT:
     """Get a view field's default: a `cls` view built with these arguments, one per view.
 
@@ -489,7 +513,7 @@ def child(cls: Callable[_P, _ViewT], /, *args: _P.args, **kwargs: _P.kwargs) -> 
     def build() -> _ViewT:
         return cls(*copy.deepcopy(args), **copy.deepcopy(kwargs))
 
-    return cast("_ViewT", attrs.Factory(build))
+    return attrs.Factory(build)
 
 
 @define_view
@@ -569,7 +593,7 @@ class View:
         """
         return TranslatedText(self._tr(text), text)
 
-    @contextlib.contextmanager
+    @catching_context
     def refusing(self, message: str) -> Iterator[None]:
         """Show the model's refusal of the block's change in the main view's status bar.
 

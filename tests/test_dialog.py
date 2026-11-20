@@ -6,6 +6,7 @@ import functools
 from typing import TYPE_CHECKING, Optional
 
 import pytest
+from typing_extensions import override
 
 from composeui.core.model import RefusedError
 from composeui.core.reactivity import reactive, start_reactions
@@ -178,6 +179,7 @@ class AskingView(MainView):
     city: LabelView = child(LabelView)
     confirm: DialogView = child(DialogView, kind=DialogKind.CONFIRM)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         #: each summary `summarize` made; not a field: the test's record

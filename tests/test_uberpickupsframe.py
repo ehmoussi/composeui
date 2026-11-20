@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime
 import gzip
-from typing import TYPE_CHECKING, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar, cast
 
 import pytest
 
@@ -103,11 +103,11 @@ WidgetT = TypeVar("WidgetT")
 
 def _qt_object(renderer: object, widget_type: type[WidgetT]) -> WidgetT:
     """Get the Qt widget of `renderer`, checked to be a `widget_type`."""
-    renderer_type: type[QtWidgetRenderer] = pytest.importorskip(
+    renderer_type: type[QtWidgetRenderer[Any, Any]] = pytest.importorskip(
         "composeui.qtcore.qtrenderer"
     ).QtWidgetRenderer
     assert isinstance(renderer, renderer_type)
-    widget = cast("QtWidgetRenderer", renderer).qt_object
+    widget = cast("QtWidgetRenderer[Any, Any]", renderer).qt_object
     assert isinstance(widget, widget_type)
     return widget
 

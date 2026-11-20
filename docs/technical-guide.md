@@ -997,7 +997,8 @@ Run the examples with `uv run python -m examples.pipeform --backend qt`, or `tex
 Every behavior change needs a test in `tests/`.
 
 - Backend tests exercise real rendered widgets: `qtbot` for Qt, `App.run_test()` for
-  Textual, and the `httpx` or Starlette test client for the web.
+  Textual, and the Starlette test client for the web. It runs on `httpx2`, or on `httpx`
+  before Python 3.11, as `httpx2` needs 3.11.
 - Tests for an optional backend guard with `pytest.importorskip(...)`.
 - `make test` runs the tests in parallel, a worker per CPU (pytest-xdist). So a test must
   not depend on the state or the order of another. `pytest` without `-n` runs them one
@@ -1092,7 +1093,10 @@ files, and delete `js/vendor/`.
 
 - `ruff` lints with `select = ["ALL"]` and a line length of 100. `pyproject.toml` has the
   ignore list. Fix lint properly rather than adding `noqa`, unless it is clearly justified.
-- `mypy` must pass. Fully type-annotate new code: the package ships `py.typed`.
+- `mypy` must pass in strict mode, with the extra checks in `pyproject.toml`. Fully
+  type-annotate new code: the package ships `py.typed`. Mark each method that
+  overrides a base class's method with `@override` from `typing_extensions`, below
+  `@property` when the method has one.
 - Every Python module starts with `from __future__ import annotations`, after its
   docstring. Ruff enforces it (`required-imports`, rule I002), and `make lint` adds it to a
   new file. The annotations are then strings:

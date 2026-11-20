@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from qtpy.QtWidgets import QFileDialog
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core import chartimage
 from composeui.core.renderer import ViewLike
@@ -55,6 +55,7 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QChart()

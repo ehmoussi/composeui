@@ -7,6 +7,7 @@ import time
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from typing_extensions import override
 
 pytest.importorskip("polars")
 pytest.importorskip("starlette")
@@ -115,6 +116,7 @@ def test_a_user_uploads_a_dataset_filters_it_and_exports_the_rows_shown() -> Non
     views: list[DataExplorerMainView] = []
 
     class ExplorerApp(WebApplication[DataExplorerMainView]):
+        @override
         def setup_session(self, main_view: DataExplorerMainView) -> None:
             views.append(main_view)
 

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import threading
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 
@@ -158,7 +158,7 @@ def test_a_saved_sweep_opens_with_its_runs(app: App, tmp_path: Path) -> None:
 
 def test_a_sweep_shows_its_runs_in_the_qt_widgets(app: App, qtbot: QtBot) -> None:
     pytest.importorskip("qtpy")
-    renderer_type: type[QtWidgetRenderer] = pytest.importorskip(
+    renderer_type: type[QtWidgetRenderer[Any, Any]] = pytest.importorskip(
         "composeui.qtcore.qtrenderer"
     ).QtWidgetRenderer
     main_view = app.main_view
@@ -172,7 +172,7 @@ def test_a_sweep_shows_its_runs_in_the_qt_widgets(app: App, qtbot: QtBot) -> Non
     assert main_view.runs.rows == [["20", "6"], ["30", "10"], ["40", "14"]]
     renderer = main_view.progress.renderer
     assert isinstance(renderer, renderer_type)
-    progress_bar = cast("QtWidgetRenderer", renderer).qt_object
+    progress_bar = cast("QtWidgetRenderer[Any, Any]", renderer).qt_object
     assert progress_bar is not None
     assert progress_bar.value() == 3
     assert set(threads) == {threading.main_thread()}

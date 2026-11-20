@@ -8,6 +8,7 @@ from rich.text import Text
 from textual.binding import Binding, BindingType
 from textual.containers import Horizontal
 from textual.widgets import Label
+from typing_extensions import override
 
 from composeui.core._views.controls import RANGE_DASH
 from composeui.core.signal import Signal
@@ -104,6 +105,7 @@ class ComposeRangeSlider(DragReportMixin, can_focus=True):
         self.low, self.high = low, high
         self.refresh()
 
+    @override
     def render(self) -> RenderResult:
         width = self._track_width()
         if width <= 0:
@@ -200,6 +202,7 @@ class ComposeRangeSlider(DragReportMixin, can_focus=True):
                 self._report()
         self.refresh()  # the active handle shows its focus
 
+    @override
     def _report(self) -> None:
         self._drop_report()
         self.moved.emit(self.low, self.high)
@@ -236,6 +239,7 @@ class ComposeDateRangeInput(Horizontal):
     def fields(self) -> tuple[ComposeDateInput, ComposeDateInput]:
         return self.start, self.end
 
+    @override
     def compose(self) -> ComposeResult:
         yield self.start
         yield Label(RANGE_DASH.strip())

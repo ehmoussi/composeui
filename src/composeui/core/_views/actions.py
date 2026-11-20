@@ -13,6 +13,7 @@ from typing import (
 )
 
 import attrs
+from typing_extensions import override
 
 from composeui.core import study
 from composeui.core._views.base import OMIT, UI_TEXT, View, define_view
@@ -51,6 +52,7 @@ class ActionView(View):
 
     triggered: SignalNoArgs = attrs.Factory(SignalNoArgs)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         # first, so the callbacks connected after it see the new check state; on Qt,
@@ -80,6 +82,7 @@ class Menu(View):
 
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         # the menu should be visible only when triggered
@@ -105,6 +108,7 @@ class NewAction(ActionView):
 
     text: str = attrs.field(default=T("New"), metadata={UI_TEXT: True})
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.shortcut = "Ctrl+n"
@@ -123,6 +127,7 @@ class OpenFileAction(ActionView):
 
     text: str = attrs.field(default=T("Open"), metadata={UI_TEXT: True})
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.shortcut = "Ctrl+o"
@@ -151,6 +156,7 @@ class PickFileAction(ActionView):
     )
     file_picked: Signal[Path] = attrs.Factory(Signal[Path])
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.triggered.connect(self._pick_file)
@@ -171,6 +177,7 @@ class SaveAction(ActionView):
 
     text: str = attrs.field(default=T("Save"), metadata={UI_TEXT: True})
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.shortcut = "Ctrl+s"
@@ -188,6 +195,7 @@ class SaveAsAction(ActionView):
 
     text: str = attrs.field(default=T("Save As"), metadata={UI_TEXT: True})
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.shortcut = "Ctrl+Shift+s"
@@ -202,6 +210,7 @@ class ExitAppAction(ActionView):
 
     text: str = attrs.field(default=T("Exit"), metadata={UI_TEXT: True})
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.shortcut = "Ctrl+q"
@@ -230,6 +239,7 @@ class FileMenu(Menu):
 
     title: str = attrs.field(default=T("File"), metadata={UI_TEXT: True})
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.save.triggered.connect(self._save)
@@ -309,6 +319,7 @@ class LanguageMenu(Menu):
     names: ClassVar[Mapping[str, str]] = LANGUAGE_NAMES
 
     @property
+    @override
     def children_views(self) -> list[View]:
         return [*super().children_views, *self.actions]
 

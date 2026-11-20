@@ -6,6 +6,7 @@ from qtpy.QtCore import QRect, QSize, Qt, QTimer
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import QPainter, QPaintEvent
 from qtpy.QtWidgets import QSlider, QStyle, QStyleOptionSlider
+from typing_extensions import override
 
 from composeui.core.view import DRAG_REPORT_DELAY_MS, SliderMixin
 
@@ -67,16 +68,19 @@ class QValueSlider(QSlider):
         metrics = self.fontMetrics()
         return max(metrics.horizontalAdvance(self._text_at(end)) for end in (0, self.maximum()))
 
-    def initStyleOption(self, option: QStyleOptionSlider) -> None:  # noqa: N802
+    @override
+    def initStyleOption(self, option: QStyleOptionSlider) -> None:
         super().initStyleOption(option)
         option.rect.setRight(option.rect.right() - self._slot_width() - _GAP)
 
-    def sizeHint(self) -> QSize:  # noqa: N802
+    @override
+    def sizeHint(self) -> QSize:
         # no `minimumSizeHint`: a horizontal slider's is its `sizeHint`, the slot in already
         size = super().sizeHint()
         return QSize(size.width() + self._slot_width() + _GAP, size.height())
 
-    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+    @override
+    def paintEvent(self, event: QPaintEvent) -> None:
         if self.is_filled:
             super().paintEvent(event)
         painter = QPainter(self)

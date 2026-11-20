@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from typing_extensions import override
+
 from composeui.core.view import (
     LabelRowInputView,
     LabelRowSliderView,
@@ -34,6 +36,7 @@ class NameColumn(VerticalView):
 class NameRows(ListView[str]):
     """A row per name, its label the name."""
 
+    @override
     def build_item(self, item: str) -> View:
         return LabelRowInputView(label=item)
 

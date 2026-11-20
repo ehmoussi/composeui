@@ -9,6 +9,7 @@ from rich.segment import Segment
 from rich.style import Style
 from textual.strip import Strip
 from textual.widget import Widget
+from typing_extensions import override
 
 from composeui.core.view import (
     ArrowShape,
@@ -386,6 +387,7 @@ class ComposeDrawing(Widget):
         self._grid = grid
         return grid
 
+    @override
     def render_line(self, y: int) -> Strip:
         columns, height = self.size
         base = self.rich_style

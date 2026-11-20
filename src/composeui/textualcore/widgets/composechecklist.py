@@ -8,6 +8,7 @@ from textual.containers import Vertical
 from textual.content import Content
 from textual.widgets import Checkbox, Input, SelectionList
 from textual.widgets.selection_list import Selection
+from typing_extensions import override
 
 from composeui.core.signal import Signal
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
@@ -79,6 +80,7 @@ class ComposeCheckList(Vertical):
         self.all_clicked = self.check_all.clicked
         self._rows: list[tuple[str, str]] = []
 
+    @override
     def compose(self) -> ComposeResult:
         yield self.search_input
         yield self.check_all

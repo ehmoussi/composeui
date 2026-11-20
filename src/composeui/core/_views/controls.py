@@ -17,6 +17,7 @@ from typing import (
 )
 
 import attrs
+from typing_extensions import override
 
 from composeui.core._views.base import OMIT, UI_TEXT, View, define_view, notify_renderer
 from composeui.core._views.files import StreamContent
@@ -465,6 +466,7 @@ class DownloadView(ButtonView):
         default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.clicked.connect(self._give)

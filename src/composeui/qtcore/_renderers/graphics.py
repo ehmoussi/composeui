@@ -5,7 +5,7 @@ from __future__ import annotations
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core.renderer import Renderer, ViewLike
 from composeui.qtcore.qtrenderer import _QWIDGETSIZE_MAX, QtWidgetRenderer
@@ -40,6 +40,7 @@ class QtDrawingRenderer(QtWidgetRenderer[DrawingViewLike, QDrawing]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QDrawing()

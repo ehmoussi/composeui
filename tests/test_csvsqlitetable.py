@@ -666,6 +666,10 @@ def test_dates_repeated_in_a_csv_keep_their_format_type_and_offset() -> None:
         model.close()
 
 
+def _is_yes(text: str) -> bool:
+    return text == "yes"
+
+
 @define_csv_row
 class ScalarRow:
     name: str = csv_field(
@@ -674,7 +678,7 @@ class ScalarRow:
         validator=lambda _i, a, v: attrs.validators.min_len(a.metadata["minimum_length"])(_i, a, v),
     )
     count: int
-    enabled: bool = attrs.field(converter=lambda text: text == "yes")
+    enabled: bool = attrs.field(converter=_is_yes)
     amount: decimal.Decimal = attrs.field(converter=decimal.Decimal)
     payload: bytes = attrs.field(converter=str.encode)
     optional: Optional[int] = None

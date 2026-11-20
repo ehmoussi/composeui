@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, TypeVar
 
 from qtpy.QtCore import QSignalBlocker
 from qtpy.QtWidgets import QFileDialog, QMessageBox, QWidget
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core._views.files import with_extension
 from composeui.core.renderer import ViewLike
@@ -133,6 +133,7 @@ class _QtPathInputRenderer(QtWidgetRenderer[TPathView, QFilePathField]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QFilePathField()
@@ -202,6 +203,7 @@ class QtFilePathInputRenderer(_QtPathInputRenderer[FilePathInputViewLike]):
             }
         )
 
+    @override
     def render(self) -> None:
         is_new = self._rendered_object is None
         super().render()
@@ -209,6 +211,7 @@ class QtFilePathInputRenderer(_QtPathInputRenderer[FilePathInputViewLike]):
             assert self._rendered_object is not None
             self._relay(self._view.reload_clicked, self._rendered_object.reload_button.clicked)
 
+    @override
     def ask(self, parent: QWidget) -> str:
         path = self._view.path
         start = path.parent if path is not None else self._view.start_folder()
@@ -254,6 +257,7 @@ class QtFileUploadRenderer(QtWidgetRenderer[FileUploadViewLike, QFileUpload]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QFileUpload()
@@ -321,6 +325,7 @@ class QtSavePathInputRenderer(_QtPathInputRenderer[SavePathInputViewLike]):
             )
         )
 
+    @override
     def ask(self, parent: QWidget) -> str:
         path = self._view.path
         start = path if path is not None else self._view.start_folder()
@@ -349,6 +354,7 @@ class QtFolderPathInputRenderer(_QtPathInputRenderer[PathInputViewLike]):
         # the web's list of the server's folders only
         self._refresh_dispatcher["choose_folder_text"] = lambda _view, _object, _value: None
 
+    @override
     def ask(self, parent: QWidget) -> str:
         path = self._view.path
         start = path if path is not None else self._view.start_folder()

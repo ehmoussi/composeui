@@ -12,6 +12,7 @@ import pytest
 from attrs import Factory
 from hypothesis import given
 from hypothesis import strategies as st
+from typing_extensions import override
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.translation import (
@@ -167,6 +168,7 @@ class Color(enum.Enum):
 
 @define_view
 class ColorRowView(LabelRowComboBoxView[Color]):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = self.tr("Color")
@@ -179,6 +181,7 @@ class PaletteView(GroupFormView):
     color: ColorRowView = Factory(ColorRowView)
     colors: TableView = Factory(TableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = self.tr("Palette")
@@ -212,6 +215,7 @@ def _palette_main_view(directory: Path) -> Any:
 
         palette: PaletteView = Factory(PaletteView)
 
+        @override
         def __attrs_post_init__(self) -> None:
             super().__attrs_post_init__()
             self.palette.color.value_changed.connect(self.show_color)

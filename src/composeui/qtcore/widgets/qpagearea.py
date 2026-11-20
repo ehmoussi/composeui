@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from qtpy.QtWidgets import QScrollArea, QWidget
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from qtpy.QtCore import QSize
@@ -23,6 +24,7 @@ class QPageArea(QScrollArea):
         self.setWidget(column)
         self._column = column
 
-    def sizeHint(self) -> QSize:  # noqa: N802 (Qt's name)
+    @override
+    def sizeHint(self) -> QSize:
         # a scroll area's own is the size of a few lines of text
         return self._column.sizeHint()

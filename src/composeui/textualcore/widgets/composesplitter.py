@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from textual.binding import Binding, BindingType
 from textual.containers import Container
 from textual.widget import Widget
+from typing_extensions import override
 
 from composeui.core.signal import Signal
 
@@ -51,6 +52,7 @@ class SplitterHandle(Widget, can_focus=True):
         #: the panes' lengths as the drag left them, before they're laid out
         self._dragged_lengths: list[int] = []
 
+    @override
     def render(self) -> VisualType:
         if self.splitter.is_vertical:
             return "─" * max(self.size.width, 1)
@@ -88,6 +90,7 @@ class SplitterHandle(Widget, can_focus=True):
             self.splitter.resized.emit(self._dragged_lengths)
             event.stop()
 
+    @override
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
         # the keys along the splitter only: the others still scroll the screen
         if action == "move":
@@ -195,7 +198,8 @@ class ComposeSplitter(Container):
     def _pane_after(self, handle: SplitterHandle) -> int:
         return self.children.index(handle) // 2 + 1
 
-    def arrange(self, size: Size, optimal: bool = False) -> DockArrangeResult:  # noqa: FBT002
+    @override
+    def arrange(self, size: Size, optimal: bool = False) -> DockArrangeResult:
         # a handle shows before each pane shown, past the first: as a pane is shown or
         # hidden, which this lays out again
         handles = [child for child in self.children if isinstance(child, SplitterHandle)]

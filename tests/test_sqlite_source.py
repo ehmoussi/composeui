@@ -16,6 +16,7 @@ import attrs
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
+from typing_extensions import override
 
 from composeui.core import sqlitemodel
 from composeui.core._views.tables import parse_filter
@@ -340,6 +341,7 @@ def test_the_rows_stay_in_sqlite_python_reading_only_the_ids_and_the_window(
     reads: list[str] = []
 
     class Counted(SqliteSource):
+        @override
         def cells(self, ids: Sequence[Any], columns: Sequence[str]) -> dict[Any, list[Any]]:
             reads.append(f"{len(ids)} rows")
             return super().cells(ids, columns)
@@ -428,7 +430,8 @@ def test_reads_reuse_a_connection_and_see_each_write_committed(
 
     def counted(database: str, *args: Any, **kwargs: Any) -> sqlite3.Connection:
         opened.append(database)
-        return connect(database, *args, **kwargs)
+        connection: sqlite3.Connection = connect(database, *args, **kwargs)
+        return connection
 
     monkeypatch.setattr(sqlite3, "connect", counted)
     table = SourceTableView(source=sql)

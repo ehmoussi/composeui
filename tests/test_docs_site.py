@@ -9,6 +9,7 @@ from urllib.parse import unquote, urlsplit
 from xml.etree import ElementTree as ET
 
 import pytest
+from typing_extensions import override
 
 pytestmark = pytest.mark.skipif(
     not environ.get("COMPOSEUI_DOCS_SITE"),
@@ -22,6 +23,7 @@ class _PageMetadata(HTMLParser):
         self.urls: list[str] = []
         self.noindex = False
 
+    @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
         url = None

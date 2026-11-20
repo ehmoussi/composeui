@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 from qtpy.QtCore import QObject, Qt
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtWidgets import QDialog, QMainWindow, QWidget
-from typing_extensions import TypeVarTuple, Unpack
+from typing_extensions import TypeVarTuple, Unpack, override
 
 from composeui.core.renderer import NoRenderedObjectError, Renderer, ViewLike
 from composeui.core.view import FormRowView
@@ -83,6 +83,7 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
             )
         self._main_thread_invoker = _main_thread_invoker()  # made here, on the main thread
 
+    @override
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         self._main_thread_invoker.call(self, callback)
 
@@ -102,6 +103,7 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
     def qt_object(self) -> TWidget | None:
         return self._rendered_object
 
+    @override
     def refresh(self) -> None:
         if self._rendered_object is None:
             raise NoRenderedObjectError
@@ -111,6 +113,7 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
         finally:
             self._rendered_object.blockSignals(was_blocked)
 
+    @override
     def refresh_attribute(self, attr_name: str, value: Any) -> None:
         """Show `value`, the new value of `attr_name`, without the widget emitting signals."""
         if self._rendered_object is None:

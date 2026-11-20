@@ -23,6 +23,7 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from typing_extensions import override
 
 from composeui.qtcore.widgets.qfiltertable import QTableFilterBar
 from composeui.qtcore.widgets.qplaintext import plain_label
@@ -73,12 +74,15 @@ class QSourceTableModel(QAbstractTableModel):
             last = self.index(self.rowCount() - 1, self.columnCount() - 1)
             self.dataChanged.emit(self.index(0, 0), last)
 
-    def rowCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008, N802
+    @override
+    def rowCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008
         return 0 if parent.isValid() else self._table.row_count
 
-    def columnCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008, N802
+    @override
+    def columnCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008
         return 0 if parent.isValid() else len(self._table.headers)
 
+    @override
     def data(self, index: _Index, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
         looks: dict[int, QPalette.ColorRole] = {
             Qt.ItemDataRole.BackgroundRole: QPalette.ColorRole.Highlight,
@@ -99,7 +103,8 @@ class QSourceTableModel(QAbstractTableModel):
             return QApplication.palette().brush(looks[role]) if is_selected else None
         return cells[index.column()] if index.column() < len(cells) else None
 
-    def headerData(  # noqa: N802
+    @override
+    def headerData(
         self, section: int, orientation: Qt.Orientation, role: int = Qt.ItemDataRole.DisplayRole
     ) -> Any:
         if role != Qt.ItemDataRole.DisplayRole:
@@ -156,7 +161,8 @@ class QSourceTableView(QTableView):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.ActionsContextMenu)
         self.addAction(self.export_action)
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+    @override
+    def keyPressEvent(self, event: QKeyEvent) -> None:
         current = self.currentIndex()
         if event.matches(QKeySequence.StandardKey.Copy):
             self.copy_requested.emit()

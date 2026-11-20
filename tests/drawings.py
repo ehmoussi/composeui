@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing_extensions import override
+
 from composeui.core.view import (
     ArrowShape,
     DrawingView,
@@ -26,6 +28,7 @@ class DrawingMainView(MainView):
         DrawingView, bounds=(0.0, 0.0, 4.0, 2.0), description="A moving load", height=300
     )
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.position.value_changed.connect(self._move)
