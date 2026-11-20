@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
+import atexit
+import codecs
 import collections
 import contextlib
 import functools
+import itertools
 import logging
+import operator
+import os
 import queue
+import signal
+import subprocess
 import threading
 import time
 import weakref
-from typing import TYPE_CHECKING, Any, Callable, Generic
+from typing import IO, TYPE_CHECKING, Any, Callable, Generic
 
 from typing_extensions import Concatenate, ParamSpec, TypeVar, TypeVarTuple, Unpack
 
@@ -21,7 +28,7 @@ from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.translation import T
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Iterable, Iterator, Mapping, Sequence
 
     from composeui.core.model import Model
     from composeui.core.renderer import Renderer, RendererContainer
@@ -147,6 +154,78 @@ class Job(Generic[R, ProgressT]):
         each one, and the reactive methods that they change run once after them.
         """
         self.call_on_main_thread(functools.partial(self.progress.emit, value))
+
+    def run_process(  # noqa: PLR0913 (the options of a process, each by its name)
+        self,
+        command: Sequence[str | os.PathLike[str]],
+        *,
+        cwd: str | os.PathLike[str] | None = None,
+        env: Mapping[str, str] | None = None,
+        on_output: Callable[[str], object] | None = None,
+        on_errors: Callable[[str], object] | None = None,
+        timeout: float | None = None,
+        grace: float = 5.0,
+        encoding: str = "utf-8",
+    ) -> int:
+        """Run `command` and wait for it to exit; return its exit code.
+
+        `on_output` gets the output and the errors of the process as text, decoded from
+        `encoding`, in this thread: ``on_output=job.report_progress`` shows them in a
+        `ConsoleView`. With `on_errors`, `on_output` gets the output only, and `on_errors`
+        the errors, in the order they're read. A byte that `encoding` can't decode gives the
+        replacement character. Once the job is canceled, the process is stopped and
+        `JobCanceledError` raised; after `timeout` seconds, `subprocess.TimeoutExpired`. An
+        error of `on_output` or `on_errors` stops it too.
+
+        On POSIX, the process runs in a session of its own, with the processes it starts.
+        When it exits or is stopped, what's left of them gets SIGTERM, then SIGKILL after
+        `grace` seconds. On Windows, only the process started is stopped: the processes
+        it started go on. A process still running as Python exits is stopped too.
+        """
+        self.raise_if_canceled()
+        # a character's bytes can come in two reads; an unknown encoding starts nothing
+        decoder = codecs.getincrementaldecoder(encoding)
+        process = subprocess.Popen(  # noqa: S603 (the app's own command)
+            list(command),
+            cwd=cwd,
+            env=env,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT if on_errors is None else subprocess.PIPE,
+            start_new_session=True,  # POSIX only: Windows has no session
+        )
+        with _RUNNING_LOCK:
+            _RUNNING[process] = grace
+        # the text of both streams, each with the callback it goes to, in the order it's read
+        output: queue.SimpleQueue[tuple[Callable[[str], object] | None, str]]
+        output = queue.SimpleQueue()
+        streams = [(process.stdout, on_output), (process.stderr, on_errors)]
+        readers = [
+            threading.Thread(
+                target=_read_output,
+                args=(stream, decoder(errors="replace"), target, output),
+                name="composeui-output",
+                daemon=True,
+            )
+            for stream, target in streams
+            if stream is not None
+        ]
+        started = time.monotonic()
+        try:
+            for reader in readers:
+                reader.start()
+            while process.poll() is None:
+                self.raise_if_canceled()
+                _raise_past(timeout, started, command)
+                _pass_output(output, _PROCESS_POLL)
+        except (JobCanceledError, subprocess.TimeoutExpired):
+            _end_process(process, grace, readers, output)
+            raise
+        except BaseException:
+            _stop(process, grace)  # e.g. `on_output` failed: it isn't called again
+            raise
+        _end_process(process, grace, readers, output)
+        return process.returncode
 
 
 class Task(Generic[R, P, ProgressT]):
@@ -411,6 +490,137 @@ def _debounced(
     return work(job, *args, **kwargs)
 
 
+def _read_output(
+    stream: IO[bytes],
+    decoder: codecs.IncrementalDecoder,
+    target: Callable[[str], object] | None,
+    output: queue.SimpleQueue[tuple[Callable[[str], object] | None, str]],
+) -> None:
+    """Put the text that `stream` gives in `output`, for `target`, until its end.
+
+    In a thread of its own.
+    """
+    with stream:
+        # what the process has written, without waiting for a whole chunk
+        while data := os.read(stream.fileno(), _OUTPUT_CHUNK):
+            output.put((target, decoder.decode(data)))
+    output.put((target, decoder.decode(b"", final=True)))
+
+
+def _pass_output(
+    output: queue.SimpleQueue[tuple[Callable[[str], object] | None, str]], wait: float
+) -> None:
+    """Give its callback all the text read so far, waiting up to `wait` seconds for some."""
+    parts = []
+    try:
+        if wait > 0:
+            parts.append(output.get(timeout=wait))
+        while True:
+            parts.append(output.get_nowait())
+    except queue.Empty:
+        pass
+    # each text that follows one for the same callback goes with it, in one call
+    for target, texts in itertools.groupby(parts, key=operator.itemgetter(0)):
+        text = "".join(text for _, text in texts)
+        if text != "" and target is not None:
+            target(text)
+
+
+def _raise_past(
+    timeout: float | None, started: float, command: Sequence[str | os.PathLike[str]]
+) -> None:
+    """Raise `subprocess.TimeoutExpired` once `timeout` seconds have passed since `started`."""
+    if timeout is not None and time.monotonic() - started > timeout:
+        raise subprocess.TimeoutExpired(list(command), timeout)
+
+
+def _end_process(
+    process: subprocess.Popen[bytes],
+    grace: float,
+    readers: list[threading.Thread],
+    output: queue.SimpleQueue[tuple[Callable[[str], object] | None, str]],
+) -> None:
+    """Stop `process` if it runs, and give its callbacks the rest of its output."""
+    _stop(process, grace)
+    # what's left is a pipe's buffer, unless a process left holds the output, e.g. one
+    # started on Windows: it isn't waited for
+    deadline = time.monotonic() + _OUTPUT_END_WAIT
+    for reader in readers:
+        reader.join(max(deadline - time.monotonic(), 0.0))
+    _pass_output(output, 0.0)
+
+
+def _stop(process: subprocess.Popen[bytes], grace: float) -> None:
+    """Stop `process`, run by `Job.run_process`, and forget it."""
+    _STOP_PROCESSES({process: grace})
+    with _RUNNING_LOCK:
+        _RUNNING.pop(process, None)
+
+
+def stop_running_processes() -> None:
+    """Stop the processes that jobs still run, e.g. as Python exits: the jobs' threads can't.
+
+    The web backend calls it as its server stops too: uvicorn ends on SIGTERM without
+    Python's exit.
+    """
+    with _RUNNING_LOCK:
+        running = dict(_RUNNING)
+    _STOP_PROCESSES(running)
+
+
+def _kill(running: Mapping[subprocess.Popen[bytes], float]) -> None:
+    """Kill each process of `running` unless it exited, and wait for it."""
+    for process in running:
+        process.kill()
+        process.wait()
+
+
+def _signal_group(process: subprocess.Popen[bytes], number: int) -> bool:  # posix only
+    """Send signal `number` to the group of `process`; False when none of it is left."""
+    try:
+        os.killpg(process.pid, number)
+    except (ProcessLookupError, PermissionError):  # macOS: a group of zombies refuses
+        return False
+    return True
+
+
+def _stop_sessions(running: Mapping[subprocess.Popen[bytes], float]) -> None:  # posix only
+    """Stop each process of `running` and what's left of its group, at once.
+
+    Each group gets SIGTERM, then SIGKILL after the grace time that `running` gives.
+    """
+    started = time.monotonic()
+    left = [process for process in running if _signal_group(process, signal.SIGTERM)]
+    while len(left) > 0:
+        time.sleep(_PROCESS_POLL)
+        elapsed = time.monotonic() - started
+        stopping = []
+        for process in left:
+            if elapsed >= running[process]:
+                _signal_group(process, signal.SIGKILL)
+            else:
+                process.poll()  # a zombie process started would else stay in the group
+                if _signal_group(process, 0):
+                    stopping.append(process)
+        left = stopping
+    _kill(running)
+
+
+# how the processes run by `Job.run_process` stop, with the processes they started where it can
+_STOP_PROCESSES = _stop_sessions if os.name == "posix" else _kill
+#: the processes that `Job.run_process` runs, with their grace time
+_RUNNING: dict[subprocess.Popen[bytes], float] = {}
+_RUNNING_LOCK = threading.Lock()
+# a job's thread is a daemon: Python doesn't wait for it to stop its process
+atexit.register(stop_running_processes)
+#: seconds between two checks of a process running, or stopping
+_PROCESS_POLL = 0.05
+#: the most bytes of a process's output read at once
+_OUTPUT_CHUNK = 65536
+#: seconds to read the rest of a process's output, once it's stopped
+_OUTPUT_END_WAIT = 2.0
+
+
 class Jobs:
     """The jobs of a main view (`MainView.jobs`): functions run in threads.
 
@@ -482,8 +692,8 @@ class Jobs:
         self._model = weakref.ref(model)
         self.running_changed.set_model(model)
         for task in self._live_tasks():
-            for signal in (task.changed, task.progress_reported, task.finished, task.failed):
-                signal.set_model(model)
+            for task_signal in (task.changed, task.progress_reported, task.finished, task.failed):
+                task_signal.set_model(model)
 
     def task(
         self, work: Callable[Concatenate[Job[R, ProgressT], P], R], *, debounce: float = 0.2

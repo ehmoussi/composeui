@@ -45,7 +45,7 @@ from typing_extensions import override
 from composeui.core._views.base import made_signals, view_fields
 from composeui.core._views.tables import FILTER_PATTERNS_VARIABLE
 from composeui.core.application import Application, _add_reference_to_signals
-from composeui.core.jobs import starting_study
+from composeui.core.jobs import starting_study, stop_running_processes
 from composeui.core.reactivity import start_reactions
 from composeui.core.registry import RendererType
 from composeui.core.reload import has_change_events
@@ -298,7 +298,7 @@ def _lifespan(
     """Get the server's lifespan: idle sessions saved to disk while it runs (`session_idle`).
 
     Once it stops, the sessions are closed, their uploads removed, or a ``--reload``
-    server's saved for its next process.
+    server's saved for its next process. The programs that jobs still run are stopped.
     """
 
     @contextlib.asynccontextmanager
@@ -322,6 +322,8 @@ def _lifespan(
                 sessions.save_all()
             else:
                 sessions.close_all()
+            # uvicorn ends on SIGTERM by sending it again: Python's exit then doesn't run
+            stop_running_processes()
 
     return lifespan
 

@@ -20,6 +20,12 @@ backends' modules included, can change in any release without an entry here.
 - `Task.progress_reported` emits each progress value of a task's run once, for output that
   a callback appends. `Task.changed` also emits for a start, a cancel and an outcome.
 - `Job.raise_if_canceled()` stops a canceled job's function with `JobCanceledError`.
+- `Job.run_process(command)` runs a program from a job and returns its exit code. It passes
+  the output and the errors to `on_output` as text, decoded from `encoding` (UTF-8 by
+  default), or the errors apart to `on_errors`. It stops the program when the job is canceled,
+  after a `timeout`, when a callback raises, and when the app exits. On Linux and macOS, it
+  also stops the programs that the program started. On Windows, it stops only the program
+  itself.
 
 ### Changed
 
