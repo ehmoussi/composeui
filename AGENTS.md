@@ -168,6 +168,10 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   order, e.g.
   `self._connect(widget.toggled, self._update_checked, self._view.toggled.call_callbacks)`.
   A widget's own slots, methods of a `QObject`, need no `QtSlot`.
+- A view's signals report the user's changes only: a renderer shows a value set by code
+  without the widget reporting it. Qt blocks the widget's signals in `refresh_attribute`, but
+  not a child widget's, such as a date field's line edit. Textual sets the value under
+  `prevent(...)` through a widget method, such as `ComposeInput.set_value`.
 - In `webcore`, build HTML with `Markup(template).format(...)`, never an f-string: it
   escapes every value (see the `web-security` skill).
 - The page's scripts in `webcore/static/` are classic scripts with JSDoc types, each in a
