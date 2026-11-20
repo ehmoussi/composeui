@@ -1121,6 +1121,10 @@ files, and delete `js/vendor/`.
   methods of one signal to one `_connect`, in order:
   `self._connect(widget.toggled, self._update_checked, self._view.toggled.call_callbacks)`.
   A widget's own slots are methods of a `QObject`, and need no `QtSlot`.
+- A view's signals report the user's changes only, so a renderer shows a value set by code
+  without the widget reporting it. Qt blocks the widget's signals in `refresh_attribute`, but
+  not the signals of a child widget, such as the line edit of a date field. Textual sets the
+  value under `prevent(...)` through a method of the widget, such as `ComposeInput.set_value`.
 - In `webcore`, build HTML with `Markup(template).format(...)` from `markupsafe`, never with
   an f-string. `format` escapes every value that is not `Markup` itself.
 - The page's scripts in `webcore/static/` are classic scripts with JSDoc types, each in a

@@ -32,6 +32,8 @@ Look for these signs in the code that the change touches:
 - **Counters and watermarks,** such as `PostOrder`'s next number.
 - **A list or stack that other code also changes,** such as Textual's screen stack, or `rows`
   that a `cell_edited` callback replaces.
+- **Code that stops a toolkit's change events,** such as Textual's `prevent` or Qt's
+  `blockSignals`: the events that remain can arrive in another order.
 
 ## Write the table
 
@@ -98,6 +100,12 @@ These are common answers, grouped by kind. Your table can need another one.
 - **An action on the top of a stack is not an action on this screen.** A screen covered by another
   one can't pop itself: Textual's `dismiss` pops the top screen.
 - **"No choice" is a state to show,** apart from a value that is `None`.
+- **A toolkit can report a change after it happens.** Textual queues a widget's message, such
+  as `Input.Changed`, and code can set the value before Textual handles it. Stopping the code's
+  own message (`prevent`) also removes the message that set the view back. Check the message
+  against the widget's current value before it reaches the view, as
+  `ComposeInput.on_input_changed` does. Qt's signals arrive at once; the web's posts go through
+  `PostOrder`.
 
 ### Data and positions
 
