@@ -135,6 +135,7 @@ not in the package: run them from a clone of the repository (see
   - [What each backend draws](user-guide/maps.md#what-each-backend-draws)
 - [Running work in threads](user-guide/threads.md)
   - [Progress and canceling](user-guide/threads.md#progress-and-canceling)
+  - [Run an external program](user-guide/threads.md#run-an-external-program)
   - [Reusable loading tasks](user-guide/threads.md#reusable-loading-tasks)
     - [A task of another view](user-guide/threads.md#a-task-of-another-view)
     - [Run the latest call only](user-guide/threads.md#run-the-latest-call-only)

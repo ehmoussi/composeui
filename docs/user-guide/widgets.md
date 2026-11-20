@@ -1048,11 +1048,10 @@ A `ConsoleView` shows plain text that the app adds to as it comes, for example t
 solver that a [job](threads.md) runs. To show one message to the user, such as an error, use a
 [log message](#log-message) instead.
 
-Call `append` with the new text, such as each line that the job reports as its progress:
+Call `append` with the new text, such as the output of a program that the job reports as its
+progress (see [Run an external program](threads.md#run-an-external-program)):
 
 ```python
-import io
-import subprocess
 import sys
 
 from composeui.core.jobs import Job
@@ -1062,12 +1061,7 @@ SOLVER = "print('Step 1'); print('50%', end='\\r'); print('Done')"
 
 
 def run_solver(job: Job[int, str], command: list[str]) -> int:
-    with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as process:
-        assert process.stdout is not None
-        # newline="": each line keeps its "\r" or "\n", which text mode reads as "\n"
-        for line in io.TextIOWrapper(process.stdout, encoding="utf-8", newline=""):
-            job.report_progress(line)
-    return process.returncode
+    return job.run_process(command, on_output=job.report_progress)
 
 
 @define_view
@@ -1087,8 +1081,8 @@ assert main_view.output.text == "Step 1\nDone\n"
 ```
 
 - **Lines.** "\n" ends a line. "\r" starts the line again: the next text replaces it, as a
-  terminal shows a progress line. "\r\n" ends the line. Python reads a "\r" in text mode as
-  "\n", so read the output with `newline=""`, as the example does.
+  terminal shows a progress line. "\r\n" ends the line. `job.run_process` keeps each "\r" of
+  the output.
 - **The last lines.** The view keeps the last `max_lines` lines (10,000 by default) and drops
   the oldest. `lines` holds them, and `last_line` the line being written. `line_count` counts
   the lines ended since the view was built, the dropped ones too.

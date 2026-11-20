@@ -257,6 +257,11 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   current run, and a replaced run's result never shows. A reactive method can call it, but
   must not read the state of the task that it starts.
   See https://ehmoussi.github.io/composeui/user-guide/threads.html
+- **Run an external program with `job.run_process(command, on_output=job.report_progress)`**,
+  not `subprocess` by hand: it returns the exit code, and stops the program when the job is
+  canceled. On Windows, it doesn't stop the programs that the program started. A Python
+  program sends its output late through a pipe: set `PYTHONUNBUFFERED=1` in its `env`.
+  See https://ehmoussi.github.io/composeui/user-guide/threads.html#run-an-external-program
 - **Load the data every user reads once,** with `@shared_data` (`composeui.core.shared`) on a
   function that takes only its job, passed to `self.jobs.task`. Never load a user's private
   data with it, nor take the session's input. Return a Polars frame (each session gets a

@@ -2,7 +2,8 @@
 
 A long computation would freeze the app while it runs. `main_view.jobs.start(work, *args)`
 runs `work(job, *args)` in a thread of its own instead. These sections cover progress and
-canceling, reusable loading tasks, data shared by the sessions, and how jobs behave.
+canceling, external programs, reusable loading tasks, data shared by the sessions, and how
+jobs behave.
 
 The function must not touch a view, because the widgets of a toolkit belong to the main
 thread. The function returns its result. The `finished` signal of its job emits the result
@@ -93,6 +94,83 @@ job = main_view.jobs.start(process, 3)
 job.progress.connect(show_progress)
 main_view.jobs.wait()  # Only for a main view with no toolkit; apps use their event loop.
 ```
+
+## Run an external program
+
+In the function of a job, `job.run_process(command)` runs a program, such as a solver, and
+waits for it to exit. It returns the exit code of the program. Canceling the job stops the
+program. To show the output of the program, pass `on_output=job.report_progress`, and append
+each value to a [`ConsoleView`](widgets.md#console):
+
+```python
+import sys
+
+from composeui.core.jobs import Job
+from composeui.core.view import ConsoleView, MainView, child, define_view
+
+SOLVER = "print('Step 1'); print('Done')"
+
+
+def run_solver(job: Job[int, str], command: list[str]) -> int:  # in its thread
+    return job.run_process(command, on_output=job.report_progress)
+
+
+@define_view
+class SolverView(MainView):
+    output: ConsoleView = child(ConsoleView)
+
+    def run(self) -> None:
+        job = self.jobs.start(run_solver, [sys.executable, "-c", SOLVER])
+        job.progress.connect(self.output.append)
+
+
+main_view = SolverView()
+main_view.run()
+main_view.jobs.wait()  # Only for a main view with no toolkit.
+assert main_view.output.text == "Step 1\nDone\n"
+```
+
+- **Output.** `on_output` gets the output and the errors of the program as text, in the
+  thread of the job, in the order that the program sends them. Without `on_output`, the output
+  is read and dropped.
+- **Buffering.** Many programs keep their output in a buffer when it goes to a pipe, not to a
+  terminal, and send it in blocks of a few kilobytes. The console then shows it late, and after
+  the errors. For a Python program, pass `env={**os.environ, "PYTHONUNBUFFERED": "1"}`: `env`
+  replaces the whole environment. For many C programs on Linux, put `stdbuf -oL` before the
+  command, so that each line is sent.
+- **Errors apart.** With `on_errors`, `on_output` gets the output only, and `on_errors` the
+  errors, also in the thread of the job. Use it for a program that writes data, such as CSV,
+  on its output and warnings on its errors. The order between the output and the errors is
+  then lost: the text of each comes as it's read.
+- **Encoding.** The text is decoded from `encoding`, UTF-8 by default. A character whose bytes
+  come in two reads arrives whole. A byte that the encoding can't decode shows as "�". On
+  Windows, many programs write in the code page of the system: pass
+  `encoding=locale.getpreferredencoding(False)`, or `"oem"` for a console tool. An unknown
+  encoding raises `LookupError` before the program starts.
+- **Options.** `cwd` and `env` set the folder and the environment of the program, as for
+  `subprocess.Popen`. The program reads no input.
+- **Stopping.** `run_process` stops the program in these cases:
+  - When the job is canceled, it raises `JobCanceledError`.
+  - After `timeout` seconds, it raises `subprocess.TimeoutExpired`.
+  - When `on_output` or `on_errors` raises, the error goes on.
+
+  The text that the program writes as it stops still reaches `on_output` and `on_errors`,
+  unless one of them raised.
+- **The programs that it starts.** On Linux and macOS, the program runs in a session of its
+  own, with the programs that it starts, such as the processes of an MPI run. When it exits or
+  is stopped, the programs left in the session get SIGTERM, then SIGKILL after `grace` seconds
+  (5 by default). So a program that saves its work on SIGTERM has `grace` seconds to save.
+- **When the app exits** while the program runs, Python stops the program as the job would.
+  The web server also stops the programs as it stops, after Ctrl+C or SIGTERM. A signal that
+  ends a Qt or Textual app before Python exits leaves the program running: SIGTERM, SIGKILL,
+  or Ctrl+C on Qt.
+- **On the web,** the input of a user can reach the command. `run_process` uses no shell, so
+  each item of the list stays one argument. A program can still read an argument that starts
+  with `-` as an option: check the input first. Each session can start a program, and nothing
+  limits how many run at once.
+- **On Windows,** only the program that `run_process` started is stopped. The programs that
+  it started go on, and `run_process` waits at most 2 seconds for the output that they still
+  write.
 
 ## Reusable loading tasks
 

@@ -237,6 +237,9 @@ The SQLite model is complete otherwise: do not rebuild it.
 - **Reload keeps the widgets' state** (Next). Scroll positions, column widths and focus survive
   a reload on Qt. First, measure the memory that each reload keeps.
 - **Textual reload in place** (When needed). After the Qt reload keeps its widgets' state.
+- **Stopping a program's children on Windows** (Later). `Job.run_process` stops only the
+  program that it started: the programs that this one started go on. A Windows job object stops
+  them all.
 - **PyQt6** (When needed). When an existing PyQt6 app wants to use ComposeUI.
 
 ## Testing

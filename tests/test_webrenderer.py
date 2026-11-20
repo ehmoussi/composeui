@@ -5700,6 +5700,30 @@ def test_reload_serves_the_app_the_program_builds_again_in_a_new_process(
     assert [len(names) for names in saved] == [1]
 
 
+def test_a_web_server_that_stops_stops_the_programs_that_jobs_run(app: _HelloApp) -> None:
+    # uvicorn ends on SIGTERM by sending it again once stopped: Python's exit can't stop them
+    main_view = MainView()
+    started = threading.Event()
+    exit_codes: list[int] = []
+
+    def work(job: Job[int]) -> int:
+        sleeper = "print('ready', flush=True); import time; time.sleep(60)"
+        return job.run_process([sys.executable, "-c", sleeper], on_output=lambda _: started.set())
+
+    main_view.jobs.start(work).finished.connect(exit_codes.append)
+    try:
+        with _Browser(app.create_starlette_app()):
+            assert started.wait(20)
+        # the program stopped, its job ends on its own: it would sleep 60 s
+        main_view.jobs.wait(timeout=20)
+    finally:
+        main_view.jobs.cancel()
+        main_view.jobs.wait(timeout=20)
+
+    (exit_code,) = exit_codes
+    assert exit_code != 0
+
+
 #: a program serving the hello app, as a script: `python hello.py --reload`
 _HELLO_SCRIPT = """
 from composeui.webcore.webapplication import WebApplication
