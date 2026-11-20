@@ -29,6 +29,8 @@ backends' modules included, can change in any release without an entry here.
 
 ### Changed
 
+- On the web, a `LabelView` keeps the line breaks of its text, as Qt and Textual do.
+  Before, the browser showed each line break as a space.
 - The main view's questions before it replaces a file or discards unsaved changes are
   destructive: Enter now cancels them, instead of replacing or discarding.
 - On Qt and Textual, what jobs hand to the main thread while it is busy comes to it

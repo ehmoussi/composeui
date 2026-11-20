@@ -1650,7 +1650,7 @@ def rows() -> _RowsMainView:
 def test_a_label_s_role_picks_its_tag_and_keeps_its_text_as_set(
     rows: _RowsMainView, role: TextRole, tag: str, class_name: str
 ) -> None:
-    hostile = '<b onclick="x">Plan</b>'
+    hostile = '<b onclick="x">Plan</b>\nSteel'
     rows.note.text = hostile
     rows.note.role = role
     renderer = rows.note.renderer
@@ -1659,7 +1659,10 @@ def test_a_label_s_role_picks_its_tag_and_keeps_its_text_as_set(
     element = _element(renderer.to_html(), renderer.widget_id)
 
     assert element.tag == tag
+    classes = (element.attributes["class"] or "").split()
     assert class_name in (element.attributes["class"] or "")
+    # the browser shows the line break only with this class
+    assert "whitespace-pre-line" in classes
     assert element.text == hostile
 
 

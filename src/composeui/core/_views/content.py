@@ -188,7 +188,7 @@ class LabelMixin:
 
 @define_view
 class LabelView(LabelMixin, View):
-    """A line of read-only text, for example a caption."""
+    """Read-only text, for example a caption; each line break in it starts a new line."""
 
     _renderer_key = "label"
 
