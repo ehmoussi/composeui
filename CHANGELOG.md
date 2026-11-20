@@ -59,6 +59,11 @@ backends' modules included, can change in any release without an entry here.
   to one row. A page wider than the window scrolls sideways. A page in a `Router` also fills
   the window's height now. A view that scrolls within itself, such as a `MarkdownView`,
   reaches the bottom of the window.
+- On Qt, a `VerticalView` is as tall as its views, in a page, a tab, a sidebar or right in
+  the window. Before, it took a share of the spare height, and a large gap showed under its
+  views. A `VerticalView` that holds a view that scrolls within itself, such as a
+  `MarkdownView`, gives that view all its spare height while it shows: in a page, the view
+  reaches the bottom of the window, also when it shows only after the page was built.
 - On the web with `--reload`, a program that the app starts no longer inherits the key that
   signs the session cookies. A program that showed its environment to a user, for example in a
   `ConsoleView`, showed the key.

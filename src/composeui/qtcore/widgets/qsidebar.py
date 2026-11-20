@@ -15,6 +15,7 @@ from qtpy.QtWidgets import (
     QWidget,
 )
 
+from composeui.qtcore.widgets.qcolumnlayout import QColumnLayout
 from composeui.qtcore.widgets.qplaintext import plain_label
 
 #: pixels a sidebar is wide at least while expanded, e.g. room for a form's fields
@@ -58,7 +59,7 @@ class QSidebar(QDockWidget):
         header.addWidget(self.toggle, 0, Qt.AlignmentFlag.AlignTop)
         body_layout.addLayout(header)
         content = QWidget()
-        self.content_layout = QVBoxLayout(content)
+        self.content_layout = QColumnLayout(content)
         self.content_scroll = QScrollArea()
         self.content_scroll.setMinimumWidth(_MINIMUM_WIDTH)
         self.content_scroll.setWidgetResizable(True)
@@ -74,7 +75,7 @@ class QSidebar(QDockWidget):
 
     def finish_content(self) -> None:
         """Leave the height to spare below the content, once it is added, not between it."""
-        self.content_layout.addStretch()
+        self.content_layout.add_spare_space()
 
     def is_expanded(self) -> bool:
         return self.content_scroll.isVisibleTo(self)
