@@ -31,7 +31,10 @@ class _InputView:
     placeholder: str = attrs.field(default="", metadata={UI_TEXT: True})
     # signals
     editing_finished: SignalNoArgs = attrs.field(factory=SignalNoArgs)
+    #: the user changed the text: typed it, or picked a path or a date that the field shows.
+    #: Text or a value set by code emits no signal.
     text_changed: Signal[str] = attrs.field(factory=Signal[str])
+    #: the user typed in the field. Text or a value set by code emits no signal.
     text_edited: Signal[str] = attrs.field(factory=Signal[str])
 
 

@@ -52,7 +52,7 @@ class TextualInputRenderer(TextualWidgetRenderer[InputViewLike, ComposeInput]):
 
     @staticmethod
     def _refresh_text(_view: InputViewLike, rendered_object: ComposeInput, value: str) -> None:
-        rendered_object.value = value
+        rendered_object.set_value(value)
 
     @staticmethod
     def _refresh_placeholder(
@@ -156,13 +156,13 @@ class TextualFloatInputRenderer(TextualWidgetRenderer[FloatInputViewLike, Compos
     def _refresh_value(
         view: FloatInputViewLike, rendered_object: ComposeInput, value: float | None
     ) -> None:
-        rendered_object.value = view.shown_text(value, view.decimals)
+        rendered_object.set_value(view.shown_text(value, view.decimals))
 
     @staticmethod
     def _refresh_decimals(
         view: FloatInputViewLike, rendered_object: ComposeInput, value: int | None
     ) -> None:
-        rendered_object.value = view.shown_text(view.value, value)
+        rendered_object.set_value(view.shown_text(view.value, value))
 
     @staticmethod
     def _refresh_placeholder(
@@ -189,12 +189,9 @@ class TextualFloatInputRenderer(TextualWidgetRenderer[FloatInputViewLike, Compos
         rendered_object.validators.append(Number(minimum=_view.minimum, maximum=value))
 
     def _update_text(self, text: str) -> None:
-        # Textual reports the text the renderer set too: as shown for the view's value,
-        # maybe rounded, it isn't the user's and leaves the value as it is.
-        # Transient invalid text while typing (e.g. "-", "1.") is ignored.
-        if text != self._view.shown_text(self._view.value, self._view.decimals):
-            with self.stop_refresh(), contextlib.suppress(ValueError):
-                self._view.value = float(text) if text != "" else None
+        # transient invalid text while typing (e.g. "-") is ignored
+        with self.stop_refresh(), contextlib.suppress(ValueError):
+            self._view.value = float(text) if text != "" else None
         self._view.text_changed.emit(text)
         self._view.text_edited.emit(text)
 
@@ -242,7 +239,7 @@ class TextualIntInputRenderer(TextualWidgetRenderer[IntInputViewLike, ComposeInp
     def _refresh_value(
         _view: IntInputViewLike, rendered_object: ComposeInput, value: int | None
     ) -> None:
-        rendered_object.value = str(value) if value is not None else ""
+        rendered_object.set_value(str(value) if value is not None else "")
 
     @staticmethod
     def _refresh_placeholder(
@@ -316,6 +313,8 @@ class TextualDateInputRenderer(TextualWidgetRenderer[DateInputViewLike, ComposeD
             self._rendered_object = ComposeDateInput()
             self._rendered_object.date_edited.connect(self._update_value)
             self._rendered_object.input.value_changed.connect(self._update_text)
+            # a picked date changes the text, but the user didn't type it
+            self._rendered_object.text_picked.connect(self._view.text_changed.emit)
             self._rendered_object.input.value_submitted.connect(self._view.editing_finished.emit)
 
     @staticmethod

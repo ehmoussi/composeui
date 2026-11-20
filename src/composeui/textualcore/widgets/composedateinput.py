@@ -282,6 +282,8 @@ class ComposeDateInput(Horizontal):
         self.day_names: list[str] = []
         self._date: datetime.date | None = None
         self.date_edited: Signal[datetime.date | None] = Signal()
+        #: the field shows the text of a date picked in the calendar; the input reports typing
+        self.text_picked: Signal[str] = Signal()
         self.input.value_changed.connect(self._read_text)
         self.input.value_submitted.connect(self._show_date)
 
@@ -306,8 +308,11 @@ class ComposeDateInput(Horizontal):
 
     def _pick(self, value: datetime.date | None) -> None:
         if value is not None:
+            is_new = value != self._date
             self._edit(value)
             self._show_date()
+            if is_new:  # the picked date's text, whatever the app did on `date_edited`
+                self.text_picked.emit(format_date(value, self.date_format))
         self.input.focus()
 
     def _read_text(self, text: str) -> None:
@@ -326,6 +331,6 @@ class ComposeDateInput(Horizontal):
             self.date_edited.emit(value)
 
     def _show_date(self) -> None:
-        text = "" if self._date is None else format_date(self._date, self.date_format)
-        if self.input.value != text:
-            self.input.value = text
+        self.input.set_value(
+            "" if self._date is None else format_date(self._date, self.date_format)
+        )

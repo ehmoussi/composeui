@@ -42,6 +42,12 @@ backends' modules included, can change in any release without an entry here.
 
 ### Fixed
 
+- A text field's `text_changed` and `text_edited` report the user's changes only, on every
+  backend. On Textual, text or a value that code set in a text, number, date or path field
+  emitted both, as if the user had typed it. On Qt, a date set by code emitted
+  `text_changed`. A path or a date that the user picks emits `text_changed` only, now on
+  every backend: Textual emitted `text_edited` too, and a date picked on the web emitted
+  neither.
 - A table that overrides `cell_widget(row, column)` gets a widget per row on every backend.
   Qt and Textual drew no "…" button for a widget that `cell_widgets` didn't declare, and
   Space on Textual didn't toggle such a check box. On the web, its list of the server's
