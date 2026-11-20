@@ -11,7 +11,9 @@ view.
 ## Label
 
 A `LabelView` shows read-only `text`, for example a caption or a result. Code sets the text.
-The user cannot edit it. Each line break (`\n`) in the text starts a new line, on every backend.
+The user cannot edit it. On every backend, each line break (`\n`) in the text starts a new line,
+and a line too long for the page wraps to the next line. A word longer than a line, such as a
+path, breaks where the line ends.
 
 ```python
 from composeui.core.view import LabelView, child

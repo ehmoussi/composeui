@@ -100,9 +100,10 @@ class WebLabelRenderer(WebRenderer[LabelViewLike]):
 
     def to_html(self, *, oob: bool = False) -> Markup:
         tag, classes = _ROLE_MARKUP[self._view.role]
-        # pre-line keeps the text's line breaks, as Qt and Textual do, and collapses its spaces
+        # pre-line keeps the text's line breaks, as Qt and Textual do, and collapses its spaces;
+        # wrap-anywhere breaks a word longer than the line, such as a path, as they do too
         return Markup(
-            '<{tag} {attributes} class="whitespace-pre-line {classes}">{text}</{tag}>'
+            '<{tag} {attributes} class="whitespace-pre-line wrap-anywhere {classes}">{text}</{tag}>'
         ).format(
             tag=tag,
             attributes=self._root_attributes(oob=oob),

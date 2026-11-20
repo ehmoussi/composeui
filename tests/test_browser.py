@@ -1280,6 +1280,33 @@ def test_back_and_forward_go_through_the_pages_shown(pages_page: Page, pages_bas
     expect(total).to_be_visible()
 
 
+def test_a_label_breaks_a_word_longer_than_its_page_rather_than_widening_it(
+    pages_page: Page,
+) -> None:
+    page = pages_page
+    page.set_viewport_size({"width": 600, "height": 800})
+    page.goto("/")
+    path = "/home/user/studies/" + "/".join(["a_folder_name_without_any_space"] * 6)
+    with _posted(page):
+        page.get_by_role("textbox").press_sequentially(path)
+    with _posted(page):
+        page.get_by_role("button", name="Submit").click()
+    with _posted(page):
+        page.get_by_role("link", name="Results").click()
+    total = page.get_by_text(f"Submitted: {path}")
+    expect(total).to_be_visible()
+
+    # every character in view, on several lines: no sideways scroll to read the end of the path
+    main = page.get_by_role("main").bounding_box()
+    box = total.bounding_box()
+    assert main is not None
+    assert box is not None
+    assert box["x"] + box["width"] <= main["x"] + main["width"]
+    line = total.evaluate("label => parseFloat(getComputedStyle(label).lineHeight)")
+    assert box["height"] >= 2 * line
+    assert page.evaluate("document.documentElement.scrollWidth") <= 600
+
+
 def test_the_main_column_is_as_wide_as_the_shown_page_lets_it(pages_page: Page) -> None:
     page = pages_page
     page.set_viewport_size({"width": 1600, "height": 900})

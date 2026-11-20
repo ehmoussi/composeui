@@ -12,9 +12,11 @@ from composeui.core.view import TextRole
 class ComposeLabel(Label):
     """A `Label` with the look of a `TextRole`, from the app's theme."""
 
-    # a terminal has one text size: a title differs from a subtitle by its color
+    # a terminal has one text size: a title differs from a subtitle by its color. A long line
+    # wraps to its container's width rather than widening the page, as on Qt and the web.
     DEFAULT_CSS: ClassVar[str] = """
     ComposeLabel {
+        max-width: 100%;
         &.-title { text-style: bold; }
         &.-subtitle { color: $text-muted; text-style: bold; }
         &.-caption { color: $text-muted; text-style: italic; }
