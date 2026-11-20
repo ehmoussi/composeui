@@ -448,8 +448,13 @@ class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
         if not self.is_enabled or event not in ("input", "change", "pick"):
             super().dispatch(event, form)
         if event == "pick":
-            with contextlib.suppress(ValueError):  # a date input posts a date, or nothing
-                self._edit(datetime.date.fromisoformat(form.get("picked", "")))
+            try:
+                picked = datetime.date.fromisoformat(form.get("picked", ""))
+            except ValueError:  # a date input posts a date, or nothing
+                picked = None
+            if picked is not None and self._edit(picked):
+                # a picked date changes the text, but the user didn't type it
+                self._view.text_changed.emit(self._view.shown_text(picked))
             # the field shows it: swapped back, as the button had the focus, not the field
             self._refresh_value(self._view, self.widget_id, self._view.value)
             return
@@ -470,12 +475,14 @@ class WebDateInputRenderer(WebRenderer[DateInputViewLike]):
             self._refresh_value(self._view, self.widget_id, self._view.value)
             self._view.editing_finished.emit()
 
-    def _edit(self, value: datetime.date | None) -> None:
+    def _edit(self, value: datetime.date | None) -> bool:
+        """Give the view the user's date; get whether it changed."""
         if value == self._view.value:
-            return
+            return False
         with self.stop_refresh():
             self._view.value = value
         self._view.value_changed.emit(value)
+        return True
 
     def _posted_text(self) -> str:
         if self._last_posted_text is not None:

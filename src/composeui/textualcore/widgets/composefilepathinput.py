@@ -243,6 +243,6 @@ class ComposeFilePathInput(Horizontal):
 
     def _take(self, path: Path | None) -> None:
         if path is not None:
-            self.input.value = text_of_path(path, self.base_folder)
+            self.input.set_value(text_of_path(path, self.base_folder))
             self.path_picked.emit(path)
         self.input.focus()

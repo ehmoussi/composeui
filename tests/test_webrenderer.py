@@ -1920,6 +1920,9 @@ def test_a_date_input_is_typed_in_the_language_s_format_or_picked_in_the_browser
     assert isinstance(label, WebFormLabelRenderer)
     changes: list[datetime.date | None] = []
     arrival.value_changed.connect(changes.append)
+    texts: list[str] = []
+    arrival.text_changed.connect(texts.append)
+    arrival.text_edited.connect(lambda text: texts.append(f"typed {text}"))
     date_input = _element(field.to_html(), field.widget_id)
     (text,) = (attributes for tag, attributes in date_input.descendants if tag == "input")
     assert (text["type"], text["value"], text["placeholder"]) == (
@@ -1962,6 +1965,10 @@ def test_a_date_input_is_typed_in_the_language_s_format_or_picked_in_the_browser
 
     fragments = handle_event(field, "pick", {"picked": "2026-12-24"})
     assert (arrival.value, changes[-1]) == (datetime.date(2026, 12, 24),) * 2
+    assert texts[-1] == "24/12/2026"  # picked, not typed
+    handle_event(field, "pick", {"picked": "2026-12-24"})  # the same day: nothing new
+    handle_event(field, "pick", {"picked": ""})  # no day picked
+    assert (len(changes), texts.count("24/12/2026")) == (2, 1)
     swapped = _swapped(fragments, field.widget_id)
     assert next(a["value"] for tag, a in swapped.descendants if tag == "input") == "24/12/2026"
     fragments = handle_event(field, "change", {"value": "31/02/2026"})  # no such day

@@ -177,9 +177,10 @@ A form shows its other views too, such as a table or a `HorizontalView` of butto
 shows in its place between the rows, as wide as the form. The checks of the form run on its
 rows only.
 
-- **The text fields** emit `text_edited` on each change that the user makes, and
+- **The text fields** emit `text_edited` on each change that the user types, and
   `editing_finished` when the user is done with the field, for example on Enter, or as a
-  text area loses the focus.
+  text area loses the focus. `text_changed` also reports a path or a date that the user
+  picks. Text or a value that code sets emits neither signal.
 - **A check box** shows other views only while it is checked, with `shows`:
   `self.show_raw_data.shows(self.table)`. It sets their `is_visible` at once, and again
   each time the box changes: as the user clicks it, as code sets `is_checked`, and as a

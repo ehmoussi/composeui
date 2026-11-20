@@ -35,8 +35,15 @@ class ComposeInput(Input):
         self.value_changed: Signal[str] = Signal()
         self.value_submitted: SignalNoArgs = SignalNoArgs()
 
+    def set_value(self, value: str) -> None:
+        """Show `value` without reporting it: `value_changed` reports the user's changes."""
+        with self.prevent(Input.Changed):
+            self.value = value
+
     def on_input_changed(self, event: Input.Changed) -> None:
-        self.value_changed.emit(event.value)
+        # handled later than the change: text set since, e.g. by `set_value`, replaced it
+        if event.value == self.value:
+            self.value_changed.emit(event.value)
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self.value_submitted.emit()

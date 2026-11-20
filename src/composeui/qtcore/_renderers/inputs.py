@@ -348,7 +348,8 @@ class QtDateInputRenderer(QtWidgetRenderer[DateInputViewLike, QDateField]):
             self._connect(self._rendered_object.date_edited, self._update_value)
             line_edit = self._rendered_object.line_edit
             self._relay(self._view.editing_finished, line_edit.editingFinished)
-            self._relay(self._view.text_changed, line_edit.textChanged)
+            # not the line edit's `textChanged`: it also reports the dates set by code
+            self._relay(self._view.text_changed, self._rendered_object.text_changed)
             self._relay(self._view.text_edited, line_edit.textEdited)
             self.refresh()
 

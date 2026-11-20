@@ -71,11 +71,16 @@ from composeui.core.view import (
     CellStyle,
     CellWidget,
     ChartKind,
+    DateInputView,
     DialogKind,
     DialogView,
     EditRefusedError,
+    FilePathInputView,
+    FloatInputView,
     FormDialogView,
     ImageView,
+    InputView,
+    IntInputView,
     LabelView,
     ListSource,
     LogType,
@@ -122,6 +127,7 @@ from composeui.textualcore.widgets.composefiltertable import (
 )
 from composeui.textualcore.widgets.composeformdialog import ComposeFormDialog
 from composeui.textualcore.widgets.composeimage import ComposeImage
+from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composemarkdown import ComposeMarkdown
 from composeui.textualcore.widgets.composemetric import ComposeMetric
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
@@ -409,6 +415,9 @@ async def test_a_date_input_s_calendar_names_its_days_in_the_language_and_keeps_
 ):
     view, app, changes = await _booking_app()
     arrival = view.form.arrival
+    texts: list[str] = []
+    arrival.text_changed.connect(texts.append)
+    arrival.text_edited.connect(lambda text: texts.append(f"typed {text}"))
 
     async with app.run_test(size=(80, 30)) as pilot:
         field = _field_widget(arrival.renderer)
@@ -428,6 +437,12 @@ async def test_a_date_input_s_calendar_names_its_days_in_the_language_and_keeps_
         assert not isinstance(app.screen, ComposeCalendar)
         assert (arrival.value, field.input.value) == (datetime.date(2026, 11, 25), "25/11/2026")
         assert changes == [datetime.date(2026, 11, 25)]
+        assert texts == ["25/11/2026"]  # picked, not typed
+        await pilot.click(field.button)
+        await pilot.pause()
+        await pilot.press("enter")  # the same day again: nothing to report
+        await pilot.pause()
+        assert (changes, texts) == ([datetime.date(2026, 11, 25)], ["25/11/2026"])
 
         await pilot.click(field.button)
         await pilot.pause()
@@ -507,6 +522,10 @@ async def test_a_file_path_is_typed_or_picked_in_the_picker_and_reloaded(tmp_pat
     measurements = view.form.measurements
     picked: list[Path] = []
     measurements.path_picked.connect(picked.append)
+    texts: list[str] = []
+    measurements.text_changed.connect(texts.append)
+    measurements.text_edited.connect(lambda text: texts.append(f"typed {text}"))
+    measurements.path_picked.connect(lambda path: texts.append(f"picked {path}"))
     reloads: list[None] = []
     measurements.reload_clicked.connect(lambda: reloads.append(None))
 
@@ -532,6 +551,9 @@ async def test_a_file_path_is_typed_or_picked_in_the_picker_and_reloaded(tmp_pat
         assert len(app.screen_stack) == 1
         assert (measurements.path, picked) == (tmp_path / "flows.csv", [tmp_path / "flows.csv"])
         assert field.input.value == str(tmp_path / "flows.csv")
+        # the picked path changes the text, then is reported, but the user didn't type it
+        typed, flows = str(tmp_path / "x"), str(tmp_path / "flows.csv")
+        assert texts[-4:] == [typed, f"typed {typed}", flows, f"picked {flows}"]
 
         await pilot.click(field.reload_button)
         await pilot.pause()
@@ -3085,6 +3107,103 @@ async def test_a_combobox_emits_its_value_when_the_user_picks_it_not_when_code_s
         await pilot.pause()
         assert seen == [Material.Steel]
         assert material.value is Material.Steel
+
+
+@define_view
+class _TextFieldsMainView(MainView):
+    name: InputView = Factory(InputView)
+    ratio: FloatInputView = Factory(FloatInputView)
+    count: IntInputView = Factory(IntInputView)
+    day: DateInputView = Factory(DateInputView)
+    path: FilePathInputView = Factory(FilePathInputView)
+
+
+def _set_name(view: _TextFieldsMainView) -> None:
+    view.name.text = "Ada"
+
+
+def _set_ratio(view: _TextFieldsMainView) -> None:
+    view.ratio.value = 2.5
+
+
+def _set_count(view: _TextFieldsMainView) -> None:
+    view.count.value = 3
+
+
+def _set_day(view: _TextFieldsMainView) -> None:
+    view.day.value = datetime.date(2026, 1, 2)
+    view.day.date_format = "dd/MM/yyyy"
+
+
+def _set_path(view: _TextFieldsMainView) -> None:
+    view.path.text = "flows.csv"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("name", "set_by_code"),
+    [
+        ("name", _set_name),
+        ("ratio", _set_ratio),
+        ("count", _set_count),
+        ("day", _set_day),
+        ("path", _set_path),
+    ],
+)
+async def test_a_text_field_reports_the_text_the_user_types_not_the_text_code_sets(
+    name: str, set_by_code: Callable[[_TextFieldsMainView], None]
+) -> None:
+    view = _TextFieldsMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    field = getattr(view, name)
+    seen: list[tuple[str, str]] = []
+    field.text_changed.connect(lambda text: seen.append(("changed", text)))
+    field.text_edited.connect(lambda text: seen.append(("edited", text)))
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert isinstance(field.renderer, TextualWidgetRenderer)
+        widget = field.renderer.widget
+        text_input = (
+            widget.input if isinstance(widget, (ComposeDateInput, ComposeFilePathInput)) else widget
+        )
+        assert isinstance(text_input, ComposeInput)
+        set_by_code(view)
+        # typed after: the field's change for the code's text would come first
+        text_input.focus()
+        await pilot.press("end", "1")
+        await pilot.pause()
+
+        assert seen == [("changed", text_input.value), ("edited", text_input.value)]
+
+
+@pytest.mark.asyncio
+async def test_a_text_field_keeps_the_text_code_sets_after_a_change_textual_reports_later() -> None:
+    view = _TextFieldsMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    seen: list[str] = []
+    view.name.text_changed.connect(seen.append)
+    view.name.text_edited.connect(seen.append)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        assert isinstance(view.name.renderer, TextualWidgetRenderer)
+        text_input = view.name.renderer.widget
+        assert isinstance(text_input, ComposeInput)
+        text_input.focus()
+        # a key's edit, its `Changed` message queued; the app's text comes before Textual
+        # handles it, as a job's result can
+        text_input.insert_text_at_cursor("a")
+        view.name.text = "Ada"
+        await pilot.pause()
+
+        assert (view.name.text, text_input.value, seen) == ("Ada", "Ada", [])
 
 
 @pytest.mark.asyncio

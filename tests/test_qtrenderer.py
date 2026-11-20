@@ -1145,6 +1145,34 @@ def test_a_date_picked_in_qt_s_calendar_shows_before_the_app_hears_of_it(qtbot: 
     assert shown == ["11/03/2026"]
 
 
+def test_a_date_input_reports_the_text_typed_or_picked_not_the_text_code_sets(
+    qtbot: QtBot,
+) -> None:
+    view = BookingMainView()
+    view.render(RendererType.QT)
+    arrival = view.form.arrival
+    field = _field_widget(arrival)
+    assert isinstance(field, QDateField)
+    qtbot.addWidget(field)
+    field.show()
+    texts: list[str] = []
+    arrival.text_changed.connect(texts.append)
+    arrival.text_edited.connect(lambda text: texts.append(f"typed {text}"))
+
+    view.set_language("fr")  # its format, set in code
+    arrival.value = datetime.date(2026, 11, 3)
+    assert (field.line_edit.text(), texts) == ("03/11/2026", [])
+    field.line_edit.selectAll()
+    qtbot.keyClicks(field.line_edit, "4")
+    assert texts == ["4", "typed 4"]
+    qtbot.mouseClick(field.button, Qt.MouseButton.LeftButton)
+    field.calendar.setSelectedDate(QDate(2026, 11, 5))
+    days = field.calendar.findChild(QTableView)
+    assert days is not None
+    qtbot.keyClick(days, Qt.Key.Key_Return)
+    assert texts[2:] == ["05/11/2026"]  # picked, not typed
+
+
 def test_a_file_upload_gives_the_user_s_file_from_qt_s_dialog_without_a_copy(
     qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

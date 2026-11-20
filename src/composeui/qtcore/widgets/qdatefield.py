@@ -33,10 +33,13 @@ class QDateField(QWidget):
     the user's dates, typed or picked, and None once the field is emptied; text that isn't
     a date reports nothing, and leaving the field puts the date back. The calendar, a
     popup, offers the dates from `minimum` to `maximum`, named in the system's language.
+    `text_changed` reports the user's text, typed or picked, not the dates set by code.
     """
 
     #: the user typed or picked a date (a `datetime.date`), or emptied the field (None)
     date_edited = QtSignal(object)
+    #: the user changed the text: typed it, or picked a date that the field now shows
+    text_changed = QtSignal(str)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -47,6 +50,7 @@ class QDateField(QWidget):
         layout.setSpacing(2)
         self.line_edit = QLineEdit()
         self.line_edit.textEdited.connect(self._read_text)
+        self.line_edit.textEdited.connect(self.text_changed)
         self.line_edit.editingFinished.connect(self._show_date)
         layout.addWidget(self.line_edit)
         self.button = QToolButton()
@@ -112,7 +116,10 @@ class QDateField(QWidget):
         # once that work is over, e.g. a dashboard filtering its rows and drawing them again
         self._show_date()
         self.line_edit.repaint()
+        # as typed text: the date first, then its text, whatever the app did on the date
+        text = self.line_edit.text()
         self.date_edited.emit(picked)
+        self.text_changed.emit(text)
 
     def _edit(self, value: Optional[datetime.date]) -> None:
         if value != self._date:

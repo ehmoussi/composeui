@@ -88,7 +88,7 @@ class _TextualPathInputRenderer(TextualWidgetRenderer[TPathView, ComposeFilePath
 
     @staticmethod
     def _refresh_text(_view: TPathView, rendered_object: ComposeFilePathInput, value: str) -> None:
-        rendered_object.input.value = value
+        rendered_object.input.set_value(value)
 
     @staticmethod
     def _refresh_placeholder(
@@ -124,9 +124,11 @@ class _TextualPathInputRenderer(TextualWidgetRenderer[TPathView, ComposeFilePath
         self._view.text_edited.emit(text)
 
     def _pick(self, path: Path) -> None:
-        # the field's change arrives later, as a message: the view has the path first
+        # a picked path changes the text, but the user didn't type it
+        text = self._view.path_text(path)
         with self.stop_refresh():
-            self._view.text = self._view.path_text(path)
+            self._view.text = text
+        self._view.text_changed.emit(text)
         self._view.path_picked.emit(path)
 
 
