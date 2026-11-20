@@ -17,6 +17,7 @@ from typing import (
 )
 
 import attrs
+from typing_extensions import override
 
 from composeui.core._views.base import OMIT, UI_TEXT, View, define_view
 from composeui.core._views.inputs import InputMixin
@@ -220,9 +221,11 @@ class DownloadSink(io.RawIOBase):
         self._put = put
         self._pending = bytearray()
 
+    @override
     def writable(self) -> bool:
         return True
 
+    @override
     def write(self, data: Buffer, /) -> int:
         view = memoryview(data).cast("B")
         self._pending += view
@@ -233,6 +236,7 @@ class DownloadSink(io.RawIOBase):
             self._put(piece)
         return len(view)
 
+    @override
     def close(self) -> None:
         """Hand over the last piece, then close; the writer may close it itself."""
         if not self.closed:
@@ -376,6 +380,7 @@ class SavePathInputMixin(PathInputMixin):
     )
 
     @property
+    @override
     def path(self) -> Optional[Path]:
         """Get the path the field holds, the first extension added; None while it's empty.
 

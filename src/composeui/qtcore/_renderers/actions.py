@@ -6,6 +6,7 @@ from typing import Any
 
 from qtpy.QtGui import QAction, QIcon, QKeySequence
 from qtpy.QtWidgets import QMenu, QToolBar, QWidget
+from typing_extensions import override
 
 from composeui.core.view import ActionView, Menu, PickFileAction, SeparatorAction, ToolBar
 from composeui.qtcore.qtrenderer import QtWidgetRenderer
@@ -33,12 +34,14 @@ class QtActionRenderer(QtWidgetRenderer[ActionView, QAction]):
     def set_parent_rendered_object(self, parent: QWidget) -> None:
         self._parent_rendered_object = parent
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None and self._parent_rendered_object:
             self._rendered_object = QAction(self._parent_rendered_object)
             self._relay(self._view.triggered, self._rendered_object.triggered)
             self.refresh()
 
+    @override
     def refresh_attribute(self, attr_name: str, value: Any) -> None:
         # no `QAction` without a parent to show it, e.g. the entry of a page outside a
         # router: nothing to update, and `render` shows the view as it is then
@@ -90,6 +93,7 @@ class QtSeparatorRenderer(QtWidgetRenderer[SeparatorAction, QAction]):
     def set_parent_rendered_object(self, parent: QWidget) -> None:
         self._parent_rendered_object = parent
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None and self._parent_rendered_object is not None:
             self._rendered_object = QAction(self._parent_rendered_object)
@@ -106,6 +110,7 @@ class QtMenuRenderer(QtWidgetRenderer[Menu, QMenu]):
     def set_parent_rendered_object(self, parent: QWidget) -> None:
         self._parent_rendered_object = parent
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None and self._parent_rendered_object is not None:
             self._rendered_object = QMenu(self._parent_rendered_object)
@@ -132,6 +137,7 @@ class QtToolBarRenderer(QtWidgetRenderer[ToolBar, QToolBar]):
         super().__init__(view)
         self._refresh_dispatcher.update({"title": self._refresh_title})
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QToolBar()

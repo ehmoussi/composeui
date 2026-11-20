@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
 from textual.containers import Vertical
 from textual.widgets import Label
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from PIL.Image import Image
@@ -98,6 +99,7 @@ class ComposeImage(Vertical):
         self._image: Image | None = None
         self._height: int | None = None
 
+    @override
     def compose(self) -> ComposeResult:
         yield self._description
         if self._pixels is not None:

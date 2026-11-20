@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Callable, Generic, NoReturn
 
 import attrs
 from narwhals.stable.v2 import dependencies
-from typing_extensions import TypeVar
+from typing_extensions import TypeVar, override
 
 from composeui.core import jobs
 from composeui.core.jobs import CalledInJobError, Job, JobCanceledError
@@ -203,6 +203,7 @@ class _LoadJob(Job[R, ProgressT]):
         super().__init__(_no_main_thread)
         self._run = run
 
+    @override
     def report_progress(self, value: ProgressT) -> None:
         self._run.report(value)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import attrs
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.view import (
     STRETCH,
@@ -22,6 +23,7 @@ class TablesRow(HorizontalView):
     wide: TableView = attrs.field(factory=TableView, metadata={STRETCH: 3})
     hidden: TableView = attrs.field(factory=TableView, metadata={STRETCH: 2})
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.narrow.headers = ["Narrow"]
@@ -47,6 +49,7 @@ class StartButtons(HorizontalView):
     first: ButtonView = Factory(ButtonView)
     second: ButtonView = Factory(ButtonView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.first.text = "Add"
@@ -57,6 +60,7 @@ class StartButtons(HorizontalView):
 class EndButtons(StartButtons):
     align = Align.END
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.first.text = "Cancel"

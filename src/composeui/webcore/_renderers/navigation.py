@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, Callable, Final
 
 from markupsafe import Markup
+from typing_extensions import override
 
 from composeui.core._views.actions import OpenFileAction
 from composeui.core.renderer import MainRenderer
@@ -55,6 +56,7 @@ class WebSidebarRenderer(WebRenderer[SidebarView]):
             dict.fromkeys(("title", "toggle_text", "is_expanded"), self._mark_dirty)
         )
 
+    @override
     def render(self) -> None:
         super().render()
         self._adopt(self._view.children_views)
@@ -64,6 +66,7 @@ class WebSidebarRenderer(WebRenderer[SidebarView]):
         """The id of the drawer's checkbox, checked while the drawer shows on a phone."""
         return f"{self.widget_id}-drawer"
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         title = self._view.title
         heading = (
@@ -116,6 +119,7 @@ class WebSidebarRenderer(WebRenderer[SidebarView]):
             sidebar_icon=_icon("sidebar", "size-5"),
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event != "toggle":
             super().dispatch(event, form)
@@ -177,6 +181,7 @@ class WebRouterRenderer(WebRenderer[Router]):
         super().__init__(view)
         self._refresh_dispatcher["current_route"] = self._refresh_current_route
 
+    @override
     def render(self) -> None:
         super().render()
         for page in self._view.pages:
@@ -200,6 +205,7 @@ class WebRouterRenderer(WebRenderer[Router]):
             page.renderer.build()
         self._mark_dirty(view, rendered_object, value)
 
+    @override
     def shows(self, child: WebRenderer[Any]) -> bool:
         return self.is_current(child)
 
@@ -210,6 +216,7 @@ class WebRouterRenderer(WebRenderer[Router]):
             for view in self._view.pages
         )
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         slots: list[str] = []
         for page in self._view.pages:
@@ -317,6 +324,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         """The main view's router, whose pages have addresses; None without one."""
         return next((view for view in self._view.children_views if isinstance(view, Router)), None)
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = f"cui-{id(self._view)}-main"
@@ -330,6 +338,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             if isinstance(view, OpenFileAction) and isinstance(view.renderer, WebActionRenderer):
                 view.renderer.accept = self._view.extension
 
+    @override
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         call_in_session(self._target, callback)
 
@@ -458,17 +467,21 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             ).format(swap=swap, badge=badge, title=title)
         )
 
+    @override
     def close(self) -> None:
         self.is_closed = True
 
+    @override
     def open_file(self) -> Path | None:
         # no browser-side path to return: the web backend uploads instead (M7), and
         # None is what `FileMenu`'s callbacks already treat as "cancelled"
         return None
 
+    @override
     def save_file(self) -> Path | None:
         return None  # see `open_file`; saving is a browser download (M7)
 
+    @override
     def download(self, file: DownloadedFile) -> None:
         # the session's next answer names it (`downloads_marker`)
         self.downloads.add(file)

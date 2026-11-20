@@ -43,9 +43,13 @@ class Readings(CSVSqliteTable, row_type=Reading, name="reading"):
     pass
 
 
+def stripped(value: str) -> str:
+    return value.strip()
+
+
 @attrs.define
 class ExistingRow:
-    name: str = csv_field("Name", converter=lambda value: value.strip())
+    name: str = csv_field("Name", converter=stripped)
     count: int
 
 

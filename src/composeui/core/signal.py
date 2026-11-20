@@ -406,7 +406,7 @@ class Signal(Generic[Unpack[Ts]]):
     def get_function_name(callback: CallbackT[Any]) -> str:
         if isinstance(callback, (InjectedCallback, _FirstArgumentsCallback)):
             wrapped = callback.get_callback()
-            return "<collected>" if wrapped is None else Signal.get_function_name(wrapped)  # type: ignore[arg-type]
+            return "<collected>" if wrapped is None else Signal.get_function_name(wrapped)
         if isinstance(callback, functools.partial):
             inner = Signal.get_function_name(callback.func)
             args = list(map(repr, callback.args))
@@ -419,7 +419,7 @@ class Signal(Generic[Unpack[Ts]]):
     def get_function_file(callback: CallbackT[Any]) -> str:
         if isinstance(callback, (InjectedCallback, _FirstArgumentsCallback)):
             wrapped = callback.get_callback()
-            return "" if wrapped is None else Signal.get_function_file(wrapped)  # type: ignore[arg-type]
+            return "" if wrapped is None else Signal.get_function_file(wrapped)
         if isinstance(callback, functools.partial):
             return Signal.get_function_file(callback.func)
         code = getattr(callback, "__code__", None)

@@ -6,6 +6,7 @@ import functools
 from typing import TYPE_CHECKING, Any
 
 from textual.content import Content
+from typing_extensions import override
 
 from composeui.core.renderer import Renderer
 from composeui.core.view import DialogKind, DialogView, OkCancelDialogView
@@ -46,17 +47,21 @@ class TextualDialogRenderer(Renderer[DialogView, DialogView]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = self._view
 
+    @override
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         _call_on_app_thread(self.app, callback)
 
+    @override
     def refresh(self) -> None:
         # see `TextualWidgetRenderer.refresh`
         self.call_on_main_thread(super().refresh)
 
+    @override
     def refresh_attribute(self, attr_name: str, value: Any) -> None:
         self.call_on_main_thread(functools.partial(super().refresh_attribute, attr_name, value))
 
@@ -145,6 +150,7 @@ class TextualFormDialogRenderer(TextualDialogRenderer):
         self._refresh_dispatcher["has_failing_check"] = self._refresh_has_failing_check
         self._refresh_dispatcher["is_destructive"] = self._refresh_kind
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             super().render()
@@ -182,6 +188,7 @@ class TextualFormDialogRenderer(TextualDialogRenderer):
     def _answer_form(self, answer: str) -> None:
         {"accept": self._view.accept, "reject": self._view.reject}.get(answer, self._view.dismiss)()
 
+    @override
     def _refresh_visible(self, view: DialogView, _rendered_object: DialogView, value: bool) -> None:
         app, screen = self.app, self.form_screen
         # opened before the app runs: its mount refreshes the tree again
@@ -196,6 +203,7 @@ class TextualFormDialogRenderer(TextualDialogRenderer):
         elif not value and screen.is_active:  # covered: `_pop_if_closed`, once uncovered
             app.pop_screen()
 
+    @override
     def _refresh_enabled(
         self, _view: DialogView, _rendered_object: DialogView, value: bool
     ) -> None:
@@ -203,25 +211,30 @@ class TextualFormDialogRenderer(TextualDialogRenderer):
         self.form_screen.reject_button.disabled = not value
         self.form_screen.accept_button.disabled = not (value and self._form_view.can_accept)
 
+    @override
     def _refresh_title(self, _view: DialogView, _rendered_object: DialogView, value: str) -> None:
         assert self.form_screen is not None
         self.form_screen.title_label.update(value)
         self.form_screen.title_label.display = value != ""
 
+    @override
     def _refresh_text(self, _view: DialogView, _rendered_object: DialogView, value: str) -> None:
         assert self.form_screen is not None
         self.form_screen.text_label.update(value)
         self.form_screen.text_label.display = value != ""
 
+    @override
     def _refresh_kind(self, _view: DialogView, _rendered_object: DialogView, _value: Any) -> None:
         pass  # always OK and Cancel: a form is confirmed or not
 
+    @override
     def _refresh_accept_text(
         self, _view: DialogView, _rendered_object: DialogView, value: str
     ) -> None:
         assert self.form_screen is not None
         self.form_screen.accept_button.label = Content(value)
 
+    @override
     def _refresh_reject_text(
         self, _view: DialogView, _rendered_object: DialogView, value: str
     ) -> None:

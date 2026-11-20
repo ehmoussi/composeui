@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from markupsafe import Markup
+from typing_extensions import override
 
 from composeui.core.view import DialogKind, DialogView, OkCancelDialogView
 
@@ -26,6 +27,7 @@ class WebDialogRenderer(WebRenderer[DialogView]):
 
     #: its `dispatch` decides by event: a second click on a dialog just closed does nothing
     @property
+    @override
     def takes_events(self) -> bool:
         return True
 
@@ -41,6 +43,7 @@ class WebDialogRenderer(WebRenderer[DialogView]):
             )
         )
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         view = self._view
         title_id = f"{self.widget_id}-title"
@@ -112,6 +115,7 @@ class WebDialogRenderer(WebRenderer[DialogView]):
             text=text,
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         answers = {
             "accept": self._view.accept,
@@ -146,6 +150,7 @@ class WebFormDialogRenderer(WebDialogRenderer):
         self._refresh_dispatcher["is_accept_enabled"] = self._refresh_accept
         self._refresh_dispatcher["has_failing_check"] = self._refresh_accept
 
+    @override
     def render(self) -> None:
         super().render()
         view = self._form_view
@@ -155,6 +160,7 @@ class WebFormDialogRenderer(WebDialogRenderer):
     def accept_id(self) -> str:
         return f"{self.widget_id}-accept"
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         is_whole, self._is_whole = self._is_whole, False
         if oob and not is_whole:
@@ -226,6 +232,7 @@ class WebFormDialogRenderer(WebDialogRenderer):
     def _refresh_accept(self, view: DialogView, rendered_object: str, value: Any) -> None:
         super()._mark_dirty(view, rendered_object, value)
 
+    @override
     def _mark_dirty(self, view: DialogView, rendered_object: str, value: Any) -> None:
         self._is_whole = True
         super()._mark_dirty(view, rendered_object, value)

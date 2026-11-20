@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, NamedTuple, TypeVar
 
 from markupsafe import Markup
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core._views.files import is_within_roots, with_extension
 from composeui.core.renderer import ViewLike
@@ -489,6 +489,7 @@ class _WebPathInputRenderer(_WebTextFieldRenderer[TPathView]):
             )
         return self._server_files
 
+    @override
     def _mark_dirty(self, view: TPathView, rendered_object: str, value: Any) -> None:
         self._mark_part("field")
 
@@ -496,6 +497,7 @@ class _WebPathInputRenderer(_WebTextFieldRenderer[TPathView]):
         self._swaps.add(part)
         super()._mark_dirty(self._view, "", None)
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         swaps, self._swaps = self._swaps, set()
         if oob and swaps and "field" not in swaps:
@@ -586,6 +588,7 @@ class _WebPathInputRenderer(_WebTextFieldRenderer[TPathView]):
         """Get the file types the picker offers, e.g. [".csv"]; empty for any."""
         return []
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event.startswith("browse"):
             self._browse(event, form.get("name", ""))
@@ -624,12 +627,15 @@ class _WebPathInputRenderer(_WebTextFieldRenderer[TPathView]):
         self._view.text_changed.emit(text)
         self._view.path_picked.emit(path)
 
+    @override
     def _text(self) -> str:
         return self._view.text
 
+    @override
     def _posted_text(self) -> str:
         return self._view.text
 
+    @override
     def _apply_text(self, text: str) -> None:
         with self.stop_refresh():
             self._view.text = text
@@ -648,6 +654,7 @@ class WebFilePathInputRenderer(_WebPathInputRenderer[FilePathInputViewLike]):
     _role = "file_path_input"
     _shown_fields = (*_PATH_FIELDS, "extensions", "has_reload", "reload_text")
 
+    @override
     def _picker_html(self, disabled: str) -> Markup:
         types = ",".join(self.file_types)
         return Markup(
@@ -665,6 +672,7 @@ class WebFilePathInputRenderer(_WebPathInputRenderer[FilePathInputViewLike]):
             accept=Markup(' accept="{}"').format(types) if types else "",
         )
 
+    @override
     def _after_html(self, disabled: str) -> Markup:
         if not self._view.has_reload:
             return Markup()
@@ -681,6 +689,7 @@ class WebFilePathInputRenderer(_WebPathInputRenderer[FilePathInputViewLike]):
             reload_icon=_icon("reload"),
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event != "reload":
             super().dispatch(event, form)
@@ -690,6 +699,7 @@ class WebFilePathInputRenderer(_WebPathInputRenderer[FilePathInputViewLike]):
             self._view.reload_clicked.emit()
 
     @property
+    @override
     def file_types(self) -> list[str]:
         return _file_types(self._view.extensions)
 
@@ -726,16 +736,20 @@ class WebSavePathInputRenderer(_WebPathInputRenderer[SavePathInputViewLike]):
     )
 
     @property
+    @override
     def file_types(self) -> list[str]:
         return _file_types(self._view.extensions)
 
+    @override
     def _confirms_overwrite(self) -> bool:
         return self._view.confirms_overwrite
 
+    @override
     def _save_texts(self) -> tuple[str, str, str, str]:
         view = self._view
         return (view.file_name_text, view.save_text, view.replace_question_text, view.replace_text)
 
+    @override
     def _show_path(self, path: Path) -> None:
         # the list asked about a file that exists, unless `confirms_overwrite` is off
         self._view.remember_pick(path)
@@ -754,6 +768,7 @@ class WebFolderPathInputRenderer(_WebPathInputRenderer[FolderPathInputViewLike])
     _kind = "folder"
     _shown_fields = (*_PATH_FIELDS, "choose_folder_text")
 
+    @override
     def _choose_folder_text(self) -> str:
         return self._view.choose_folder_text
 
@@ -798,6 +813,7 @@ class WebFileUploadRenderer(WebRenderer[FileUploadViewLike]):
     def file_types(self) -> list[str]:
         return _file_types(self._view.extensions)
 
+    @override
     def _mark_dirty(self, view: FileUploadViewLike, rendered_object: str, value: Any) -> None:
         self._swaps_whole = True
         super()._mark_dirty(view, rendered_object, value)
@@ -814,6 +830,7 @@ class WebFileUploadRenderer(WebRenderer[FileUploadViewLike]):
             self._view.empty_text if file is None else file.name,
         )
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         only_name = self._swaps_name and not self._swaps_whole
         self._swaps_name = self._swaps_whole = False

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QApplication, QFileDialog
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core._views.tables import SourceTableByPosition
 from composeui.core.renderer import ViewLike
@@ -142,6 +142,7 @@ class QtSourceTableRenderer(QtWidgetRenderer[SourceTableViewLike, QDataFilterTab
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QDataFilterTable(self._view)
@@ -293,6 +294,7 @@ class QtTableRenderer(QtWidgetRenderer[TableViewLike, QFilterTable]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QFilterTable()

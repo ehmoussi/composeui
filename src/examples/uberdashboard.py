@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import polars as pl
+from typing_extensions import override
 
 from composeui.core.application import run
 from composeui.core.dashboard import (
@@ -86,6 +87,7 @@ class UberDashboardMainView(DashboardView):
         DownloadView, text="Download these pickups", filename="pickups.csv"
     )
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.loader = self.jobs.task(read_pickups)

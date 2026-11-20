@@ -3,19 +3,17 @@
 from __future__ import annotations
 
 import weakref
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from textual.containers import Vertical
 from textual.content import Content
+from textual.widget import Widget
 from textual.widgets import Label
+from typing_extensions import override
 
 from composeui.core.renderer import RendererContainer
 from composeui.core.view import FormLabelRowView, FormRowView, FormView, GroupFormView, View
-from composeui.textualcore._renderers.content import TextualLogRenderer
 from composeui.textualcore.textualrenderer import TextualWidgetRenderer
-
-if TYPE_CHECKING:
-    from textual.widget import Widget
 
 
 class TextualFormLabelRenderer(TextualWidgetRenderer[FormLabelRowView, Label]):
@@ -33,6 +31,7 @@ class TextualFormLabelRenderer(TextualWidgetRenderer[FormLabelRowView, Label]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = Label()
@@ -77,6 +76,7 @@ def _widget_of(view: View) -> Widget | None:
 
 
 class TextualFormRenderer(TextualWidgetRenderer[FormView, Vertical]):
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             # its rows and its other views, e.g. a table; a view this backend doesn't
@@ -112,14 +112,14 @@ class TextualFormRenderer(TextualWidgetRenderer[FormView, Vertical]):
     def _get_field_widget(field_row_renderer: RendererContainer[View]) -> Widget:
         field_renderer = field_row_renderer.get_renderer("field")
         assert isinstance(field_renderer, TextualWidgetRenderer)
-        assert field_renderer.widget is not None
+        assert isinstance(field_renderer.widget, Widget)
         return field_renderer.widget
 
     @staticmethod
     def _get_log_widget(field_row_renderer: RendererContainer[View]) -> Widget:
         log_renderer = field_row_renderer.get_renderer("log")
-        assert isinstance(log_renderer, TextualLogRenderer)
-        assert log_renderer.widget is not None
+        assert isinstance(log_renderer, TextualWidgetRenderer)
+        assert isinstance(log_renderer.widget, Label)
         return log_renderer.widget
 
     @staticmethod
@@ -139,6 +139,7 @@ class TextualGroupFormRenderer(TextualFormRenderer):
             }
         )
 
+    @override
     def render(self) -> None:
         is_first_render = self._rendered_object is None
         super().render()

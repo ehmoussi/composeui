@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, NamedTuple, TypeVar
 
 from qtpy.QtCore import QThread, QTimer
 from qtpy.QtWidgets import QApplication, QMainWindow, QWidget
+from typing_extensions import override
 
 from composeui.core.application import Application, ModelApplication
 from composeui.core.registry import RendererType
@@ -217,6 +218,7 @@ class QtApplication(Application[MainViewT]):
         super().__init__(build_main_view=build_main_view)
         _add_reload_argument(self._parser)
 
+    @override
     def run(self) -> None:
         super().run()
         assert self._args is not None
@@ -250,6 +252,7 @@ class QtModelApplication(ModelApplication[MainViewT, ModelT]):
             raise
         _add_reload_argument(self._parser)
 
+    @override
     def run(self) -> None:
         try:
             super().run()

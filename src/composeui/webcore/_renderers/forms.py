@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from markupsafe import Markup
+from typing_extensions import override
 
 from composeui.core.renderer import RendererContainer
 from composeui.core.view import FormLabelRowView, FormView, GroupFormView
@@ -45,6 +46,7 @@ class WebFormLabelRenderer(WebRenderer[FormLabelRowView]):
     def has_help(self) -> bool:
         return self._view.help != ""
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         field = self._field_renderer()
         # a radio group or a checkbox is a `<div>`, which isn't labelable: its
@@ -114,10 +116,12 @@ class WebFormRenderer(WebRenderer[FormView]):
 
     _role = "form"
 
+    @override
     def render(self) -> None:
         super().render()
         self._adopt(self._view.children_views)
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         return self._fieldset(oob=oob, classes="flex min-w-0 flex-col gap-5", legend="")
 
@@ -148,6 +152,7 @@ class WebGroupFormRenderer(WebFormRenderer):
         super().__init__(view)
         self._refresh_dispatcher.update({"title": self._mark_dirty})
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         title = self._view.title if isinstance(self._view, GroupFormView) else ""
         return self._fieldset(

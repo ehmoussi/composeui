@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core._views.actions import OpenFileAction
 from composeui.core.view import ActionView, MainView, SeparatorAction, ToolBar, define_view
@@ -16,6 +17,7 @@ class EditToolBar(ToolBar):
     run: ActionView = Factory(ActionView)
     wrap: ActionView = Factory(ActionView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = "Edit"
@@ -33,6 +35,7 @@ class ToolBarMainView(MainView):
     toolbar: EditToolBar = Factory(EditToolBar)
     router: PagesRouter = Factory(PagesRouter)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         # the File menu's Open, from the toolbar

@@ -6,6 +6,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, Static
+from typing_extensions import override
 
 from composeui.core.signal import Signal, SignalNoArgs
 
@@ -76,6 +77,7 @@ class ComposeFormDialog(ModalScreen[None]):
     def on_screen_resume(self) -> None:
         self.resumed.emit()
 
+    @override
     def compose(self) -> ComposeResult:
         with VerticalScroll():
             yield self.title_label

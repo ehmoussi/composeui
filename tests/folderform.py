@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 
 import attrs
+from typing_extensions import override
 
 from composeui.core.view import (
     ButtonView,
@@ -32,6 +33,7 @@ class FolderForm(FormView):
     buttons: FolderButtons = attrs.Factory(FolderButtons)
     entries: TableView = child(TableView, headers=["Name"], rows=[["beam.export"]])
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.buttons.up.clicked.connect(self._go_up)
@@ -55,6 +57,7 @@ class StudyMainView(MainView):
     open: ButtonView = child(ButtonView, text="Open")
     open_dialog: OpenStudyDialog = child(OpenStudyDialog, title="Open a study")
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.open.clicked.connect(self.open_dialog.open)

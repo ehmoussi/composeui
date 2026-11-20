@@ -6,7 +6,7 @@ import math
 from typing import TYPE_CHECKING, Any, ClassVar, Final
 
 from markupsafe import Markup
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core._views.controls import RANGE_DASH
 from composeui.core.renderer import ViewLike
@@ -54,6 +54,7 @@ class WebCheckBoxRenderer(WebRenderer[CheckBoxViewLike]):
             }
         )
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         checked = " checked" if self._view.is_checked else ""
         disabled = "" if self.is_enabled else " disabled"
@@ -76,6 +77,7 @@ class WebCheckBoxRenderer(WebRenderer[CheckBoxViewLike]):
             text=self._view.text,
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event != "change":
             super().dispatch(event, form)
@@ -110,6 +112,7 @@ class WebButtonRenderer(WebRenderer[ButtonViewLike]):
         super().__init__(view)
         self._refresh_dispatcher.update({"text": self._mark_dirty, "variant": self._mark_dirty})
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         disabled = "" if self.is_enabled else " disabled"
         variant = _BUTTON_CLASSES[self._view.variant]
@@ -127,6 +130,7 @@ class WebButtonRenderer(WebRenderer[ButtonViewLike]):
             text=self._view.text,
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         # a disabled button can't be clicked: a post saying otherwise is refused
         if event != "click" or not self.is_enabled:
@@ -168,10 +172,12 @@ class WebDialogButtonRenderer(WebButtonRenderer):
         )
 
     @property
+    @override
     def is_enabled(self) -> bool:
         """Whether it can be pressed: enabled, with its dialog, and no check of its fails."""
         return super().is_enabled and not self._dialog_button.is_blocked
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         # a disabled button can't be clicked: a post saying otherwise is refused
         if event != "click" or not self.is_enabled:
@@ -193,6 +199,7 @@ class WebProgressBarRenderer(WebRenderer[ProgressBarViewLike]):
         super().__init__(view)
         self._refresh_dispatcher.update({"value": self._mark_dirty, "maximum": self._mark_dirty})
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         value, maximum = self._view.value, self._view.maximum
         clamped = ProgressBarView.clamp(value, maximum)
@@ -242,6 +249,7 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
             }
         )
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         minimum, step = self._view.minimum, self._view.step
         last = self._steps.last_position(minimum, self._view.maximum, step)
@@ -291,6 +299,7 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
         except ValueError:
             return None
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event not in ("input", "change"):
             super().dispatch(event, form)
@@ -313,6 +322,7 @@ class WebFloatSliderRenderer(WebSliderRenderer):
 
     _steps = FloatSliderMixin
 
+    @override
     @staticmethod
     def _posted(text: str) -> float | None:
         try:
@@ -357,6 +367,7 @@ class WebRangeSliderRenderer(WebRenderer[RangeSliderViewLike]):
             )
         )
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         view, steps = self._view, self._range.step_rules
         minimum, step = view.minimum, view.step
@@ -419,6 +430,7 @@ class WebRangeSliderRenderer(WebRenderer[RangeSliderViewLike]):
             ends=RANGE_DASH.join(texts),
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event not in ("input", "change"):
             super().dispatch(event, form)

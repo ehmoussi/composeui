@@ -12,6 +12,7 @@ import attrs
 import pytest
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
+from typing_extensions import override
 
 pytest.importorskip("polars")
 pytest.importorskip("pandas")
@@ -28,9 +29,9 @@ from composeui.core.dataframesource import (
     points_of,
     series_of,
 )
+from composeui.core.model import RefusedError
 from composeui.core.sqlitemodel import (
     CSVSqliteTable,
-    RefusedError,
     SqliteModel,
     csv_field,
     define_csv_row,
@@ -522,7 +523,7 @@ def test_a_date_range_with_a_time_zone_at_one_end_only_is_refused() -> None:
 )
 @pytest.mark.parametrize(("search", "row_filter"), [("n", None), ("", "/n/"), ("", "=none")])
 def test_an_empty_pandas_cell_has_no_text_to_find(
-    column: pd.Series, search: str, row_filter: Optional[str]
+    column: pd.Series[Any], search: str, row_filter: Optional[str]
 ) -> None:
     source = DataFrameSource(pd.DataFrame({"name": column}))
     filters = {} if row_filter is None else {"name": parse_filter(row_filter)}
@@ -1064,6 +1065,7 @@ class _AbsoluteTable(CSVSqliteTable, row_type=_Absolute, name="absolute"):
 
 
 class _TenfoldTable(CSVSqliteTable, row_type=_Count, name="tenfold"):
+    @override
     def row_parameters(self, row: dict[str, Any]) -> tuple[Any, ...]:
         (count,) = super().row_parameters(row)
         return (count * 10,)
@@ -1178,7 +1180,8 @@ class _SampleFrame:
     def native(self) -> IntoDataFrame:
         frame = pl.DataFrame(self.columns)
         if self.library == "pyarrow":
-            return frame.to_arrow()
+            table: IntoDataFrame = frame.to_arrow()
+            return table
         return frame.to_pandas() if self.library == "pandas" else frame
 
 

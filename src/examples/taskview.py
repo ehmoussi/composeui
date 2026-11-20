@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Optional
 
 import attrs
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core import application
 from composeui.core.registry import RendererType
@@ -82,6 +83,7 @@ def run_task(job: Job[TaskStatus], duration: float, failure_rate: float) -> Task
 
 @define_view
 class ConfigInputView(LabelRowIntInputView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.minimum = 0
@@ -98,6 +100,7 @@ class TaskConfigForm(GroupFormView):
         LabelRowSliderView, label=T("Percentage of Failure (%)"), value=20, maximum=100
     )
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = self.tr("Configuration")
@@ -204,6 +207,7 @@ class TaskMainView(MainView):
         default=None, init=False, metadata={OMIT: True}
     )
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.buttons.run.clicked.connect(self.start)

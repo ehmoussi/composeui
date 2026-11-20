@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 from textual.content import Content
 from textual.widgets import Collapsible
+from typing_extensions import override
 
 from composeui.core.signal import Signal
 
@@ -24,6 +25,7 @@ class ComposeCollapsible(Collapsible):
         super().__init__(*children)
         self.toggled: Signal[bool] = Signal()
 
+    @override
     def _watch_title(self, title: str) -> None:
         # plain text: Textual's own reads the title as markup
         self._title.label = Content(title)

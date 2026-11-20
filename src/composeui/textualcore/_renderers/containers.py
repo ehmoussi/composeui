@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from textual.containers import Container, Grid, Horizontal, Vertical
 from textual.content import Content
 from textual.widgets import TabPane
+from typing_extensions import override
 
 from composeui.core.registry import RendererType
 from composeui.core.view import (
@@ -38,6 +39,7 @@ if TYPE_CHECKING:
 class TextualPageRenderer(TextualWidgetRenderer[PageView, Vertical]):
     """A page's views in a column, like the screen's own."""
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             widgets = [
@@ -52,6 +54,7 @@ class TextualPageRenderer(TextualWidgetRenderer[PageView, Vertical]):
 class TextualHorizontalRenderer(TextualWidgetRenderer[HorizontalView, Horizontal]):
     """Views side by side, each as wide as its share of the row."""
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             widgets: list[Widget] = []
@@ -70,6 +73,7 @@ class TextualHorizontalRenderer(TextualWidgetRenderer[HorizontalView, Horizontal
 class TextualVerticalRenderer(TextualWidgetRenderer[VerticalView, Vertical]):
     """Views one above the other, at the top of the column."""
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             widgets = [
@@ -90,6 +94,7 @@ class TextualSplitterRenderer(TextualWidgetRenderer[SplitterView, ComposeSplitte
         # names a border on the web only
         self._refresh_dispatcher["border_text"] = lambda _view, _splitter, _value: None
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             panes = [
@@ -124,6 +129,7 @@ class TextualExpanderRenderer(TextualWidgetRenderer[ExpanderView, ComposeCollaps
             {"title": self._refresh_title, "is_expanded": self._refresh_is_expanded}
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             widgets = [
@@ -164,6 +170,7 @@ class TextualListRenderer(TextualWidgetRenderer["ListView[Any]", ComposeList]):
         super().__init__(view)
         self._refresh_dispatcher.update({"item_views": self._refresh_item_views})
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeList(*self._widgets(self._view.item_views))
@@ -225,6 +232,7 @@ class TextualTabPageRenderer(TextualWidgetRenderer[TabPage, TabPane]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             widgets = [
@@ -272,6 +280,7 @@ class TextualTabsRenderer(TextualWidgetRenderer[TabView, ComposeTabbedContent]):
         super().__init__(view)
         self._refresh_dispatcher["current_index"] = self._refresh_current_index
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             panes = [
@@ -323,6 +332,7 @@ class TextualGridRenderer(TextualWidgetRenderer[GridView, Grid]):
     widget, empty for cells no view takes. So a hidden view leaves its cell in place.
     """
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             at_cell = {

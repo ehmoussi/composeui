@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 from qtpy.QtCore import QSize, Signal, Slot
 from qtpy.QtWidgets import QPlainTextEdit, QSizePolicy
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from qtpy.QtGui import QFocusEvent
@@ -26,12 +27,14 @@ class QTextArea(QPlainTextEdit):
         self._is_changed = False
         self.textChanged.connect(self._emit_text_changed)
 
-    def sizeHint(self) -> QSize:  # noqa: N802
+    @override
+    def sizeHint(self) -> QSize:
         margins = self.contentsMargins()
         height = 4 * self.fontMetrics().lineSpacing() + 2 * self.document().documentMargin()
         return QSize(super().sizeHint().width(), round(height) + margins.top() + margins.bottom())
 
-    def focusOutEvent(self, event: QFocusEvent) -> None:  # noqa: N802
+    @override
+    def focusOutEvent(self, event: QFocusEvent) -> None:
         super().focusOutEvent(event)
         if self._is_changed:
             self._is_changed = False

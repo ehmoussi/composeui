@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtWidgets import QDialog, QDialogButtonBox, QPushButton, QVBoxLayout, QWidget
+from typing_extensions import override
 
 from composeui.qtcore.widgets.qplaintext import plain_label
 
@@ -61,12 +62,15 @@ class QFormDialog(QDialog):
         """Show `button` among Cancel and OK; clicking it answers nothing."""
         self.buttons.addButton(button, QDialogButtonBox.ButtonRole.ActionRole)
 
+    @override
     def accept(self) -> None:
         self.answered_ok.emit()
 
+    @override
     def reject(self) -> None:
         self.answered_cancel.emit()
 
-    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+    @override
+    def closeEvent(self, event: QCloseEvent) -> None:
         event.ignore()  # closed by its view, once it hears the answer
         self.dismissed.emit()

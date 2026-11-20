@@ -6,6 +6,8 @@ markup: both must show these texts as they are.
 
 from __future__ import annotations
 
+from typing_extensions import override
+
 from composeui.core.view import (
     ButtonView,
     CheckBoxView,
@@ -41,6 +43,7 @@ class MarkupMainView(MainView):
     notes: TableView = child(TableView, headers=[MARKUP], rows=[[MARKUP]], filterable_columns=[0])
     warning: DialogView = child(DialogView, title=MARKUP, text=MARKUP)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.notes.filters = {0: "=" + MARKUP}  # its chip shows the text typed

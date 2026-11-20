@@ -6,6 +6,7 @@ from pathlib import Path  # noqa: TC003 (attrs resolves the view's annotations)
 from typing import Union
 
 import attrs
+from typing_extensions import override
 
 from composeui.core.view import (
     OMIT,
@@ -36,6 +37,7 @@ class ReportMainView(MainView):
         default=b"a,b\n1,2\n", init=False, metadata={OMIT: True}
     )
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.export.content = self.later.content = self._make_report

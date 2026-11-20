@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import contextlib
 import enum
 import functools
 from collections import deque
@@ -16,9 +15,10 @@ from typing import (
 )
 
 import attrs
+from typing_extensions import override
 
 from composeui.core import reactivity
-from composeui.core._views.base import OMIT, UI_TEXT, View, define_view
+from composeui.core._views.base import OMIT, UI_TEXT, View, catching_context, define_view
 from composeui.core._views.content import LogType, LogView, Validator
 from composeui.core._views.controls import DialogButtonView
 from composeui.core._views.forms import FormT, FormView
@@ -87,6 +87,7 @@ class DialogView(View):
         default=_NOT_ASKED, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         # shown only once opened
@@ -223,6 +224,7 @@ class RestoreWorkDialogView(DialogView):
         default=_NOT_ASKED_RESTORE, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.accepted.connect(functools.partial(self._restore_answer, 0))
@@ -241,6 +243,7 @@ class RestoreWorkDialogView(DialogView):
         self.text = translate_again(_RESTORE_WORK_QUESTION, self._tr).format(time=saved)
         self.open()
 
+    @override
     def dismiss(self) -> None:
         """Close the question without a button: the work waits for the next start."""
         self.is_visible = False
@@ -290,6 +293,7 @@ class OkCancelDialogView(DialogView):
         def content(self) -> View:
             """Get the view the dialog shows above its buttons."""
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.kind = DialogKind.CONFIRM
@@ -334,7 +338,8 @@ class OkCancelDialogView(DialogView):
         self.has_failing_check = len(messages) > 0
         self._follow_checks()
 
-    @contextlib.contextmanager
+    @override
+    @catching_context
     def refusing(self, message: str) -> Iterator[None]:
         """Show the model's refusal of the block's change in the dialog, which stays open.
 
@@ -365,6 +370,7 @@ class OkCancelDialogView(DialogView):
         """Run every check of the dialog now."""
         self.validate()
 
+    @override
     def accept(self) -> None:
         """Close the dialog with its accepting answer, once every check passes.
 
@@ -397,6 +403,7 @@ class OkCancelDialogView(DialogView):
         if button.closes and not self._is_refused:
             self.is_visible = False
 
+    @override
     def open(self) -> None:
         """Show the dialog, without the message of an earlier answer."""
         self._forget_answer()
@@ -438,6 +445,7 @@ class TypedFormDialogView(OkCancelDialogView, Generic[FormT]):
 
     form: FormT = attrs.field()
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         forms: list[FormView] = [self.form]
@@ -452,21 +460,25 @@ class TypedFormDialogView(OkCancelDialogView, Generic[FormT]):
         self._follow_form()
 
     @property
+    @override
     def is_valid(self) -> bool:
         """Whether no check shown fails, the form's or the dialog's own."""
         return self.form.is_valid and super().is_valid
 
+    @override
     def open(self) -> None:
         """Show the dialog, OK as the form's checks last left it."""
         self._follow_form()
         super().open()
 
+    @override
     def check(self) -> None:
         """Run every check now: the form's, then the dialog's own."""
         self.form.check()
         super().check()
 
     @property
+    @override
     def content(self) -> FormT:
         """Get the view the dialog shows: its form."""
         return self.form

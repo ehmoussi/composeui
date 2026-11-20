@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.view import (
     ButtonView,
@@ -32,6 +33,7 @@ class InputsPage(PageView):
     name: InputView = Factory(InputView)
     submit: ButtonView = Factory(ButtonView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.submit.text = "Submit"
@@ -46,6 +48,7 @@ class ResultsPage(PageView):
     total: LabelView = Factory(LabelView)
     progress: ProgressBarView = Factory(ProgressBarView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.total.text = "Total: 0"
@@ -64,6 +67,7 @@ class PagesMainView(MainView):
 
     router: PagesRouter = Factory(PagesRouter)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.router.inputs.submit.clicked.connect(self._submit)

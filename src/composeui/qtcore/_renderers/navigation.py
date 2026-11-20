@@ -22,6 +22,7 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from typing_extensions import override
 
 from composeui.core._views.files import save_download
 from composeui.core.registry import RendererType
@@ -61,6 +62,7 @@ class QtSidebarRenderer(QtWidgetRenderer[SidebarView, QSidebar]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QSidebar()
@@ -111,6 +113,7 @@ class QtRouterRenderer(QtWidgetRenderer[Router, QStackedWidget]):
         self._slots: dict[str, QWidget] = {}
         self._refresh_dispatcher.update({"current_route": self._refresh_current_route})
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QStackedWidget()
@@ -166,7 +169,8 @@ class QtMainWindow(QMainWindow):
         #: a reload's, which saved the study
         self.may_close: Callable[[], bool] | None = None
 
-    def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
+    @override
+    def closeEvent(self, event: QCloseEvent) -> None:
         if self.may_close is None or self.may_close():
             super().closeEvent(event)
         else:
@@ -201,6 +205,7 @@ class QtMainRenderer(
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             if self._window is None:
@@ -221,6 +226,7 @@ class QtMainRenderer(
             self._add_child_widgets(self._view, self._rendered_object)
             self.refresh()
 
+    @override
     def open_file(self) -> Path | None:
         """Return an existing file selected by the user."""
         assert self._rendered_object is not None
@@ -229,6 +235,7 @@ class QtMainRenderer(
         )
         return self._build_filepath(filepath_str, selected_filter)
 
+    @override
     def save_file(self) -> Path | None:
         assert self._rendered_object is not None
         filepath_str, selected_filter = QFileDialog.getSaveFileName(
@@ -236,6 +243,7 @@ class QtMainRenderer(
         )
         return self._build_filepath(filepath_str, selected_filter)
 
+    @override
     def download(self, file: DownloadedFile) -> None:
         self._downloads.append(file)
         # the dialog runs an event loop of its own, where a job's callback may download too
@@ -253,6 +261,7 @@ class QtMainRenderer(
         finally:
             self._is_asking = False
 
+    @override
     def close(self) -> None:
         assert self._rendered_object is not None
         self._is_closing = True

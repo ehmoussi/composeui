@@ -15,9 +15,11 @@ from typing import TYPE_CHECKING, Any, BinaryIO, Callable, Literal, Optional, ca
 from unittest.mock import Mock
 
 import attrs
+import narwhals as nw
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
+from typing_extensions import override
 
 pytest.importorskip("polars")
 pytest.importorskip("pandas")
@@ -445,6 +447,7 @@ class TripsPage(MainView):
     filters: TripFilters = child(TripFilters)
     table: SourceTableView = child(SourceTableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.loader = self.jobs.task(_read_trips)
@@ -540,7 +543,7 @@ def test_a_csv_file_of_too_many_columns_is_refused_before_it_is_read(
     path = tmp_path / "wide.csv"
     path.write_text(text, encoding="utf-8")
     read = Mock(side_effect=AssertionError("read"))
-    monkeypatch.setattr(dashboard.nw, "read_csv", read)
+    monkeypatch.setattr(nw, "read_csv", read)
 
     with pytest.raises(ValueError, match=error):
         read_frame(path, backend="pandas", max_columns=3)

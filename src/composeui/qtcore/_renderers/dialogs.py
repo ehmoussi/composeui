@@ -7,6 +7,7 @@ from typing import Any
 
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QAbstractButton, QMessageBox, QPushButton
+from typing_extensions import override
 
 from composeui.core.view import DialogKind, DialogView, OkCancelDialogView
 from composeui.qtcore._renderers.forms import _widget_of
@@ -52,6 +53,7 @@ class QtDialogRenderer(QtWidgetRenderer[DialogView, QMessageBox]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             box = QMessageBox()
@@ -158,6 +160,7 @@ class QtFormDialogRenderer(QtWidgetRenderer[OkCancelDialogView, QFormDialog]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             dialog = QFormDialog()

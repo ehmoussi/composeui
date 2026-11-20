@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from textual.widgets import Label, Static
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core._views.content import image_content, line_styles_after, lines_after
 from composeui.core.renderer import ViewLike
@@ -38,6 +38,7 @@ class TextualLabelRenderer(TextualWidgetRenderer[LabelViewLike, ComposeLabel]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeLabel(markup=False)
@@ -68,6 +69,7 @@ class TextualImageRenderer(TextualWidgetRenderer[ImageViewLike, ComposeImage]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeImage()
@@ -100,6 +102,7 @@ class TextualMarkdownRenderer(TextualWidgetRenderer[MarkdownViewLike, ComposeMar
         super().__init__(view)
         self._refresh_dispatcher.update({"text": self._refresh_text})
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeMarkdown()
@@ -145,6 +148,7 @@ class TextualConsoleRenderer(TextualWidgetRenderer[ConsoleViewLike, ComposeConso
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeConsoleBox()
@@ -229,6 +233,7 @@ class TextualMetricRenderer(TextualWidgetRenderer[MetricViewLike, ComposeMetric]
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeMetric()
@@ -287,6 +292,7 @@ class TextualLogRenderer(TextualWidgetRenderer[LogViewLike, Label]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = Label(markup=False)
@@ -319,6 +325,7 @@ class TextualStatusBarRenderer(TextualWidgetRenderer[StatusBar, Static]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = Static(markup=False)

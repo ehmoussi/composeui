@@ -10,6 +10,7 @@ import time
 from typing import TYPE_CHECKING, BinaryIO, cast
 
 import pytest
+from typing_extensions import override
 
 pytest.importorskip("polars")
 pytest.importorskip("starlette")
@@ -117,6 +118,7 @@ def test_a_user_unchecks_a_base_on_the_web_and_downloads_the_rows_shown() -> Non
     views: list[UberDashboardMainView] = []
 
     class DashboardApp(WebApplication[UberDashboardMainView]):
+        @override
         def setup_session(self, main_view: UberDashboardMainView) -> None:
             views.append(main_view)
 
@@ -170,6 +172,7 @@ def test_four_web_sessions_read_the_csv_once_and_each_filters_its_own_rows(
     views: list[UberDashboardMainView] = []
 
     class DashboardApp(WebApplication[UberDashboardMainView]):
+        @override
         def setup_session(self, main_view: UberDashboardMainView) -> None:
             views.append(main_view)
 

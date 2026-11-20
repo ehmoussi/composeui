@@ -24,7 +24,9 @@ from typing import (
 )
 
 import attrs
-from cattrs.gen import AttributeOverride, make_dict_unstructure_fn, override
+from cattrs.gen import make_dict_unstructure_fn
+from cattrs.gen import override as attribute_override
+from typing_extensions import override
 
 from composeui.core._views import base
 from composeui.core._views.actions import FileMenu, LanguageMenu
@@ -122,8 +124,10 @@ def _omit_renderer_and_signals(
     # a generic view's class, e.g. a field's `RecordTableView[Room]`
     view_cls = get_origin(cls) or cls
     attrs.resolve_types(view_cls)
-    overrides: dict[str, AttributeOverride] = {
-        str(f.name): override(omit=True) for f in attrs.fields(view_cls) if not _is_state_field(f)
+    overrides = {
+        str(f.name): attribute_override(omit=True)
+        for f in attrs.fields(view_cls)
+        if not _is_state_field(f)
     }
     unstructure = make_dict_unstructure_fn(
         cls,
@@ -242,9 +246,12 @@ def _show_checked(view: View) -> None:
     views = deque([view])
     while len(views) > 0:
         current = views.popleft()
-        if isinstance(current, CheckBoxMixin):
-            for shown in current.shown_views:
-                shown.is_visible = current.is_checked
+        # an `object`: from Python 3.13, mypy finds the `__replace__` of attrs' `View` and
+        # mixin incompatible, so a view that is both looks impossible to it
+        checkable: object = current
+        if isinstance(checkable, CheckBoxMixin):
+            for shown in checkable.shown_views:
+                shown.is_visible = checkable.is_checked
         views.extend(current.children_views)
 
 
@@ -342,6 +349,7 @@ class FileView(View):
     extensions: dict[str, tuple[str, ...]] = attrs.Factory(dict[str, tuple[str, ...]])
     # file_type: FileType = attrs.field(default=FileType.OpenFile)
 
+    @override
     def _create_renderer(self, renderer_type: RendererType) -> None:
         return None
 
@@ -457,6 +465,7 @@ class MainView(View):
     #: set by `set_language`; empty while the text shows as written in the code
     _language: str = attrs.field(default="", init=False, repr=False, metadata={OMIT: True})
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         # the tasks that the views built as they were built start from now on
@@ -468,6 +477,7 @@ class MainView(View):
             menu.check(self.language)
 
     @property
+    @override
     def children_views(self) -> list[View]:
         views = super().children_views
         if self.has_file_menu:
@@ -788,6 +798,7 @@ class MainView(View):
         """Get the files `download` gave while no backend showed the main view, e.g. in a test."""
         return self._downloads
 
+    @override
     def render(self, renderer_type: RendererType) -> None:
         super().render(renderer_type)
         if self.renderer is not None:

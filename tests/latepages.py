@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.view import (
     ContentDialogView,
@@ -39,6 +40,7 @@ class RoomsPage(PageView):
     rooms: RecordTableView[Room] = child(RecordTableView[Room], columns=SORTED_COLUMNS)
     readings: SourceTableView = child(SourceTableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.readings.source = GatedSource()
@@ -89,6 +91,7 @@ class LatePagesMainView(MainView):
 
     router: LatePagesRouter = Factory(LatePagesRouter)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.status_bar.timeout = 0

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from qtpy.QtWidgets import QCheckBox, QProgressBar, QPushButton
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core.renderer import ViewLike
 from composeui.core.view import (
@@ -55,6 +55,7 @@ class QtSliderRenderer(QtWidgetRenderer[SliderViewLike, QValueSlider]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QValueSlider()
@@ -152,6 +153,7 @@ class QtRangeSliderRenderer(QtWidgetRenderer[RangeSliderViewLike, QRangeSlider])
             dict.fromkeys(("low_text", "high_text"), lambda _view, _rendered_object, _value: None)
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QRangeSlider()
@@ -222,6 +224,7 @@ class QtCheckBoxRenderer(QtWidgetRenderer[CheckBoxViewLike, QCheckBox]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QCheckBox()
@@ -261,6 +264,7 @@ class QtButtonRenderer(QtWidgetRenderer[ButtonViewLike, QPushButton]):
             {"text": self._refresh_text, "variant": self._refresh_variant}
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QPushButton()
@@ -315,6 +319,7 @@ class QtDialogButtonRenderer(QtButtonRenderer):
             }
         )
 
+    @override
     def render(self) -> None:
         super().render()
         assert self._rendered_object is not None
@@ -336,6 +341,7 @@ class QtDialogButtonRenderer(QtButtonRenderer):
     def _noop(_view: ButtonViewLike, _rendered_object: QPushButton, _value: bool) -> None:
         pass  # read on each click
 
+    @override
     def _emit_clicked(self) -> None:
         self._dialog_button.click()
 
@@ -352,6 +358,7 @@ class QtProgressBarRenderer(QtWidgetRenderer[ProgressBarViewLike, QProgressBar])
             {"value": self._refresh_value, "maximum": self._refresh_maximum}
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QProgressBar()

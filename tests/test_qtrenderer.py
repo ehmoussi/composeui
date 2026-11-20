@@ -76,6 +76,7 @@ from qtpy.QtWidgets import (
     QTreeWidgetItem,
     QWidget,
 )
+from typing_extensions import override
 
 from composeui.core import chartimage
 from composeui.core._views.controls import MAX_SLIDER_STEPS
@@ -236,7 +237,7 @@ def _field_widget(view: View) -> QWidget:
     field_renderer = renderer.get_renderer("field")
     assert isinstance(field_renderer, QtWidgetRenderer)
     widget = field_renderer.qt_object
-    assert widget is not None
+    assert isinstance(widget, QWidget)
     return widget
 
 
@@ -2291,7 +2292,8 @@ class _WindowsShown(QObject):
         super().__init__()
         self.shown: list[QWidget] = []
 
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+    @override
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.Type.Show and isinstance(watched, QWidget) and watched.isWindow():
             self.shown.append(watched)
         return False
@@ -2531,7 +2533,7 @@ def _tree_item(tree: QTreeWidget, *labels: str) -> QTreeWidgetItem:
 
 
 def _labels(item: QTreeWidgetItem) -> tuple[str, ...]:
-    parent = item.parent()
+    parent: Optional[QTreeWidgetItem] = item.parent()
     return (*(() if parent is None else _labels(parent)), item.text(0))
 
 
@@ -4494,7 +4496,9 @@ def test_save_image_saves_the_chart_as_it_shows(
     _view_box(chart).setRange(xRange=(0.5, 1.5), yRange=(0, 10), padding=0)
     asked: list[tuple[str, str]] = []
 
-    def get_save_file_name(_parent: QWidget, caption: str, name: str, filters: str) -> tuple:
+    def get_save_file_name(
+        _parent: QWidget, caption: str, name: str, filters: str
+    ) -> tuple[str, str]:
         asked.append((caption, name))
         assert filters.startswith("PDF (*.pdf)")  # vector first
         return (str(tmp_path / picked) if picked else ""), "SVG (*.svg)"
@@ -5100,6 +5104,7 @@ class _PositionalGatedSource(GatedSource):
         self.row_ids_scope = object()
         self.changed.emit()
 
+    @override
     def ordered_ids(
         self, sort: Optional[Sort], search: str, filters: Mapping[str, Filter]
     ) -> range:
@@ -5237,7 +5242,9 @@ def test_a_large_table_s_button_exports_its_rows_as_csv(
     view.rooms.filters = {"temperature": ">19"}
     asked: list[tuple[str, str, str]] = []
 
-    def get_save_file_name(_parent: QWidget, caption: str, name: str, filters: str) -> tuple:
+    def get_save_file_name(
+        _parent: QWidget, caption: str, name: str, filters: str
+    ) -> tuple[str, str]:
         asked.append((caption, name, filters))
         return (str(tmp_path / picked) if picked else ""), filters
 
@@ -5916,6 +5923,7 @@ def test_a_signal_disconnected_hears_its_widget_no_more(qtbot: QtBot) -> None:
 class _FailingGatedSource(GatedSource):
     """A large source whose order, asked in a job, fails: e.g. its database gone."""
 
+    @override
     def ordered_ids(self, sort: Sort | None, search: str, filters: Mapping[str, Filter]) -> range:
         if threading.current_thread() is not threading.main_thread():
             msg = "the database is gone"

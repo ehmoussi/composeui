@@ -25,6 +25,7 @@ from typing import TYPE_CHECKING, ClassVar, Optional
 
 import attrs
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.application import run
 from composeui.core.sqlitemodel import SqliteModel, SqliteTable, as_parameters, table
@@ -239,6 +240,7 @@ class PipeCatalogueModel(SqliteModel):
 
 @define_view
 class DimensionRowView(LabelRowFloatInputView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.minimum = 0
@@ -247,6 +249,7 @@ class DimensionRowView(LabelRowFloatInputView):
 
 @define_view
 class NameRowView(LabelRowInputView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Name"
@@ -259,6 +262,7 @@ class NameRowView(LabelRowInputView):
 
 @define_view
 class MaterialRowView(LabelRowComboBoxView[Material]):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Material"
@@ -270,6 +274,7 @@ class MaterialRowView(LabelRowComboBoxView[Material]):
 class InstalledRowView(LabelRowDateInputView):
     """When the pipe was installed, if known: never in the future."""
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Installed on"
@@ -293,6 +298,7 @@ class PipeFormView(FormView):
     length: DimensionRowView = Factory(DimensionRowView)
     installed: InstalledRowView = Factory(InstalledRowView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.radius.label = "Outer radius (mm)"
@@ -317,6 +323,7 @@ class PipeFormView(FormView):
 class MaterialFilterRowView(LabelRowComboBoxView[str]):
     """A material to show, by name, or every material ("")."""
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Material"
@@ -361,6 +368,7 @@ class PipeExpander(ExpanderView):
 class PipeList(ListView[ListedPipe]):
     """The pipes shown, an expander each, told apart by their name, which is unique."""
 
+    @override
     def build_item(self, item: ListedPipe) -> View:
         view = PipeExpander()
         self.update_item(view, item)
@@ -368,9 +376,11 @@ class PipeList(ListView[ListedPipe]):
         view.buttons.delete.clicked.connect(functools.partial(self._delete, item.name))
         return view
 
+    @override
     def item_key(self, item: ListedPipe) -> Hashable:
         return item.name
 
+    @override
     def update_item(self, view: View, item: ListedPipe) -> bool:
         # in place: an expanded pipe stays expanded
         assert isinstance(view, PipeExpander)
@@ -439,6 +449,7 @@ class PipeBrowser(SplitterView):
     tree: PipeTree = attrs.field(factory=PipeTree, metadata={STRETCH: 1})
     pipes: PipeList = attrs.field(factory=PipeList, metadata={STRETCH: 3})
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.tree.selection_changed.connect(self._expand_selected)
@@ -499,6 +510,7 @@ class EditPipeDialog(TypedFormDialogView[PipeFormView]):
         self.check()  # Save as these values leave it, no message left from another pipe
         self.open()
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = "Edit the pipe"
@@ -507,6 +519,7 @@ class EditPipeDialog(TypedFormDialogView[PipeFormView]):
 
 @define_view
 class RemoveShownDialog(DialogView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.kind = DialogKind.CONFIRM
@@ -525,6 +538,7 @@ class PipeCatalogueMainView(MainView):
     confirm_remove: RemoveShownDialog = Factory(RemoveShownDialog)
     edit_dialog: EditPipeDialog = Factory(EditPipeDialog)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         # the callbacks get the model through their `model` parameter

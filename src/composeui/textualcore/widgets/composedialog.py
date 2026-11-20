@@ -7,6 +7,7 @@ from textual.containers import Horizontal, Vertical
 from textual.content import Content
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label, Static
+from typing_extensions import override
 
 from composeui.core.view import DialogKind
 
@@ -67,6 +68,7 @@ class ComposeDialog(ModalScreen[Optional[bool]]):
         #: closed by the app under another screen: it leaves once uncovered
         self.closed_while_covered = False
 
+    @override
     def compose(self) -> ComposeResult:
         with Vertical():
             yield self.title_label

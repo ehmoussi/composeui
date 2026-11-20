@@ -12,6 +12,7 @@ from textual.content import Content
 from textual.widgets import ContentSwitcher
 from textual_fspicker import FileOpen, FileSave
 from textual_fspicker.path_filters import Filter, Filters
+from typing_extensions import override
 
 from composeui.core._views.files import save_download
 from composeui.core.renderer import MainRenderer
@@ -65,6 +66,7 @@ class TextualSidebarRenderer(TextualWidgetRenderer[SidebarView, ComposeSidebar])
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             widgets = [
@@ -110,6 +112,7 @@ class TextualRouterRenderer(TextualWidgetRenderer[Router, ContentSwitcher]):
         self.toolbar: ComposeToolbar | None = None
         self._refresh_dispatcher.update({"current_route": self._refresh_current_route})
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             buttons: list[Widget] = []
@@ -165,6 +168,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
     def app(self) -> _ComposeUIApp | None:
         return self._rendered_object
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = _ComposeUIApp(self._view, self._root_widget())
@@ -215,9 +219,11 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
             content = Horizontal(*sidebars, content)
         return Vertical(content, *docked)
 
+    @override
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         _call_on_app_thread(self._rendered_object, callback)
 
+    @override
     def post_on_main_thread(self, callback: Callable[[], None]) -> None:
         # `call_from_thread` waits for the callback: a job holding the model's lock, whose
         # callback asks for it, would stop both
@@ -227,17 +233,21 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         else:
             _call_on_app_thread(app, callback)
 
+    @override
     def refresh(self) -> None:
         # see `TextualWidgetRenderer.refresh` - same cross-thread hazard applies here.
         self.call_on_main_thread(super().refresh)
 
+    @override
     def refresh_attribute(self, attr_name: str, value: Any) -> None:
         self.call_on_main_thread(functools.partial(super().refresh_attribute, attr_name, value))
 
+    @override
     def close(self) -> None:
         assert self._rendered_object is not None
         self._rendered_object.exit()
 
+    @override
     def open_file(self) -> Path | None:
         """Return an existing file selected by the user.
 
@@ -256,6 +266,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         result = cast("Path | None", app.call_from_thread(_show))  # type: ignore[arg-type]
         return self._apply_default_extension(result)
 
+    @override
     def save_file(self) -> Path | None:
         """Return a file path selected by the user to save to.
 
@@ -272,6 +283,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         result = cast("Path | None", app.call_from_thread(_show))  # type: ignore[arg-type]
         return self._apply_default_extension(result)
 
+    @override
     def download(self, file: DownloadedFile) -> None:
         # from a file action's worker too (`_ComposeUIApp.trigger`)
         self.call_on_main_thread(functools.partial(self._queue_download, file))

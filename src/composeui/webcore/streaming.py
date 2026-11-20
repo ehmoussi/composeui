@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING, BinaryIO, cast
 
 import anyio
 from starlette.responses import PlainTextResponse, Response, StreamingResponse
+from typing_extensions import override
 
 from composeui.core._views.files import DOWNLOAD_CHUNK_SIZE, DownloadCanceledError, DownloadSink
 
@@ -254,6 +255,7 @@ class StreamResponse(Response):
         self._places = places
         self._download_headers = headers
 
+    @override
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         # left in the reverse order: the place and the session are freed once nothing writes
         async with contextlib.AsyncExitStack() as stack:

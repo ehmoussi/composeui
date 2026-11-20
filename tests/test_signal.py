@@ -10,6 +10,7 @@ import threading
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from typing_extensions import override
 
 from composeui.core.application import Application, ModelApplication
 from composeui.core.model import Model
@@ -287,6 +288,7 @@ def test_now_calls_the_callback_right_away_then_on_each_emit() -> None:
 class _RecordView(View):
     """A record's view, showing what a longer-lived signal (e.g. its model's) emits."""
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.shown: list[int] = []
@@ -484,6 +486,7 @@ class _WiredMainView(MainView):
     early: ButtonView = child(ButtonView, text="Early")
     late: ButtonView = child(ButtonView, text="Late")
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.early.clicked.connect(lambda: None)  # made as the view is built

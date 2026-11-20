@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING, ClassVar, Optional
 
 import attrs
 import pytest
+from typing_extensions import override
 
 from composeui.core import autosave
 from composeui.core.application import Application, ModelApplication
@@ -113,7 +115,7 @@ def autosaves(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]
     def start_kept(
         cls: type[Autosave], main_view: MainView, model: Model | None, *, restores: bool
     ) -> Autosave | None:
-        autosave = start(cls, main_view, model, restores=restores)
+        autosave: Optional[Autosave] = start(cls, main_view, model, restores=restores)
         if autosave is not None:
             started.append(autosave)
         return autosave
@@ -503,11 +505,13 @@ class _UncountedJsonModel(Model):
         self.texts: list[str] = []
         self.fails = False
 
+    @override
     def save_data(self, path: Path) -> None:
         if self.fails:
             raise OSError(28, "No space left on device")
         path.write_text(json.dumps(self.texts))
 
+    @override
     def open_data(self, path: Path) -> None:
         self.texts = json.loads(path.read_text())
 
@@ -520,6 +524,7 @@ class _JsonModel(_UncountedJsonModel):
         self.version = 0
 
     @property
+    @override
     def data_version(self) -> int:
         return self.version
 
@@ -854,15 +859,15 @@ def test_an_app_starting_as_another_closes_cleanly_restores_nothing_of_it(
     first.main_view.note.text = "discarded"
     _tick(first.main_view)
     starting: list[_AutosavingApplication] = []
-    rmtree = autosave.shutil.rmtree
+    rmtree = shutil.rmtree
 
     def start_another_first(path: Path, *, ignore_errors: bool) -> None:
         # once: the folder's lock released, the folder not deleted yet
-        monkeypatch.setattr(autosave.shutil, "rmtree", rmtree)
+        monkeypatch.setattr(shutil, "rmtree", rmtree)
         starting.append(apps())
         rmtree(path, ignore_errors=ignore_errors)
 
-    monkeypatch.setattr(autosave.shutil, "rmtree", start_another_first)
+    monkeypatch.setattr(shutil, "rmtree", start_another_first)
     _autosave_of(first.main_view).close(clean=True)
 
     (second,) = starting

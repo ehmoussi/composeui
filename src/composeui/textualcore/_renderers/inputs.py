@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from textual.content import Content
 from textual.validation import Integer, Number
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core._views.inputs import date_hint
 from composeui.core.renderer import ViewLike
@@ -44,6 +44,7 @@ class TextualInputRenderer(TextualWidgetRenderer[InputViewLike, ComposeInput]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeInput()
@@ -83,6 +84,7 @@ class TextualTextAreaRenderer(TextualWidgetRenderer[InputViewLike, ComposeTextAr
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeTextArea()
@@ -146,6 +148,7 @@ class TextualFloatInputRenderer(TextualWidgetRenderer[FloatInputViewLike, Compos
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeInput()
@@ -228,6 +231,7 @@ class TextualIntInputRenderer(TextualWidgetRenderer[IntInputViewLike, ComposeInp
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             # `type="integer"` lets in only what can start an int: digits and a sign
@@ -308,6 +312,7 @@ class TextualDateInputRenderer(TextualWidgetRenderer[DateInputViewLike, ComposeD
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeDateInput()
@@ -421,6 +426,7 @@ class TextualDateRangeInputRenderer(
             )
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeDateRangeInput()

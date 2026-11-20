@@ -111,7 +111,7 @@ class PartialMainView(MainView):
     expander: PartialExpander = Factory(PartialExpander)
     page: PartialPage = Factory(PartialPage)
     form: PartialForm = Factory(PartialForm)
-    items: ListView = Factory(ListView)
+    items: ListView[LabelView] = Factory(ListView)
     shown: LabelView = Factory(LabelView)
     skipped: UnregisteredView = Factory(UnregisteredView)
     #: outside a menu and a toolbar: no QAction, and no place in the window

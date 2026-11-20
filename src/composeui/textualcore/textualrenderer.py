@@ -7,6 +7,7 @@ from collections import deque
 from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 
 from textual.types import NoActiveAppError
+from typing_extensions import override
 
 from composeui.core.renderer import Renderer, RendererContainer, ViewLike
 from composeui.core.view import FormRowView, View
@@ -89,6 +90,7 @@ class TextualWidgetRenderer(Renderer[TView, TWidget]):
     def widget(self) -> TWidget | None:
         return self._rendered_object
 
+    @override
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         _call_on_app_thread(self._get_app(), callback)
 
@@ -97,6 +99,7 @@ class TextualWidgetRenderer(Renderer[TView, TWidget]):
             return None
         return _app_of(self._rendered_object)
 
+    @override
     def refresh(self) -> None:
         # Textual widgets aren't thread-safe (see `App.call_from_thread`'s own
         # docstring) - state can legitimately change from a non-main thread (e.g.
@@ -106,6 +109,7 @@ class TextualWidgetRenderer(Renderer[TView, TWidget]):
         # is a no-op in the common case.
         self.call_on_main_thread(self._refresh_if_mounted)
 
+    @override
     def refresh_attribute(self, attr_name: str, value: Any) -> None:
         self.call_on_main_thread(
             functools.partial(self._refresh_attribute_if_mounted, attr_name, value)

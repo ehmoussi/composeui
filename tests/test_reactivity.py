@@ -12,6 +12,7 @@ import weakref
 from typing import TYPE_CHECKING, Any, cast
 
 import pytest
+from typing_extensions import override
 
 from composeui.core.application import Application, ModelApplication
 from composeui.core.model import Model
@@ -65,6 +66,7 @@ class HourView(MainView):
     shown: LabelView = child(LabelView)
     other: LabelView = child(LabelView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         #: one item per run of `show_hour`
@@ -146,6 +148,7 @@ class FormView(MainView):
     summary: LabelView = child(LabelView)
     save: ButtonView = child(ButtonView, text="Save")
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.runs = 0
@@ -226,6 +229,7 @@ class ChainView(MainView):
     second: LabelView = child(LabelView)
     third: LabelView = child(LabelView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.runs: list[str] = []
@@ -259,6 +263,7 @@ class TaxView(MainView):
     taxed: LabelView = child(LabelView)
     summary: LabelView = child(LabelView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.runs: list[str] = []
@@ -301,6 +306,7 @@ class TaxFirstView(MainView):
     taxed: LabelView = child(LabelView)
     summary: LabelView = child(LabelView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.runs: list[str] = []
@@ -348,6 +354,7 @@ class PointsView(MainView):
     pickups: MapView = child(MapView)
     count: LabelView = child(LabelView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.runs = 0
@@ -417,6 +424,7 @@ class PingPongView(MainView):
     ping: LabelRowSliderView = child(LabelRowSliderView, label="Ping", maximum=1000)
     pong: LabelRowSliderView = child(LabelRowSliderView, label="Pong", maximum=1000)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.runs = 0
@@ -514,6 +522,7 @@ def test_a_failing_method_lets_the_others_show_the_change_then_raises(
 
 @define_view
 class PlainSubclassView(HourView):
+    @override
     def show_hour(self) -> None:
         self.runs.append("plain")
 
@@ -574,6 +583,7 @@ class SquareView(MainView):
     number: LabelRowSliderView = child(LabelRowSliderView, label="Number", maximum=100)
     shown: LabelView = child(LabelView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.squares: Task[int, [int], None] = self.jobs.task(square, debounce=0)
@@ -612,6 +622,7 @@ def test_a_task_s_result_is_an_input_and_start_latest_follows_the_field(
 
 @define_view
 class LoadOnceView(MainView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.loads = 0
@@ -640,6 +651,7 @@ def test_a_method_starting_a_task_runs_once_without_reading_its_state() -> None:
 class RestartView(MainView):
     shown: LabelView = child(LabelView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.squares: Task[int, [int], None] = self.jobs.task(square, debounce=0)
@@ -663,6 +675,7 @@ def test_a_method_starting_a_task_whose_state_it_read_is_refused() -> None:
 class LatestView(MainView):
     shown: LabelView = child(LabelView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.started = threading.Event()
@@ -749,6 +762,7 @@ class NameItem(View):
 
 @define_view
 class Names(ListView[str]):
+    @override
     def build_item(self, item: str) -> View:
         return NameItem(name=LabelView(text=item))
 
@@ -848,6 +862,7 @@ class HourItem(View):
 class ReaderView(MainView):
     shown: LabelView = child(LabelView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         #: a view outside the tree, e.g. a panel shared by several pages
@@ -931,6 +946,7 @@ class _WaitingList(list[str]):
         self._entered = entered
         self._proceed = proceed
 
+    @override
     def append(self, item: str) -> None:
         super().append(item)
         self._entered.set()
@@ -974,7 +990,7 @@ def test_a_web_event_s_response_carries_what_the_methods_changed() -> None:
     session_module = pytest.importorskip("composeui.webcore.session")
     view = HourView()
     start_reactions(view)
-    renderer_type: type[WebRenderer] = pytest.importorskip(
+    renderer_type: type[WebRenderer[Any]] = pytest.importorskip(
         "composeui.webcore.webrenderer"
     ).WebRenderer
     session = session_module.WebSession(view)
@@ -982,11 +998,12 @@ def test_a_web_event_s_response_carries_what_the_methods_changed() -> None:
     assert isinstance(box, renderer_type)
     assert isinstance(shown, renderer_type)
 
-    response = session.handle_event(cast("WebRenderer", box).widget_id, "change", {"checked": "on"})
+    box_id = cast("WebRenderer[Any]", box).widget_id
+    response = session.handle_event(box_id, "change", {"checked": "on"})
 
     assert response is not None
     body, _path = response
-    assert f'id="{cast("WebRenderer", shown).widget_id}"' in body
+    assert f'id="{cast("WebRenderer[Any]", shown).widget_id}"' in body
     assert "11:00" in body
 
 

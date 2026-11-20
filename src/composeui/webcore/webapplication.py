@@ -232,6 +232,7 @@ class _SteadySigner(itsdangerous.TimestampSigner):
         self._latest = 0
         self._lock = threading.Lock()
 
+    @override
     def get_timestamp(self) -> int:
         with self._lock:
             self._latest = max(self._latest, int(time.time()))
@@ -253,6 +254,7 @@ class _GZipMiddleware(GZipMiddleware):
     take the event loop's time, which every session shares, piece after piece.
     """
 
+    @override
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http" and scope["path"].startswith("/download/"):
             await self.app(scope, receive, send)
@@ -465,6 +467,7 @@ class WebApplication(Application[MainViewT]):
             action="store_true",
         )
 
+    @override
     def connect(
         self, *, view: ViewT, signals: Sequence[Signal[Unpack[Ts]]]
     ) -> _ConnectDecorator[ViewT, MainViewT, Unpack[Ts]]:
@@ -525,6 +528,7 @@ class WebApplication(Application[MainViewT]):
             reloading=saved_sessions is not None,
         )
 
+    @override
     def run(self) -> None:
         """Build and serve the app."""
         super().run()
@@ -642,6 +646,7 @@ class WebModelApplication(WebApplication[MainViewT], Generic[MainViewT, ModelT])
         self._model_setup = setup_model
         super().__init__(build_main_view=build_main_view)
 
+    @override
     def connect(
         self, *, view: ViewT, signals: Sequence[Signal[Unpack[Ts]]]
     ) -> _ConnectModelDecorator[ViewT, MainViewT, ModelT, Unpack[Ts]]:
@@ -658,6 +663,7 @@ class WebModelApplication(WebApplication[MainViewT], Generic[MainViewT, ModelT])
         if self._model_setup is not None:
             self._model_setup(main_view, model)
 
+    @override
     def _new_session_model(self) -> ModelT:
         return self._build_model()
 

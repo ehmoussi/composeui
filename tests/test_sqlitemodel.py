@@ -17,6 +17,7 @@ import pytest
 from attrs import Factory
 from hypothesis import given, settings
 from hypothesis import strategies as st
+from typing_extensions import override
 
 from composeui.core.application import ModelApplication
 from composeui.core.jobs import Job
@@ -883,6 +884,7 @@ class TagsMainView(MainView):
     add: ButtonView = Factory(ButtonView)
     table: TableView = Factory(TableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.status_bar.timeout = 0

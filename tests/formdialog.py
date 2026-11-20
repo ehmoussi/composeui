@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import attrs
+from typing_extensions import override
 
 from composeui.core.view import (
     ButtonView,
@@ -22,6 +23,7 @@ class PipeForm(FormView):
     name: LabelRowInputView = child(LabelRowInputView, label="Name")
     length: LabelRowFloatInputView = child(LabelRowFloatInputView, label="Length (m)")
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.name.set_validator(self._check_name, self.name.text_edited)
@@ -39,6 +41,7 @@ class PipeForm(FormView):
 class EditPipeDialog(TypedFormDialogView[PipeForm]):
     form: PipeForm = attrs.Factory(PipeForm)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = "Edit the pipe"
@@ -53,6 +56,7 @@ class PipeMainView(MainView):
     edit: ButtonView = child(ButtonView, text="Edit")
     edit_dialog: EditPipeDialog = attrs.Factory(EditPipeDialog)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.edit.clicked.connect(self._edit)

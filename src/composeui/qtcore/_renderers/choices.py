@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, cast
 from qtpy.QtCore import Qt
 from qtpy.QtGui import QIcon
 from qtpy.QtWidgets import QHeaderView, QTreeWidget, QTreeWidgetItem, QWidget
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core._views.choices import walk_tree
 from composeui.core.renderer import ViewLike
@@ -49,6 +49,7 @@ class QtRadioGroupRenderer(QtWidgetRenderer[ValuesViewLike[TValue], QRadioGroup]
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QRadioGroup(self._view.values)
@@ -93,6 +94,7 @@ class QtComboBoxRenderer(
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QValueComboBox(self._view.values)
@@ -176,6 +178,7 @@ class _QtChoicesRenderer(
     def _make_widget(self) -> TChoicesWidget:
         return cast("TChoicesWidget", QCheckList())
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = self._make_widget()
@@ -251,13 +254,16 @@ class QtMultiComboBoxRenderer(_QtChoicesRenderer[QMultiComboBox]):
     _invalid_style = "QPushButton { border: 1px solid red; }"
     _shown_attributes = (*_QtChoicesRenderer._shown_attributes, "empty_text", "count_text")  # noqa: SLF001
 
+    @override
     @staticmethod
     def _check_list(widget: QMultiComboBox) -> QCheckList:
         return widget.check_list
 
+    @override
     def _make_widget(self) -> QMultiComboBox:
         return QMultiComboBox()
 
+    @override
     def _show(self, widget: QMultiComboBox, shown: ChoicesShown) -> None:
         widget.check_list.show_choices(shown)
         widget.setText(shown.summary)
@@ -284,6 +290,7 @@ class QtTreeRenderer(QtWidgetRenderer[TreeView, QTreeWidget]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QTreeWidget()

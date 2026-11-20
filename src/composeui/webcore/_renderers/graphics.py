@@ -7,7 +7,7 @@ import math
 from typing import TYPE_CHECKING, Final
 
 from markupsafe import Markup
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core.renderer import ViewLike
 from composeui.core.view import (
@@ -25,7 +25,7 @@ from composeui.core.view import (
     TextShape,
 )
 from composeui.webcore._renderers.content import _ROLE_MARKUP
-from composeui.webcore.webrenderer import WebRenderer
+from composeui.webcore.webrenderer import UnsupportedEventError, WebRenderer
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -59,6 +59,7 @@ class WebMapRenderer(WebRenderer[MapViewLike]):
             )
         )
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         view = self._view
         center, span_x, span_y = MapView.point_bounds(view.points, view.center)
@@ -98,6 +99,7 @@ class WebMapRenderer(WebRenderer[MapViewLike]):
             attribution=attribution,
         )
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         if event not in ("click", "viewport") or not self.is_enabled:
             super().dispatch(event, form)
@@ -108,7 +110,7 @@ class WebMapRenderer(WebRenderer[MapViewLike]):
             )
             zoom = float(form.get("zoom", "")) if event == "viewport" else 0.0
         except ValueError:
-            super().dispatch(event, form)
+            raise UnsupportedEventError(self, event) from None
         if not 0 <= zoom <= MapView.MAX_ZOOM:
             super().dispatch(event, form)
         if event == "click":
@@ -170,6 +172,7 @@ class WebDrawingRenderer(WebRenderer[DrawingViewLike]):
             dict.fromkeys(("shapes", "bounds", "description", "height"), self._mark_dirty)
         )
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         view = self._view
         bounds = DrawingView.shown_bounds(view.shapes, view.bounds)

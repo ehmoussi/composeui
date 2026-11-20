@@ -6,7 +6,7 @@ import contextlib
 import importlib.metadata
 import threading
 import traceback
-from typing import TYPE_CHECKING, Any, Callable, cast
+from typing import TYPE_CHECKING, Any, Callable, Optional, cast
 
 import attrs
 import pytest
@@ -391,7 +391,11 @@ def _copy_on_write() -> contextlib.AbstractContextManager[object]:
     pd = pytest.importorskip("pandas")
     if _ALWAYS_COPIES_ON_WRITE:
         return contextlib.nullcontext()
-    return pd.option_context("mode.copy_on_write", True)  # noqa: FBT003 (pandas' API)
+    context: contextlib.AbstractContextManager[object, Optional[bool]] = pd.option_context(
+        "mode.copy_on_write",
+        True,  # noqa: FBT003 (pandas' API)
+    )
+    return context
 
 
 def test_a_pandas_frame_with_copy_on_write_is_a_copy_per_session() -> None:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 import attrs
+from typing_extensions import override
 
 from composeui.core.view import (
     ContentDialogView,
@@ -33,6 +34,7 @@ class SettingsDialog(ContentDialogView[SettingsPanel]):
     apply: DialogButtonView = child(DialogButtonView, text="Apply")
     discard: DialogButtonView = child(DialogButtonView, text="Discard", closes=True, checks=False)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.accept_text = "Save"
@@ -46,6 +48,7 @@ class SettingsDialog(ContentDialogView[SettingsPanel]):
 class SettingsMainView(MainView):
     settings: SettingsDialog = attrs.Factory(SettingsDialog)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         #: each answer of the dialog, by its signal: "apply", "discard", "accepted" or

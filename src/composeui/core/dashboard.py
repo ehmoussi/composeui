@@ -158,7 +158,7 @@ def column_filter(
         # copied for each view built, as `child` does: a list among them is never shared
         return cls(*copy.deepcopy(args), **copy.deepcopy(kwargs))
 
-    return cast("_ViewT", attrs.field(factory=build, metadata={_FILTER_COLUMN: column}))
+    return attrs.field(factory=build, metadata={_FILTER_COLUMN: column})
 
 
 def _filters_of(view: View) -> list[tuple[str, _Filter]]:

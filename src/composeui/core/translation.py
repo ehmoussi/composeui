@@ -12,6 +12,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
 
+from typing_extensions import override
+
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
@@ -165,10 +167,12 @@ class TranslatedText(str):  # noqa: SLOT000
         self.arguments = arguments
         return self
 
+    @override
     def __getnewargs__(self) -> tuple[str, str, tuple[tuple[Any, ...], dict[str, Any]] | None]:  # type: ignore[override]
         # copying it (`copy.deepcopy`) keeps what it remembers
         return (str(self), self.source, self.arguments)
 
+    @override
     def format(self, *args: Any, **kwargs: Any) -> TranslatedText:
         """Format it, remembering the arguments: translated text among them follows too."""
         return TranslatedText(str.format(self, *args, **kwargs), self.source, (args, kwargs))

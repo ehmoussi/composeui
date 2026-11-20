@@ -18,6 +18,7 @@ import time
 from typing import TYPE_CHECKING, Any, Optional
 
 import attrs
+from typing_extensions import override
 
 from composeui.core import application
 from composeui.core.registry import RendererType
@@ -144,6 +145,7 @@ class TimedSource(SqliteSource):
         self.readings = readings
         self.seconds = 0.0
 
+    @override
     def ordered_ids(
         self, sort: Optional[Sort], search: str, filters: Mapping[str, Filter]
     ) -> Sequence[Any]:
@@ -169,12 +171,14 @@ class LargeTableMainView(MainView):
     #: the readings, in the model
     _source: Optional[TimedSource] = attrs.field(default=None, init=False, metadata={OMIT: True})
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.table.selection_changed.connect(self._show_selected)
         self.table.row_activated.connect(self._show_activated)
         self.table.ordered.connect(self._show_count)
 
+    @override
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--rows", type=int, default=1_000_000, help="the readings to generate")
@@ -184,6 +188,7 @@ class LargeTableMainView(MainView):
         self._source = TimedSource(model.readings)
         self.table.source = self._source
 
+    @override
     def apply_arguments(self, args: argparse.Namespace) -> None:
         # a study opened with -f has its readings already
         if self._source is not None and self._source.count() == 0:

@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 import attrs
 import pytest
+from typing_extensions import override
 
 from composeui.core.application import (
     BACKEND_VARIABLE,
@@ -65,10 +66,12 @@ class _StartMainView(MainView):
     #: the study's count when the option applied; -1 until then
     count_then: int = -1
 
+    @override
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--start", type=int, default=1, help="Count from START.")
 
+    @override
     def apply_arguments(self, args: argparse.Namespace) -> None:
         self.count_then = self.start
         self.start = args.start
@@ -636,9 +639,11 @@ class _NotesModel(Model):
     def __init__(self) -> None:
         self.notes = ""
 
+    @override
     def save_data(self, path: Path) -> None:
         path.write_text(self.notes)
 
+    @override
     def open_data(self, path: Path) -> None:
         self.notes = path.read_text()
 

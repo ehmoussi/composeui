@@ -15,10 +15,10 @@ from typing import (
     Optional,
     TypeVar,
     Union,
-    cast,
 )
 
 import attrs
+from typing_extensions import override
 
 from composeui.core._views.actions import ActionView
 from composeui.core._views.base import (
@@ -155,6 +155,7 @@ class SplitterView(View):
     #: `sizes`; not emitted when `sizes` is set in code
     resized: Signal[list[int]] = attrs.Factory(Signal[list[int]])
 
+    @override
     def __attrs_post_init__(self) -> None:
         if len(self.sizes) == 0:
             self.sizes = [
@@ -249,6 +250,7 @@ class TabView(View):
         tabs = self.tabs
         return tabs[self.current_index] if len(tabs) > 0 else None
 
+    @override
     def _render_children(self, renderer_type: RendererType) -> None:
         if not renders_on_demand(renderer_type, "tabs"):
             super()._render_children(renderer_type)
@@ -300,10 +302,7 @@ def grid_cell(
     E.g. ``chart: ChartView = grid_cell((1, 0), ChartView, title="Sales")``. The arguments
     after `cls` build the view, as those of `child` do.
     """
-    return cast(
-        "_ViewT",
-        attrs.field(default=child(cls, *args, **kwargs), metadata={GRID_POSITION: position}),
-    )
+    return attrs.field(default=child(cls, *args, **kwargs), metadata={GRID_POSITION: position})
 
 
 @define_view
@@ -322,6 +321,7 @@ class GridView(View):
 
     _renderer_key = "grid"
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         taken: dict[tuple[int, int], str] = {}
@@ -389,6 +389,7 @@ class PageView(View):
 
     action: ActionView = attrs.field(factory=ActionView, metadata={OMIT: True})
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.title = self.page_title
@@ -443,10 +444,12 @@ class ListView(View, Generic[ItemT]):
         default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
 
+    @override
     def _keep_model(self, model: Optional[Model]) -> None:
         self._model = None if model is None else weakref.ref(model)
 
     @property
+    @override
     def children_views(self) -> list[View]:
         return [*super().children_views, *self.item_views]
 

@@ -17,6 +17,7 @@ from qtpy.QtWidgets import (
     QWidget,
     QWidgetAction,
 )
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from qtpy.QtCore import QPoint
@@ -31,7 +32,8 @@ _MAX_ROWS = 10
 class _RowCheckBox(QCheckBox):
     """A choice's check box, which a click anywhere on its row toggles, as a list's row."""
 
-    def hitButton(self, pos: QPoint) -> bool:  # noqa: N802
+    @override
+    def hitButton(self, pos: QPoint) -> bool:
         return self.rect().contains(pos)
 
 
@@ -126,10 +128,12 @@ class QCheckList(QWidget):
         if self.search_field.text() != text:
             self.search_field.setText(text)
 
-    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    @override
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         event.accept()
 
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    @override
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         # kept here: in a menu, a click that reaches the menu picks its entry, closing it
         event.accept()
 

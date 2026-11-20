@@ -3,6 +3,7 @@ from __future__ import annotations
 import enum
 
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.view import (
     FormView,
@@ -19,6 +20,7 @@ from composeui.webcore.webapplication import WebApplication
 
 @define_view
 class NameRowView(LabelRowInputView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Name"
@@ -32,6 +34,7 @@ class NameRowView(LabelRowInputView):
 
 @define_view
 class AgeRowView(LabelRowFloatInputView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Age"
@@ -57,6 +60,7 @@ class GreetingStyle(enum.Enum):
 
 @define_view
 class GreetingStyleRowView(LabelRowRadioGroupView[GreetingStyle]):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Greeting"
@@ -72,6 +76,7 @@ class Colour(enum.Enum):
 
 @define_view
 class ColourRowView(LabelRowComboBoxView[Colour]):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Favourite colour"
@@ -95,6 +100,7 @@ class HelloMainView(MainView):
     form: HelloFormView = Factory(HelloFormView)
     summary: LabelView = Factory(LabelView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         form = self.form

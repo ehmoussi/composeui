@@ -6,6 +6,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, HorizontalScroll, Vertical
 from textual.content import Content
 from textual.widgets import Button, Input, Select, Static
+from typing_extensions import override
 
 from composeui.core._views.tables import split_pattern
 from composeui.core.signal import Signal, SignalNoArgs
@@ -63,6 +64,7 @@ class ComposeFilterChip(Horizontal):
             REMOVE, compact=True, classes="chip-remove", tooltip=Content(remove_text)
         )
 
+    @override
     def compose(self) -> ComposeResult:
         yield self.open_button
         yield self.remove_button
@@ -146,6 +148,7 @@ class ComposeFilterBar(Horizontal):
         self._columns: list[tuple[int, str]] = []
         self.close_editor()
 
+    @override
     def compose(self) -> ComposeResult:
         yield self.search
         yield self.add_filter
@@ -362,6 +365,7 @@ class ComposeFilterTable(Vertical):
         self.empty = Static("", classes="empty", markup=False)
         self.empty.display = False
 
+    @override
     def compose(self) -> ComposeResult:
         yield self.bar
         yield self.table

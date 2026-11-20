@@ -7,7 +7,7 @@ from abc import ABCMeta, abstractmethod
 from types import MappingProxyType, MethodType
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
 
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core.reactivity import batch
 
@@ -71,6 +71,7 @@ _HANDLER_TABLES: dict[_HandlerTable, dict[str, Callable[..., None] | None]] = {}
 class _RendererMeta(ABCMeta):
     """Shares a renderer's handlers once its `__init__`, and its subclasses', registered them."""
 
+    @override
     def __call__(cls, *args: Any, **kwargs: Any) -> Any:
         renderer = super().__call__(*args, **kwargs)
         renderer._share_handlers()  # noqa: SLF001

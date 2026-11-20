@@ -177,12 +177,14 @@ class _LogFile(logging.handlers.RotatingFileHandler):
 
     _is_closed = False
 
+    @override
     def emit(self, record: logging.LogRecord) -> None:
         if self._is_closed:  # from a thread already logging as the block ended
             _STREAM_HANDLER.emit(record)
         else:
             super().emit(record)
 
+    @override
     def close(self) -> None:
         self.acquire()  # `handle` holds it while it emits
         try:
@@ -191,7 +193,8 @@ class _LogFile(logging.handlers.RotatingFileHandler):
         finally:
             self.release()
 
-    def doRollover(self) -> None:  # noqa: N802
+    @override
+    def doRollover(self) -> None:
         stream = self.stream
         assert stream is not None  # `shouldRollover` opened it
         if self._is_replaced(stream):  # posix only
@@ -462,6 +465,7 @@ class ModelApplication(Application[MainViewT], Generic[MainViewT, ModelT]):
     def _study_model(self) -> ModelT:
         return self._model
 
+    @override
     def connect(
         self, *, view: ViewT, signals: Sequence[Signal[Unpack[Ts]]]
     ) -> _ConnectModelDecorator[ViewT, MainViewT, ModelT, Unpack[Ts]]:

@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Optional
+
 from qtpy.QtCore import QEvent, QObject, QTimer
 from qtpy.QtWidgets import QWidget
+from typing_extensions import override
+
+if TYPE_CHECKING:
+    from qtpy.QtGui import QWindow
 
 
 class _WindowReleaser(QObject):
     """Release its window's native window once hidden, until it's shown again."""
 
-    def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+    @override
+    def eventFilter(self, watched: QObject, event: QEvent) -> bool:
         if event.type() == QEvent.Type.Hide and isinstance(watched, QWidget):
             # once the hide is done, and only if nothing showed it again meanwhile; the
             # window as context, so a window deleted meanwhile (its parent's) drops it
@@ -16,7 +23,7 @@ class _WindowReleaser(QObject):
 
 
 def _release(window: QWidget) -> None:
-    handle = window.windowHandle()
+    handle: Optional[QWindow] = window.windowHandle()  # None before the window is shown
     if handle is not None and not window.isVisible():
         handle.destroy()
 

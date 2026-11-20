@@ -34,6 +34,7 @@ from qtpy.QtWidgets import (
     QTableView,
     QWidget,
 )
+from typing_extensions import override
 
 from composeui.core._views.tables import PLAIN_CELL
 from composeui.core.view import (
@@ -140,10 +141,12 @@ class QTextTableModel(QAbstractTableModel):
     def style(self, row: int, column: int) -> CellStyle:
         return self.styles.get((row, column), PLAIN_CELL)
 
-    def rowCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008, N802
+    @override
+    def rowCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008
         return 0 if parent.isValid() else len(self._rows)
 
-    def columnCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008, N802
+    @override
+    def columnCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008
         return 0 if parent.isValid() else len(self._headers)
 
     def text(self, row: int, column: int) -> str:
@@ -151,6 +154,7 @@ class QTextTableModel(QAbstractTableModel):
         # a row short of a cell shows it empty
         return cells[column] if column < len(cells) else ""
 
+    @override
     def data(self, index: _Index, role: int = Qt.ItemDataRole.DisplayRole) -> Any:
         if not index.isValid():
             return None
@@ -194,6 +198,7 @@ class QTextTableModel(QAbstractTableModel):
         font.setUnderline(True)
         return font
 
+    @override
     def flags(self, index: _Index) -> Qt.ItemFlag:
         flags = super().flags(index)
         if (
@@ -209,9 +214,8 @@ class QTextTableModel(QAbstractTableModel):
             flags |= Qt.ItemFlag.ItemIsEditable
         return flags
 
-    def setData(  # noqa: N802
-        self, index: _Index, value: Any, role: int = Qt.ItemDataRole.EditRole
-    ) -> bool:
+    @override
+    def setData(self, index: _Index, value: Any, role: int = Qt.ItemDataRole.EditRole) -> bool:
         if role == Qt.ItemDataRole.CheckStateRole and index.isValid():
             is_checked = value in (Qt.CheckState.Checked, Qt.CheckState.Checked.value)
             value, role = CHECKED_TEXTS[is_checked], Qt.ItemDataRole.EditRole
@@ -226,7 +230,8 @@ class QTextTableModel(QAbstractTableModel):
         self.cell_edited.emit(row, column, text)
         return True
 
-    def headerData(  # noqa: N802
+    @override
+    def headerData(
         self,
         section: int,
         orientation: Qt.Orientation,
@@ -281,7 +286,8 @@ class QCellDelegate(QStyledItemDelegate):
     def _is_disabled(self, index: _Index) -> bool:
         return not self._model.style(index.row(), index.column()).is_enabled
 
-    def initStyleOption(self, option: QStyleOptionViewItem, index: _Index) -> None:  # noqa: N802
+    @override
+    def initStyleOption(self, option: QStyleOptionViewItem, index: _Index) -> None:
         super().initStyleOption(option, index)
         if self._is_disabled(index):
             option.state &= ~QStyle.StateFlag.State_Enabled
@@ -294,12 +300,13 @@ class QCellDelegate(QStyledItemDelegate):
             # the link's color would be lost on the selection's
             option.palette.setBrush(QPalette.ColorRole.Text, option.palette.highlightedText())
 
+    @override
     def paint(self, painter: QPainter, option: QStyleOptionViewItem, index: _Index) -> None:
         widget = self._widget(index)
         if widget is None or widget.kind not in _DRAWN_KINDS:
             super().paint(painter, option, index)
             return
-        view = option.widget
+        view: Optional[QWidget] = option.widget  # None when painted outside a view
         style = view.style() if view is not None else QApplication.style()
         item = QStyleOptionViewItem(option)
         self.initStyleOption(item, index)
@@ -337,7 +344,8 @@ class QCellDelegate(QStyledItemDelegate):
             button.state |= QStyle.StateFlag.State_Enabled
         style.drawControl(QStyle.ControlElement.CE_PushButton, button, painter, view)
 
-    def editorEvent(  # noqa: N802
+    @override
+    def editorEvent(
         self,
         event: QEvent,
         model: QAbstractItemModel,
@@ -385,9 +393,8 @@ class QCellDelegate(QStyledItemDelegate):
                 return handled
         return super().editorEvent(event, model, option, index)
 
-    def createEditor(  # noqa: N802
-        self, parent: QWidget, option: QStyleOptionViewItem, index: _Index
-    ) -> QWidget:
+    @override
+    def createEditor(self, parent: QWidget, option: QStyleOptionViewItem, index: _Index) -> QWidget:
         self.editor_created.emit()
         widget = self._widget(index)
         if widget is None or widget.kind is not CellKind.COMBOBOX:
@@ -408,7 +415,8 @@ class QCellDelegate(QStyledItemDelegate):
         QTimer.singleShot(0, editor.showPopup)
         return editor
 
-    def eventFilter(self, obj: QObject, event: QEvent) -> bool:  # noqa: N802
+    @override
+    def eventFilter(self, obj: QObject, event: QEvent) -> bool:
         # the focus lost by an editor already committed would commit it again, to a view
         # that no longer has it
         if isinstance(obj, QWidget) and obj in self._closed:
@@ -416,13 +424,13 @@ class QCellDelegate(QStyledItemDelegate):
             return False  # pragma: no cover
         return super().eventFilter(obj, event)
 
-    def setEditorData(self, editor: QWidget, index: _Index) -> None:  # noqa: N802
+    @override
+    def setEditorData(self, editor: QWidget, index: _Index) -> None:
         if not isinstance(editor, QComboBox):
             super().setEditorData(editor, index)
 
-    def setModelData(  # noqa: N802
-        self, editor: QWidget, model: QAbstractItemModel, index: _Index
-    ) -> None:
+    @override
+    def setModelData(self, editor: QWidget, model: QAbstractItemModel, index: _Index) -> None:
         if isinstance(editor, QComboBox):
             model.setData(index, editor.currentText())
         else:
@@ -454,13 +462,15 @@ class QCheckHeader(QHeaderView):
     def _group(self, column: int) -> HeaderGroup | None:
         return next((group for group in self._groups if group.covers(column)), None)
 
-    def sizeHint(self) -> QSize:  # noqa: N802
+    @override
+    def sizeHint(self) -> QSize:
         size = super().sizeHint()
         if len(self._groups) > 0:
             size.setHeight(2 * size.height())
         return size
 
-    def paintSection(self, painter: QPainter, rect: QRect, logicalIndex: int) -> None:  # noqa: N802, N803
+    @override
+    def paintSection(self, painter: QPainter, rect: QRect, logicalIndex: int) -> None:
         group = self._group(logicalIndex)
         if group is None:
             super().paintSection(painter, rect, logicalIndex)
@@ -502,11 +512,13 @@ class QCheckHeader(QHeaderView):
             return None
         return column if x - self.sectionViewportPosition(column) <= self.box_width() else None
 
-    def mousePressEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    @override
+    def mousePressEvent(self, event: QMouseEvent) -> None:
         if self._checked_column(event) is None and not self._is_on_group(event):
             super().mousePressEvent(event)
 
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    @override
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         column = self._checked_column(event)
         if self._is_on_group(event):
             return
@@ -596,7 +608,8 @@ class QTextTableView(QTableView):
     def _note_editor(self) -> None:
         self._has_editor = True
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+    @override
+    def keyPressEvent(self, event: QKeyEvent) -> None:
         index = self.currentIndex()
         if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and index.isValid():
             # as Qt does on the other platforms: activated, then passed on (e.g. to a dialog)
@@ -672,9 +685,8 @@ class QTextTableView(QTableView):
             painter.end()
         return QIcon(pixmap)
 
-    def closeEditor(  # noqa: N802
-        self, editor: QWidget, hint: QAbstractItemDelegate.EndEditHint
-    ) -> None:
+    @override
+    def closeEditor(self, editor: QWidget, hint: QAbstractItemDelegate.EndEditHint) -> None:
         if len(self._edits) > 0:
             # the cell to edit next may not stay where it is once the edit is answered
             hint = QAbstractItemDelegate.EndEditHint.NoHint

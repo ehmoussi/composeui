@@ -6,6 +6,7 @@ from qtpy.QtCore import Qt
 from qtpy.QtCore import Signal as QtSignal
 from qtpy.QtGui import QPainter, QPalette
 from qtpy.QtWidgets import QSizePolicy, QSplitter, QSplitterHandle
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from qtpy.QtGui import QKeyEvent, QMouseEvent, QPaintEvent
@@ -24,7 +25,8 @@ class QSplitterBorder(QSplitterHandle):
         super().__init__(orientation, parent)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+    @override
+    def keyPressEvent(self, event: QKeyEvent) -> None:
         if self.orientation() == Qt.Orientation.Vertical:
             steps = {Qt.Key.Key_Up: -KEY_STEP, Qt.Key.Key_Down: KEY_STEP}
             position = self.y()
@@ -38,12 +40,14 @@ class QSplitterBorder(QSplitterHandle):
         self.moveSplitter(position + step)
         self._splitter().moved_by_user.emit()
 
-    def mouseReleaseEvent(self, event: QMouseEvent) -> None:  # noqa: N802
+    @override
+    def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         super().mouseReleaseEvent(event)
         if event.button() == Qt.MouseButton.LeftButton:
             self._splitter().moved_by_user.emit()
 
-    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+    @override
+    def paintEvent(self, event: QPaintEvent) -> None:
         super().paintEvent(event)
         if self.hasFocus():  # Qt's style draws no focus on a handle
             painter = QPainter(self)
@@ -73,5 +77,6 @@ class QComposeSplitter(QSplitter):
         policy.setVerticalPolicy(QSizePolicy.Policy.Expanding)
         self.setSizePolicy(policy)
 
-    def createHandle(self) -> QSplitterHandle:  # noqa: N802
+    @override
+    def createHandle(self) -> QSplitterHandle:
         return QSplitterBorder(self.orientation(), self)

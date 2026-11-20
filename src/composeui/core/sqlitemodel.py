@@ -46,7 +46,7 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener, urlopen
 
 import attrs
-from typing_extensions import dataclass_transform
+from typing_extensions import dataclass_transform, override
 
 from composeui.core._views.tables import ColumnKind, column_kind
 from composeui.core.jobs import current_job
@@ -279,7 +279,7 @@ def define_csv_row(cls: _RowClassT) -> _RowClassT:
     Use ``@define_csv_row`` instead of ``@attrs.define`` when fields use `csv_field`.
     For mypy, enable the ``composeui.mypy`` plugin.
     """
-    return cast("_RowClassT", attrs.define(cls))
+    return attrs.define(cls)
 
 
 #: the parameters of one statement of `CSVSqliteTable`'s import, at most: SQLite's default
@@ -464,7 +464,8 @@ class _CheckedRedirects(HTTPRedirectHandler):
     def __init__(self, allowed: AllowedUrls) -> None:
         self._allowed = allowed
 
-    def redirect_request(  # noqa: PLR0913 (urllib's signature)
+    @override
+    def redirect_request(
         self,
         req: Request,
         fp: IO[bytes],
@@ -529,6 +530,7 @@ class CSVSqliteTable(SqliteTable):
     _csv_fields: ClassVar[tuple[_CSVField, ...]]
     _rows_per_insert: ClassVar[int]
 
+    @override
     def __init_subclass__(
         cls, *, row_type: type[AttrsInstance] | None = None, name: str | None = None, **kwargs: Any
     ) -> None:
@@ -1211,6 +1213,7 @@ class SqliteModel(Model):
         self._database = self._new_database()
 
     @property
+    @override
     def signals(self) -> list[Signal[Unpack[tuple[Any, ...]]]]:
         """Get the model's signals, its tables' (`SqliteTable.changed`) among them."""
         tables = [vars(table).values() for table in self._tables]
@@ -1345,6 +1348,7 @@ class SqliteModel(Model):
                 database.idle_readers.append(db)
             self._close_if_unused(database)
 
+    @override
     def _pin_data(self) -> _PinnedDatabase:
         """Pin the committed rows of now: a reader's transaction, which a copy reads later.
 
@@ -1366,15 +1370,19 @@ class SqliteModel(Model):
         return _PinnedDatabase(self, database, db)
 
     @property
+    @override
     def data_version(self) -> int:
         return self._user_writes
 
+    @override
     def _data_revision(self) -> int:
         return self._writes
 
+    @override
     def new(self) -> None:
         self._replace_database(self._new_database())
 
+    @override
     def save_data(self, path: Path) -> None:
         target = sqlite3.connect(str(path))
         try:
@@ -1385,6 +1393,7 @@ class SqliteModel(Model):
         finally:
             target.close()
 
+    @override
     def open_data(self, path: Path) -> None:
         """Open a study's database, refused unless it is made as a new one is.
 
@@ -1424,12 +1433,14 @@ class SqliteModel(Model):
             raise
         self._replace_database(database)
 
+    @override
     def loaded(self) -> None:
         # every table may have changed; emitted only now, so the views refreshing read the
         # study's views (e.g. a filter), not the ones it replaces
         for table in self._tables:
             table.changed.emit()
 
+    @override
     def close(self) -> None:
         # not the write's turn: closing the app doesn't wait for a job's long write, whose
         # end closes it, as the last query `reading` it does

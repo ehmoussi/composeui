@@ -7,12 +7,12 @@ import math
 from typing import TYPE_CHECKING, Any, Final
 
 from markupsafe import Markup
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core import chartimage
 from composeui.core.renderer import ViewLike
 from composeui.core.view import BarMode, ChartKind, ChartView
-from composeui.webcore.webrenderer import WebRenderer
+from composeui.webcore.webrenderer import UnsupportedEventError, WebRenderer
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -277,6 +277,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         )
         return f"{view.title}: {description}" if view.title and description else view.title
 
+    @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
         # a click on the plot (see `charts.js`), at a point in the axes' values
         if event != "click" or not self.is_enabled:
@@ -284,7 +285,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         try:
             x, y = float(form.get("x", "")), float(form.get("y", ""))
         except ValueError:
-            super().dispatch(event, form)
+            raise UnsupportedEventError(self, event) from None
         if not (math.isfinite(x) and math.isfinite(y)):
             super().dispatch(event, form)
         self._view.clicked.emit(x, y)
@@ -305,6 +306,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
         content = chartimage.chart_image_bytes(view, image_format, options)
         return chartimage.image_name(view.title, image_format.lower()), content
 
+    @override
     def to_html(self, *, oob: bool = False) -> Markup:
         title = self._view.title
         # the corner's controls at the end of the row, the title in the middle of the rest

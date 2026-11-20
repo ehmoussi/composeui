@@ -141,7 +141,10 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 
 - `ruff` with `select = ["ALL"]` and line length 100; see `pyproject.toml` for the ignore list.
   Fix lint properly rather than adding `noqa`, unless it is clearly justified.
-- `mypy` must pass. Fully type-annotate new code; the package ships `py.typed`.
+- `mypy` must pass in strict mode, with the extra checks in `pyproject.toml`. Fully
+  type-annotate new code; the package ships `py.typed`. Mark each method that
+  overrides a base class's method with `@override` from `typing_extensions`, below
+  `@property` when the method has one.
 - Every Python module starts with `from __future__ import annotations` (after its docstring).
   Ruff enforces it (`required-imports`, rule I002) and `make lint` adds it to a new file.
   Annotations are then strings, so: don't quote them; define views that `attrs`/`cattrs`
@@ -199,7 +202,8 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 ## Testing
 
 - Every behavior change needs a test in `tests/`. Backend tests should exercise real rendered
-  widgets (`qtbot` for Qt, `App.run_test()` for Textual, `httpx`/Starlette test client for web).
+  widgets (`qtbot` for Qt, `App.run_test()` for Textual, the Starlette test client for web).
+  The test client runs on `httpx2`, or on `httpx` before Python 3.11, as `httpx2` needs 3.11.
 - Tests for optional backends guard with `pytest.importorskip(...)`.
 - `make test` runs the tests in parallel, a worker per CPU (pytest-xdist): a test must not
   depend on another's state or order. Without `-n`, `pytest` runs them one after another.

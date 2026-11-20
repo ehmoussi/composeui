@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import enum
 
+from typing_extensions import override
+
 from composeui.core.view import (
     CheckListView,
     LabelRowMultiComboBoxView,
@@ -21,6 +23,7 @@ class Base(enum.Enum):
 
 @define_view
 class BasesRow(LabelRowMultiComboBoxView[Base]):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.values = {"Unter": Base.UNTER, "Hinter": Base.HINTER, "Weiter": Base.WEITER}
@@ -28,6 +31,7 @@ class BasesRow(LabelRowMultiComboBoxView[Base]):
 
 @define_view
 class HoursList(CheckListView[int]):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.values = {"Early morning": 5, "Morning": 9, "Noon": 12, "Evening": 19}
@@ -46,6 +50,7 @@ class ChoicesMainView(MainView):
 class OneBaseMainView(ChoicesMainView):
     """Keeps a base chosen: the last one unchecked is checked again, in code."""
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.bases.selected_changed.connect(self._keep_one)

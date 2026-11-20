@@ -5,11 +5,11 @@ from __future__ import annotations
 import weakref
 from typing import Any
 
-from qtpy.QtWidgets import QFormLayout, QGroupBox, QVBoxLayout, QWidget
+from qtpy.QtWidgets import QFormLayout, QGroupBox, QLabel, QVBoxLayout, QWidget
+from typing_extensions import override
 
 from composeui.core.renderer import RendererContainer
 from composeui.core.view import FormLabelRowView, FormRowView, FormView, GroupFormView, View
-from composeui.qtcore._renderers.content import QtLogRenderer
 from composeui.qtcore.qtrenderer import QtWidgetRenderer
 from composeui.qtcore.widgets.qformlabel import QFormLabel
 
@@ -25,6 +25,7 @@ class QtFormLabelRenderer(QtWidgetRenderer[FormLabelRowView, QFormLabel]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QFormLabel()
@@ -46,6 +47,7 @@ class QtFormLabelRenderer(QtWidgetRenderer[FormLabelRowView, QFormLabel]):
 
 
 class QtFormRenderer(QtWidgetRenderer[FormView, QWidget]):
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             if isinstance(self._view, GroupFormView):
@@ -93,8 +95,8 @@ class QtFormRenderer(QtWidgetRenderer[FormView, QWidget]):
     @staticmethod
     def _get_log_object(field_row_renderer: RendererContainer[View]) -> QWidget:
         log_renderer = field_row_renderer.get_renderer("log")
-        assert isinstance(log_renderer, QtLogRenderer)
-        assert log_renderer.qt_object is not None
+        assert isinstance(log_renderer, QtWidgetRenderer)
+        assert isinstance(log_renderer.qt_object, QLabel)
         return log_renderer.qt_object
 
     @staticmethod

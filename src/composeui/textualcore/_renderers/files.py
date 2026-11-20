@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 
 from textual.content import Content
-from typing_extensions import Protocol
+from typing_extensions import Protocol, override
 
 from composeui.core.renderer import ViewLike
 from composeui.core.view import UploadedFile
@@ -79,6 +79,7 @@ class _TextualPathInputRenderer(TextualWidgetRenderer[TPathView, ComposeFilePath
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeFilePathInput(kind=self._kind)
@@ -145,6 +146,7 @@ class TextualFilePathInputRenderer(_TextualPathInputRenderer[FilePathInputViewLi
             }
         )
 
+    @override
     def render(self) -> None:
         is_new = self._rendered_object is None
         super().render()
@@ -198,6 +200,7 @@ class TextualFileUploadRenderer(TextualWidgetRenderer[FileUploadViewLike, Compos
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeFileUpload()
@@ -270,6 +273,7 @@ class TextualSavePathInputRenderer(_TextualPathInputRenderer[SavePathInputViewLi
             }
         )
 
+    @override
     def _pick(self, path: Path) -> None:
         # the widget asked about a file that exists, unless `confirms_overwrite` is off
         self._view.remember_pick(path)

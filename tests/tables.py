@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Optional
 
 import attrs
 from attrs import Factory
+from typing_extensions import override
 
 from composeui.core.signal import SignalNoArgs
 from composeui.core.view import (
@@ -40,6 +41,7 @@ class EditableTableMainView(MainView):
 
     places: TableView = Factory(TableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.places.headers = ["Place", "Note"]
@@ -77,6 +79,7 @@ class RoomsMainView(MainView):
     rooms: RecordTableView[Room] = child(RecordTableView[Room], columns=COLUMNS)
     others: RoomsTableView = child(RoomsTableView, columns=COLUMNS[:2])
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.status_bar.timeout = 0
@@ -100,6 +103,7 @@ class SortedRoomsMainView(MainView):
     rooms: RecordTableView[Room] = child(RecordTableView[Room], columns=SORTED_COLUMNS)
     notes: TableView = Factory(TableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.status_bar.timeout = 0
@@ -123,6 +127,7 @@ class CellWidgetsMainView(MainView):
 
     variables: TableView = Factory(TableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.variables.headers = ["Keep", "Variable", "Role", "Distribution", "Help"]
@@ -149,6 +154,7 @@ class RequiredOptionsTableView(TableView):
         """Require the options of `rows`, before the rows are shown."""
         self._required = rows
 
+    @override
     def cell_widget(self, row: int, column: int) -> Optional[CellWidget]:
         if column == 0 and row not in self._required:
             return CellWidget.check_box()
@@ -164,6 +170,7 @@ class RequiredOptionsMainView(MainView):
 
     options: RequiredOptionsTableView = Factory(RequiredOptionsTableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.options.require((0,))
@@ -181,6 +188,7 @@ class DataFilesTableMainView(MainView):
 
     inputs: TableView = Factory(TableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.inputs.headers = ["Input", "File"]
@@ -199,6 +207,7 @@ class StyledTablesMainView(MainView):
     points: TableView = Factory(TableView)
     numbers: TableView = Factory(TableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.points.headers = ["Group", "Point", "Standard space", "Physical space", "Kept"]
@@ -257,6 +266,7 @@ class MillionRowsMainView(MainView):
 
     table: SourceTableView = child(SourceTableView, column_formats={"half": ".1f"})
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.table.source = MillionSource()
@@ -271,6 +281,7 @@ class RoomsDataMainView(MainView):
 
     rooms: SourceTableView = child(SourceTableView, filterable_columns=["name", "temperature"])
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.rooms.source = ListSource(
@@ -325,6 +336,7 @@ class GatedMainView(MainView):
 
     table: SourceTableView = child(SourceTableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.table.source = GatedSource()

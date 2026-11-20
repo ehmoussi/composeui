@@ -18,6 +18,7 @@ from qtpy.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from typing_extensions import override
 
 from composeui.core._views.dialogs import dialogs_in
 from composeui.core.registry import RendererType
@@ -114,6 +115,7 @@ def _add_content_widget(layout: QColumnLayout, view: View) -> None:
 class QtPageRenderer(QtWidgetRenderer[PageView, QPageArea]):
     """A page's views in a column, laid out like the window's own, scrolling if too big."""
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             column = QWidget()
@@ -130,6 +132,7 @@ class QtPageRenderer(QtWidgetRenderer[PageView, QPageArea]):
 class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
     """Views side by side, each as wide as its share of the row."""
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QWidget()
@@ -160,6 +163,7 @@ class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
 class QtVerticalRenderer(QtWidgetRenderer[VerticalView, QWidget]):
     """Views one above the other, at the top of the column."""
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QWidget()
@@ -184,6 +188,7 @@ class QtSplitterRenderer(QtWidgetRenderer[SplitterView, QComposeSplitter]):
         # names a border on the web only
         self._refresh_dispatcher["border_text"] = lambda _view, _splitter, _value: None
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QComposeSplitter(
@@ -227,6 +232,7 @@ class QtExpanderRenderer(QtWidgetRenderer[ExpanderView, QExpander]):
             {"title": self._refresh_title, "is_expanded": self._refresh_is_expanded}
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QExpander()
@@ -272,6 +278,7 @@ class QtListRenderer(QtWidgetRenderer["ListView[Any]", QScrollArea]):
         super().__init__(view)
         self._refresh_dispatcher.update({"item_views": self._refresh_item_views})
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QScrollArea()
@@ -336,6 +343,7 @@ class QtTabPageRenderer(QtWidgetRenderer[TabPage, QWidget]):
             }
         )
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QWidget()
@@ -397,6 +405,7 @@ class QtTabsRenderer(QtWidgetRenderer[TabView, QTabWidget]):
         super().__init__(view)
         self._refresh_dispatcher["current_index"] = self._refresh_current_index
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QTabWidget()
@@ -435,6 +444,7 @@ class QtTabsRenderer(QtWidgetRenderer[TabView, QTabWidget]):
 class QtGridRenderer(QtWidgetRenderer[GridView, QWidget]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views."""
 
+    @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QWidget()

@@ -43,12 +43,13 @@ from unittest import mock
 from urllib.parse import unquote
 
 import pytest
+from typing_extensions import override
 
 pytest.importorskip("starlette")
-pytest.importorskip("httpx")
+# Starlette's test client: httpx2, which needs Python 3.11, or httpx before it
+pytest.importorskip("httpx2" if sys.version_info >= (3, 11) else "httpx")
 
 import attrs
-import httpx
 from attrs import Factory
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
@@ -252,6 +253,11 @@ from tests.translated import Size, TranslatedMainView
 from tests.vertical import VerticalMainView
 from tests.workers import OpacityMainView, WorkersMainView
 
+if sys.version_info >= (3, 11):
+    import httpx2 as httpx
+else:
+    import httpx
+
 if TYPE_CHECKING:
     import argparse
     from collections.abc import Callable, Iterable, Iterator
@@ -280,6 +286,7 @@ class _HelloApp(HelloApp):
         super().__init__()
         self.session_views: list[HelloMainView] = []
 
+    @override
     def setup_session(self, main_view: HelloMainView) -> None:
         # no `threading.Timer` clearing the message in the middle of a test
         main_view.status_bar.timeout = 0
@@ -345,6 +352,7 @@ class _ElementFinder(HTMLParser):
         self._root: tuple[str, dict[str, str | None]] | None = None
         self.found: _Element | None = None
 
+    @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         attributes = dict(attrs)
         if self._root is None and attributes.get("id") == self._id:
@@ -358,12 +366,14 @@ class _ElementFinder(HTMLParser):
             if tag not in _VOID_TAGS:
                 self._depth += 1
 
+    @override
     def handle_endtag(self, tag: str) -> None:  # well-formed fragments: any end tag closes
         if self._depth > 0:
             self._depth -= 1
             if self._depth == 0:
                 self._finish()
 
+    @override
     def handle_data(self, data: str) -> None:
         if self._depth > 0:
             self._text.append(data)
@@ -784,6 +794,7 @@ class _HostileFinder(HTMLParser):
         self.found: list[str] = []
         self.shown = 0
 
+    @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "cui-xss":
             self.found.append("<cui-xss>")
@@ -797,6 +808,7 @@ class _HostileFinder(HTMLParser):
             for text in _json_strings(value or ""):
                 self._check_shown(text, f"<{tag} {name}>")
 
+    @override
     def handle_data(self, data: str) -> None:
         self._check_shown(data, "text")
 
@@ -844,6 +856,7 @@ class _NotesMainView(MainView):
 
     notes: SourceTableView = child(SourceTableView, filterable_columns=["text"])
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.notes.source = ListSource(_Note, {"text": _HOSTILE}, [_Note(_HOSTILE)])
@@ -1045,6 +1058,7 @@ class _ScriptFinder(HTMLParser):
         super().__init__()
         self.found: list[str] = []
 
+    @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag == "script" and "src" not in dict(attrs):
             self.found.append("<script>")
@@ -1126,6 +1140,7 @@ def help_client(help_views: list[HelpMainView]) -> Iterator[TestClient]:
         def __init__(self) -> None:
             super().__init__(build_main_view=HelpMainView)
 
+        @override
         def setup_session(self, main_view: HelpMainView) -> None:
             main_view.status_bar.timeout = 0
             help_views.append(main_view)
@@ -1190,6 +1205,7 @@ def test_a_main_view_sets_the_largest_file_a_user_can_upload(
     views: list[_UploadMainView] = []
 
     class UploadApp(WebApplication[_UploadMainView]):
+        @override
         def setup_session(self, main_view: _UploadMainView) -> None:
             main_view.status_bar.timeout = 0
             views.append(main_view)
@@ -1336,6 +1352,7 @@ def test_a_full_disk_says_so_and_never_hands_over_a_cut_file(
     views: list[DataFileMainView] = []
 
     class DataApp(WebApplication[DataFileMainView]):
+        @override
         def setup_session(self, main_view: DataFileMainView) -> None:
             main_view.status_bar.timeout = 0
             views.append(main_view)
@@ -1364,6 +1381,7 @@ def test_a_file_that_would_fill_the_disk_is_refused_and_keeps_the_field_s_file(
     views: list[DataFileMainView] = []
 
     class DataApp(WebApplication[DataFileMainView]):
+        @override
         def setup_session(self, main_view: DataFileMainView) -> None:
             main_view.status_bar.timeout = 0
             views.append(main_view)
@@ -1453,6 +1471,7 @@ def test_a_server_that_stops_removes_the_uploads_of_its_sessions() -> None:
     views: list[DataFileMainView] = []
 
     class DataApp(WebApplication[DataFileMainView]):
+        @override
         def setup_session(self, main_view: DataFileMainView) -> None:
             views.append(main_view)
 
@@ -1518,6 +1537,7 @@ def test_an_upload_is_one_file_on_the_disk_as_its_callbacks_run(
     views: list[DataFileMainView] = []
 
     class DataApp(WebApplication[DataFileMainView]):
+        @override
         def setup_session(self, main_view: DataFileMainView) -> None:
             views.append(main_view)
 
@@ -1588,6 +1608,7 @@ def test_widget_id_requires_a_render() -> None:
 
 @define_view
 class _NameRowView(LabelRowInputView):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Name <required>"
@@ -1605,6 +1626,7 @@ class _Shape(enum.Enum):
 
 @define_view
 class _ShapeRowView(LabelRowRadioGroupView[_Shape]):
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.label = "Shape"
@@ -1625,6 +1647,7 @@ class _RowsMainView(MainView):
     shape: _ShapeRowView = Factory(_ShapeRowView)
     table: TableView = Factory(TableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.length.label = "Length"
@@ -2844,6 +2867,7 @@ def study_files(tmp_path: Path) -> Iterator[tuple[TestClient, StudyFilesTableMai
     views: list[StudyFilesTableMainView] = []
 
     class StudyFilesApp(WebApplication[StudyFilesTableMainView]):
+        @override
         def setup_session(self, main_view: StudyFilesTableMainView) -> None:
             main_view.status_bar.timeout = 0
             main_view.inputs.cell_widgets = {
@@ -2871,7 +2895,10 @@ def test_a_table_s_file_path_with_server_roots_is_picked_among_their_files(
     assert json.loads(button["hx-vals"] or "") == {"event": "browse", "row": "1", "column": "1"}
 
     def post(event: str, **values: str) -> str:
-        return client.post(f"/widget/{renderer.widget_id}", data={"event": event, **values}).text
+        response: httpx.Response = client.post(
+            f"/widget/{renderer.widget_id}", data={"event": event, **values}
+        )
+        return response.text
 
     body = post("browse", row="1", column="1")
     assert "hidden" not in _swapped(body, f"{renderer.widget_id}-files").attributes
@@ -2908,6 +2935,7 @@ def test_a_table_s_path_by_kind_lists_the_study_as_each_row_s_kind_picks(
     views: list[StudyInputsMainView] = []
 
     class StudyInputsApp(WebApplication[StudyInputsMainView]):
+        @override
         def setup_session(self, main_view: StudyInputsMainView) -> None:
             main_view.status_bar.timeout = 0
             main_view.show_study(study)
@@ -2922,7 +2950,9 @@ def test_a_table_s_path_by_kind_lists_the_study_as_each_row_s_kind_picks(
         assert isinstance(renderer, WebTableRenderer)
 
         def post(event: str, **values: str) -> str:
-            response = client.post(f"/widget/{renderer.widget_id}", data={"event": event, **values})
+            response: httpx.Response = client.post(
+                f"/widget/{renderer.widget_id}", data={"event": event, **values}
+            )
             return response.text
 
         def path(row: int) -> str:
@@ -2973,6 +3003,7 @@ def study_paths(tmp_path: Path) -> Iterator[tuple[TestClient, StudyPathsMainView
     views: list[StudyPathsMainView] = []
 
     class StudyPathsApp(WebApplication[StudyPathsMainView]):
+        @override
         def setup_session(self, main_view: StudyPathsMainView) -> None:
             main_view.status_bar.timeout = 0
             views.append(main_view)
@@ -2992,7 +3023,9 @@ def test_a_table_s_cell_widget_of_each_row_lists_its_own_server_files(
     assert isinstance(renderer, WebTableRenderer)
 
     def post(event: str, **values: str) -> str:
-        response = client.post(f"/widget/{renderer.widget_id}", data={"event": event, **values})
+        response: httpx.Response = client.post(
+            f"/widget/{renderer.widget_id}", data={"event": event, **values}
+        )
         return response.text
 
     files_id = f"{renderer.widget_id}-files"
@@ -3071,7 +3104,8 @@ def test_a_table_s_server_files_open_only_for_a_cell_the_user_can_edit(
 
     def post(event: str, **values: str) -> int:
         data = {"event": event, **values}
-        return client.post(f"/widget/{renderer.widget_id}", data=data).status_code
+        response: httpx.Response = client.post(f"/widget/{renderer.widget_id}", data=data)
+        return response.status_code
 
     for row, column in (("0", "0"), ("9", "1"), ("x", "1")):  # no path, no row, no number
         post("browse", row=row, column=column)
@@ -3775,6 +3809,7 @@ def pipe_web(pipe_views: list[PipeMainView]) -> Starlette:
         def __init__(self) -> None:
             super().__init__(build_main_view=PipeMainView)
 
+        @override
         def setup_session(self, main_view: PipeMainView) -> None:
             main_view.status_bar.timeout = 0
             pipe_views.append(main_view)
@@ -3840,7 +3875,10 @@ def test_toggling_the_checkbox_enables_its_row_without_swapping_the_box(
     form.insulated.toggled.connect(toggled.append)
 
     def toggle(**checked: str) -> str:
-        return pipe_client.post(f"/widget/{field_id}", data={"event": "change", **checked}).text
+        response: httpx.Response = pipe_client.post(
+            f"/widget/{field_id}", data={"event": "change", **checked}
+        )
+        return response.text
 
     body = toggle(checked="on")
 
@@ -3995,6 +4033,7 @@ class _ClosedGuestbook(_Guestbook):
         super().__init__()
         self.is_closed = False
 
+    @override
     def close(self) -> None:
         self.is_closed = True
 
@@ -4004,6 +4043,7 @@ def test_a_session_s_model_closes_with_it() -> None:
     views: list[HelloMainView] = []
 
     class GuestbookApp(WebModelApplication[HelloMainView, _ClosedGuestbook]):
+        @override
         def setup_session(self, main_view: HelloMainView) -> None:
             views.append(main_view)
 
@@ -4030,6 +4070,7 @@ def test_each_browser_gets_its_own_model() -> None:
         return models[-1]
 
     class GuestbookApp(WebModelApplication[HelloMainView, _Guestbook]):
+        @override
         def setup_session(self, main_view: HelloMainView) -> None:
             views.append(main_view)
 
@@ -4082,6 +4123,7 @@ class _SignedGuestbook(SqliteModel):
 
 def test_a_saved_study_brings_its_database_to_another_browser() -> None:
     class GuestbookApp(WebModelApplication[HelloMainView, _SignedGuestbook]):
+        @override
         def setup_session(self, main_view: HelloMainView) -> None:
             main_view.status_bar.timeout = 0
             views.append(main_view)
@@ -4348,6 +4390,7 @@ def test_a_session_that_expires_cancels_its_jobs() -> None:
             canceled.set()
 
     class WorkingApp(_ShortLivedHelloApp):
+        @override
         def setup_session(self, main_view: HelloMainView) -> None:
             super().setup_session(main_view)
             main_view.jobs.start(work)
@@ -4403,6 +4446,7 @@ class _ReleasedModel(Model):
         super().__init__()
         self.is_released = False
 
+    @override
     def close(self) -> None:
         self.is_released = True
 
@@ -4414,6 +4458,7 @@ class _CountedModel(Model):
         super().__init__()
         self.closes = 0
 
+    @override
     def close(self) -> None:
         self.closes += 1
 
@@ -4567,6 +4612,7 @@ class _SessionStoreMachine(RuleBasedStateMachine):
         for session_id in self.made:
             assert self.store.is_at_hand(session_id) is (session_id not in self.on_disk)
 
+    @override
     def teardown(self) -> None:
         self.store.close_all()
         self.patched.stop()
@@ -4614,6 +4660,7 @@ class _HoldingMainView(MainView):
 class _KeptByTheAppMainView(_HoldingMainView):
     """A session that the app keeps in memory, e.g. holding an object a callback built."""
 
+    @override
     def can_hibernate(self) -> bool:
         return False
 
@@ -4755,6 +4802,7 @@ def _watched_threading() -> tuple[types.SimpleNamespace, threading.Event]:
     waiting = threading.Event()
 
     class WatchedEvent(threading.Event):
+        @override
         def wait(self, timeout: float | None = None) -> bool:
             waiting.set()
             return super().wait(timeout)
@@ -4774,15 +4822,18 @@ class _SlowSavedModel(Model):
         self.saves = 0
         self.is_closed = False
 
+    @override
     def save_data(self, path: Path) -> None:
         self.saves += 1
         self.saving.set()
         assert self.may_save.wait(10)
         path.write_text("data")
 
+    @override
     def open_data(self, path: Path) -> None:
         assert path.read_text() == "data"
 
+    @override
     def close(self) -> None:
         self.is_closed = True
 
@@ -4866,6 +4917,7 @@ def test_an_idle_session_that_fails_to_save_stays_in_memory_and_isn_t_tried_agai
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     class FailingModel(_SlowSavedModel):
+        @override
         def save_data(self, path: Path) -> None:
             self.saves += 1
             raise OSError(errno.ENOSPC, "No space left on device", str(path))
@@ -4897,9 +4949,11 @@ def test_an_idle_session_that_fails_to_save_stays_in_memory_and_isn_t_tried_agai
 class _UnopenableModel(_SlowSavedModel):
     """A model whose data saves, then fails to open, e.g. a file the disk lost."""
 
+    @override
     def save_data(self, path: Path) -> None:
         path.write_text("data")
 
+    @override
     def open_data(self, path: Path) -> None:
         msg = f"can't open {path.name}"
         raise RuntimeError(msg)
@@ -4988,6 +5042,7 @@ class _IdleGuestbookApp(WebModelApplication[HelloMainView, _ReleasedModel]):
         self.session_views: list[HelloMainView] = []
         self.models: list[_ReleasedModel] = []
 
+    @override
     def setup_model(self, main_view: HelloMainView, model: _ReleasedModel) -> None:
         main_view.status_bar.timeout = 0
         self.session_views.append(main_view)
@@ -5035,6 +5090,7 @@ def test_an_idle_session_goes_to_disk_and_its_page_reloads_into_it_as_it_was() -
 class _UnclosableModel(_ReleasedModel):
     """A model that fails to close, e.g. a database that another program locked."""
 
+    @override
     def close(self) -> None:
         super().close()
         msg = "the database is locked"
@@ -5142,6 +5198,7 @@ class _LoadedNotesMainView(MainView):
 
     notes: SourceTableView = Factory(SourceTableView)
 
+    @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.loaded.connect(self._show_notes)
@@ -5160,6 +5217,7 @@ class _IdleNotesApp(WebModelApplication[_LoadedNotesMainView, _ReleasedModel]):
         self.session_views: list[_LoadedNotesMainView] = []
         self.models: list[_ReleasedModel] = []
 
+    @override
     def setup_model(self, main_view: _LoadedNotesMainView, model: _ReleasedModel) -> None:
         self.session_views.append(main_view)
         self.models.append(model)
@@ -5397,6 +5455,7 @@ class _SessionUploadsMachine(RuleBasedStateMachine):
             expected = ["progress", "finished"] if run.has_ended and run.should_report else []
             assert run.called == expected
 
+    @override
     def teardown(self) -> None:
         for run in self.all_runs:
             run.may_end.set()
@@ -5437,6 +5496,7 @@ def test_a_failed_session_setup_closes_its_model_and_a_retry_owns_its_own() -> N
 
 
 class _UnrenderableMainView(HelloMainView):
+    @override
     def render(self, renderer_type: RendererType) -> None:
         msg = "no renderer for it"
         raise RuntimeError(msg)
@@ -5453,6 +5513,7 @@ def test_a_session_failing_to_render_closes_its_model_if_it_has_one(*, has_model
 
 def test_a_failed_setup_of_a_session_without_a_model_keeps_its_own_error() -> None:
     class App(WebApplication[HelloMainView]):
+        @override
         def setup_session(self, main_view: HelloMainView) -> None:
             msg = "the setup failed"
             raise RuntimeError(msg)
@@ -5525,6 +5586,7 @@ def test_each_new_session_emits_loaded_once_with_or_without_a_study(
     names: list[str] = []
 
     class LoadedApp(_HelloApp):
+        @override
         def setup_session(self, main_view: HelloMainView) -> None:
             super().setup_session(main_view)
             main_view.loaded.connect(lambda: names.append(main_view.form.name.text))
@@ -5542,6 +5604,7 @@ def test_a_catalogue_pipe_s_edit_button_opens_the_form_dialog_on_it() -> None:
     views: list[PipeCatalogueMainView] = []
 
     class CatalogueApp(WebModelApplication[PipeCatalogueMainView, PipeCatalogueModel]):
+        @override
         def setup_session(self, main_view: PipeCatalogueMainView) -> None:
             views.append(main_view)
 
@@ -5591,6 +5654,7 @@ def test_a_study_with_the_model_s_data_opens_in_every_new_session(
     views: list[PipeCatalogueMainView] = []
 
     class CatalogueApp(WebModelApplication[PipeCatalogueMainView, PipeCatalogueModel]):
+        @override
         def setup_session(self, main_view: PipeCatalogueMainView) -> None:
             views.append(main_view)
 
@@ -5615,10 +5679,12 @@ def test_a_study_with_the_model_s_data_opens_in_every_new_session(
 class _GreetedMainView(HelloMainView):
     """The hello app, greeting a name of its own command-line option."""
 
+    @override
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument("--greet", metavar="NAME")
 
+    @override
     def apply_arguments(self, args: argparse.Namespace) -> None:
         if args.greet is not None:
             self.form.name.text = args.greet
@@ -5636,6 +5702,7 @@ def test_an_app_s_own_options_apply_to_every_new_session(
     views: list[_GreetedMainView] = []
 
     class GreetedApp(WebApplication[_GreetedMainView]):
+        @override
         def setup_session(self, main_view: _GreetedMainView) -> None:
             views.append(main_view)
 
@@ -5956,6 +6023,7 @@ class _SlowGreetingApp(_HelloApp):
         self.messages_seen_by_the_request: list[str] = []
         self.timer_waiting = threading.Event()
 
+    @override
     def setup_session(self, main_view: HelloMainView) -> None:
         super().setup_session(main_view)
         main_view.status_bar.timeout = 0.05
@@ -6044,6 +6112,7 @@ def _read_name(job: object) -> str:
 
 def test_what_a_session_s_start_jobs_give_is_no_unsaved_change() -> None:
     class ReadingApp(_HelloApp):
+        @override
         def setup_session(self, main_view: HelloMainView) -> None:
             super().setup_session(main_view)
             job = main_view.jobs.start(_read_name)
@@ -6179,6 +6248,7 @@ def test_the_app_s_upload_limit_reaches_no_other_route(
     views: list[HelloMainView] = []
 
     class HelloApp(WebApplication[HelloMainView]):
+        @override
         def setup_session(self, main_view: HelloMainView) -> None:
             views.append(main_view)
 
@@ -6255,6 +6325,7 @@ def test_an_app_without_studies_has_no_file_buttons() -> None:
     views: list[HelpViewerMainView] = []
 
     class ViewerApp(WebApplication[HelpViewerMainView]):
+        @override
         def setup_session(self, main_view: HelpViewerMainView) -> None:
             views.append(main_view)
 
@@ -6563,7 +6634,7 @@ def test_a_pipe_study_from_first_page_to_reopening_it_elsewhere(
         form_log_id = _widget_id(form.log_view.renderer)
 
         def post(widget_id: str, data: dict[str, str]) -> str:
-            response = alice.post(f"/widget/{widget_id}", data=data)
+            response: httpx.Response = alice.post(f"/widget/{widget_id}", data=data)
             assert response.status_code == 200
             assert _find(response.text, widget_id) is None  # never the edited field
             return response.text
@@ -6759,6 +6830,7 @@ def pages_client(pages_views: list[PagesMainView]) -> Iterator[TestClient]:
         def __init__(self) -> None:
             super().__init__(build_main_view=PagesMainView)
 
+        @override
         def setup_session(self, main_view: PagesMainView) -> None:
             pages_views.append(main_view)
 
@@ -6857,6 +6929,7 @@ def toolbar_client(toolbar_views: list[ToolBarMainView]) -> Iterator[TestClient]
         def __init__(self) -> None:
             super().__init__(build_main_view=ToolBarMainView)
 
+        @override
         def setup_session(self, main_view: ToolBarMainView) -> None:
             toolbar_views.append(main_view)
 
@@ -6968,6 +7041,7 @@ def sidebar() -> Iterator[tuple[TestClient, SidebarMainView]]:
     views: list[SidebarMainView] = []
 
     class SidebarApp(WebApplication[SidebarMainView]):
+        @override
         def setup_session(self, main_view: SidebarMainView) -> None:
             views.append(main_view)
 
@@ -6994,11 +7068,11 @@ def test_a_sidebar_is_a_drawer_beside_the_pages_whatever_the_page(
         # not one of the pages: shown whatever the page
         pages = _element(page, router_id).descendants
         assert all(attributes.get("id") != aside_id for _, attributes in pages)
-    # the drawer's checkbox, which the header's button and the backdrop toggle
-    toggle = _element(page, f"{aside_id}-toggle").attributes
-    drawer = _element(page, str(toggle["data-sidebar-toggle"])).attributes
-    assert (drawer["type"], toggle["aria-controls"]) == ("checkbox", aside_id)
-    assert f'<label for="{drawer["id"]}" class="drawer-overlay"' in page
+        # the drawer's checkbox, which the header's button and the backdrop toggle
+        toggle = _element(page, f"{aside_id}-toggle").attributes
+        drawer = _element(page, str(toggle["data-sidebar-toggle"])).attributes
+        assert (drawer["type"], toggle["aria-controls"]) == ("checkbox", aside_id)
+        assert f'<label for="{drawer["id"]}" class="drawer-overlay"' in page
 
     def rename() -> None:
         view.sidebar.title = "<Add>"
@@ -7042,6 +7116,7 @@ def pipes() -> Iterator[tuple[TestClient, PipesMainView]]:
     views: list[PipesMainView] = []
 
     class PipesApp(WebApplication[PipesMainView]):
+        @override
         def setup_session(self, main_view: PipesMainView) -> None:
             main_view.pipes.items = PIPES
             views.append(main_view)
@@ -7057,6 +7132,7 @@ def test_a_console_sends_only_its_new_lines_then_the_line_being_written() -> Non
     views: list[RunMainView] = []
 
     class RunApp(WebApplication[RunMainView]):
+        @override
         def setup_session(self, main_view: RunMainView) -> None:
             views.append(main_view)
 
@@ -7086,6 +7162,7 @@ def test_a_console_shows_its_ansi_colors_in_inline_styles_and_drops_them_when_as
     views: list[ColoredRunMainView] = []
 
     class ColorsApp(WebApplication[ColoredRunMainView]):
+        @override
         def setup_session(self, main_view: ColoredRunMainView) -> None:
             views.append(main_view)
 
@@ -7125,6 +7202,7 @@ def test_a_console_s_link_downloads_its_text() -> None:
     views: list[RunMainView] = []
 
     class RunApp(WebApplication[RunMainView]):
+        @override
         def setup_session(self, main_view: RunMainView) -> None:
             main_view.output.export_filename = "run é.log"
             views.append(main_view)
@@ -7159,6 +7237,7 @@ def test_an_app_s_file_is_named_until_the_page_of_its_session_fetches_it(tmp_pat
     views: list[ReportMainView] = []
 
     class ReportApp(WebApplication[ReportMainView]):
+        @override
         def setup_session(self, main_view: ReportMainView) -> None:
             views.append(main_view)
 
@@ -7218,6 +7297,7 @@ def test_a_file_made_in_a_job_is_named_by_the_jobs_poll_the_button_disabled_mean
     views: list[ReportMainView] = []
 
     class ReportApp(WebApplication[ReportMainView]):
+        @override
         def setup_session(self, main_view: ReportMainView) -> None:
             main_view.status_bar.timeout = 0
             views.append(main_view)
@@ -7237,7 +7317,8 @@ def test_a_file_made_in_a_job_is_named_by_the_jobs_poll_the_button_disabled_mean
         deadline = time.monotonic() + 10
         while view.jobs.is_running and time.monotonic() < deadline:
             time.sleep(0.01)
-        return client.get("/jobs").text
+        response: httpx.Response = client.get("/jobs")
+        return response.text
 
     with _Browser(ReportApp(build_main_view=ReportMainView).create_starlette_app()) as client:
         client.get("/")
@@ -7308,6 +7389,7 @@ class _ReportApp(WebApplication[ReportMainView]):
         super().__init__(build_main_view=ReportMainView)
         self.views: list[ReportMainView] = []
 
+    @override
     def setup_session(self, main_view: ReportMainView) -> None:
         self.views.append(main_view)
 
@@ -7379,6 +7461,7 @@ async def test_a_stream_s_writer_waits_while_no_one_reads_and_stops_once_cancele
     waiting = threading.Event()
 
     class WatchedCondition(threading.Condition):
+        @override
         def wait(self, timeout: float | None = None) -> bool:
             waiting.set()  # the writer still holds the lock: a cancel comes once it waits
             return super().wait(timeout)
@@ -7713,6 +7796,7 @@ def test_a_download_of_whatever_name_has_a_header_naming_it() -> None:
     views: list[RunMainView] = []
 
     class RunApp(WebApplication[RunMainView]):
+        @override
         def setup_session(self, main_view: RunMainView) -> None:
             views.append(main_view)
 
@@ -7779,6 +7863,7 @@ def edited_pipe() -> Iterator[tuple[TestClient, EditedPipeMainView]]:
     views: list[EditedPipeMainView] = []
 
     class EditApp(WebApplication[EditedPipeMainView]):
+        @override
         def setup_session(self, main_view: EditedPipeMainView) -> None:
             views.append(main_view)
 
@@ -7825,6 +7910,7 @@ def study() -> Iterator[tuple[TestClient, StudyMainView]]:
     views: list[StudyMainView] = []
 
     class StudyApp(WebApplication[StudyMainView]):
+        @override
         def setup_session(self, main_view: StudyMainView) -> None:
             views.append(main_view)
 
@@ -7871,6 +7957,7 @@ def study_dialog() -> Iterator[tuple[TestClient, StudyDialogMainView]]:
     views: list[StudyDialogMainView] = []
 
     class StudyApp(WebApplication[StudyDialogMainView]):
+        @override
         def setup_session(self, main_view: StudyDialogMainView) -> None:
             views.append(main_view)
 
@@ -7906,6 +7993,7 @@ def test_a_dialog_s_own_buttons_and_check_show_on_the_web_and_act_on_their_posts
     views: list[SettingsMainView] = []
 
     class SettingsApp(WebApplication[SettingsMainView]):
+        @override
         def setup_session(self, main_view: SettingsMainView) -> None:
             main_view.settings.open()
             views.append(main_view)
@@ -7946,6 +8034,7 @@ def jobs() -> Iterator[tuple[TestClient, JobsMainView]]:
     views: list[JobsMainView] = []
 
     class JobsApp(WebApplication[JobsMainView]):
+        @override
         def setup_session(self, main_view: JobsMainView) -> None:
             views.append(main_view)
 
@@ -8341,6 +8430,7 @@ def dialog_client(dialog_views: list[DialogsMainView]) -> Iterator[TestClient]:
         def __init__(self) -> None:
             super().__init__(build_main_view=DialogsMainView)
 
+        @override
         def setup_session(self, main_view: DialogsMainView) -> None:
             dialog_views.append(main_view)
 
@@ -8366,7 +8456,8 @@ def test_an_action_opens_a_dialog_whose_answers_close_it(
     clear_id = _widget_id(dialogs_main_view.edit_menu.clear.renderer)
 
     def post(widget_id: str, event: str) -> str:
-        return dialog_client.post(f"/widget/{widget_id}", data={"event": event}).text
+        response: httpx.Response = dialog_client.post(f"/widget/{widget_id}", data={"event": event})
+        return response.text
 
     closed = _element(dialog_client.get("/").text, dialog_id)
     assert closed.tag == "dialog"
@@ -8452,6 +8543,7 @@ def notes() -> Iterator[tuple[TestClient, _NoteMainView]]:
         def __init__(self) -> None:
             super().__init__(build_main_view=_NoteMainView)
 
+        @override
         def setup_session(self, main_view: _NoteMainView) -> None:
             views.append(main_view)
 
@@ -8585,6 +8677,7 @@ def tables() -> Iterator[tuple[TestClient, HorizontalMainView]]:
     views: list[HorizontalMainView] = []
 
     class TablesApp(WebApplication[HorizontalMainView]):
+        @override
         def setup_session(self, main_view: HorizontalMainView) -> None:
             views.append(main_view)
 
@@ -8666,7 +8759,10 @@ def test_each_click_adds_or_removes_its_row_in_a_table_selecting_several(
     table.selection_changed.connect(emitted.append)
 
     def select(row: str) -> str:
-        return client.post(f"/widget/{table_id}", data={"event": "select", "row": row}).text
+        response: httpx.Response = client.post(
+            f"/widget/{table_id}", data={"event": "select", "row": row}
+        )
+        return response.text
 
     page = client.get("/").text
     grid = next(tag for tag in _element(page, table_id).descendants if tag[0] == "table")
@@ -8720,6 +8816,7 @@ def places() -> Iterator[_Places]:
     views: list[EditableTableMainView] = []
 
     class PlacesApp(WebApplication[EditableTableMainView]):
+        @override
         def setup_session(self, main_view: EditableTableMainView) -> None:
             views.append(main_view)
 
@@ -8819,6 +8916,7 @@ def test_a_record_table_shows_an_edit_as_its_new_record_or_refuses_it() -> None:
     views: list[RoomsMainView] = []
 
     class RoomsApp(WebApplication[RoomsMainView]):
+        @override
         def setup_session(self, main_view: RoomsMainView) -> None:
             views.append(main_view)
 
@@ -8839,6 +8937,7 @@ def test_a_table_s_cells_and_headers_look_as_the_view_says() -> None:
     views: list[StyledTablesMainView] = []
 
     class ResultsApp(WebApplication[StyledTablesMainView]):
+        @override
         def setup_session(self, main_view: StyledTablesMainView) -> None:
             views.append(main_view)
 
@@ -8901,6 +9000,7 @@ def test_a_table_s_cell_widgets_post_their_edits_and_clicks() -> None:
     views: list[CellWidgetsMainView] = []
 
     class VariablesApp(WebApplication[CellWidgetsMainView]):
+        @override
         def setup_session(self, main_view: CellWidgetsMainView) -> None:
             views.append(main_view)
 
@@ -8979,6 +9079,7 @@ def test_a_table_s_file_path_is_uploaded_or_typed_its_copy_kept_while_a_cell_hol
     views: list[DataFilesTableMainView] = []
 
     class InputsApp(WebApplication[DataFilesTableMainView]):
+        @override
         def setup_session(self, main_view: DataFilesTableMainView) -> None:
             main_view.status_bar.timeout = 0
             views.append(main_view)
@@ -9054,6 +9155,7 @@ def test_disabling_a_container_disables_the_views_in_it() -> None:
     views: list[VerticalMainView] = []
 
     class ColumnApp(WebApplication[VerticalMainView]):
+        @override
         def setup_session(self, main_view: VerticalMainView) -> None:
             views.append(main_view)
 
@@ -9094,6 +9196,7 @@ class _ShapesApp(WebApplication[TranslatedMainView]):
         super().__init__(build_main_view=TranslatedMainView)
         self.session_views: list[TranslatedMainView] = []
 
+    @override
     def setup_session(self, main_view: TranslatedMainView) -> None:
         self.session_views.append(main_view)
 
@@ -9241,6 +9344,7 @@ def chart_client(chart_views: list[PipeChartMainView]) -> Iterator[TestClient]:
         def __init__(self) -> None:
             super().__init__(build_main_view=PipeChartMainView)
 
+        @override
         def setup_session(self, main_view: PipeChartMainView) -> None:
             chart_views.append(main_view)
 
@@ -9832,6 +9936,7 @@ def sorted_rooms() -> Iterator[_SortedRooms]:
     views: list[SortedRoomsMainView] = []
 
     class SortedRoomsApp(WebApplication[SortedRoomsMainView]):
+        @override
         def setup_session(self, main_view: SortedRoomsMainView) -> None:
             views.append(main_view)
 
@@ -10077,6 +10182,7 @@ def million_client(million_views: list[MillionRowsMainView]) -> Iterator[TestCli
         def __init__(self) -> None:
             super().__init__(build_main_view=MillionRowsMainView)
 
+        @override
         def setup_session(self, main_view: MillionRowsMainView) -> None:
             million_views.append(main_view)
 
@@ -10105,7 +10211,7 @@ def test_a_large_table_draws_the_rows_around_the_view_as_it_scrolls(
     assert [row.get("aria-rowindex") for row in (rows[0], rows[-1])] == ["2", "101"]
 
     def scroll(start: str, offset: str = "") -> str:
-        response = million_client.post(
+        response: httpx.Response = million_client.post(
             f"/widget/{table_id}", data={"event": "scroll", "start": start, "offset": offset}
         )
         assert response.status_code == 200
@@ -10179,7 +10285,7 @@ def test_a_large_table_s_row_selected_by_a_click_keeps_the_focus(
     million_client.post(f"/widget/{table_id}", data={"event": "scroll", "start": "70"})
 
     def select(position: str) -> str:
-        response = million_client.post(
+        response: httpx.Response = million_client.post(
             f"/widget/{table_id}", data={"event": "select", "position": position}
         )
         assert response.status_code == 200
@@ -10214,9 +10320,10 @@ def test_a_large_table_s_row_activated_emits_its_id(
     table.row_activated.connect(activated.append)
 
     def activate(position: str) -> str:
-        return million_client.post(
+        response: httpx.Response = million_client.post(
             f"/widget/{table_id}", data={"event": "activate_row", "row": position}
-        ).text
+        )
+        return response.text
 
     page = million_client.get("/").text
     assert _window(page, table_id)[3].get("data-activate") == "3"
@@ -10246,6 +10353,7 @@ def rooms_data_client(rooms_data_views: list[RoomsDataMainView]) -> Iterator[Tes
         def __init__(self) -> None:
             super().__init__(build_main_view=RoomsDataMainView)
 
+        @override
         def setup_session(self, main_view: RoomsDataMainView) -> None:
             rooms_data_views.append(main_view)
 
@@ -10293,7 +10401,7 @@ def test_a_large_table_s_bar_searches_and_filters_its_columns_by_name(
     assert _element(page, f"{table_id}-bar").attributes.get("role") == "search"
 
     def post(**data: str) -> str:
-        response = rooms_data_client.post(f"/widget/{table_id}", data=data)
+        response: httpx.Response = rooms_data_client.post(f"/widget/{table_id}", data=data)
         assert response.status_code == 200
         return response.text
 
@@ -10387,6 +10495,7 @@ def test_a_table_answers_a_stale_page_s_posts_with_itself_as_it_now_is() -> None
     views: list[CellWidgetsMainView] = []
 
     class VariablesApp(WebApplication[CellWidgetsMainView]):
+        @override
         def setup_session(self, main_view: CellWidgetsMainView) -> None:
             views.append(main_view)
 
@@ -10422,6 +10531,7 @@ def test_a_table_cell_picked_keeps_the_rows_the_app_answers_with() -> None:
     views: list[CellWidgetsMainView] = []
 
     class VariablesApp(WebApplication[CellWidgetsMainView]):
+        @override
         def setup_session(self, main_view: CellWidgetsMainView) -> None:
             views.append(main_view)
 
@@ -10719,6 +10829,7 @@ def test_a_none_choice_is_shown_selected_and_picked_back() -> None:
         def __init__(self) -> None:
             super().__init__(build_main_view=FiltersMainView)
 
+        @override
         def setup_session(self, main_view: FiltersMainView) -> None:
             views.append(main_view)
 
@@ -10755,6 +10866,7 @@ class _PictureApp(WebApplication[_PictureMainView]):
         self.image = image
         self.session_views: list[_PictureMainView] = []
 
+    @override
     def setup_session(self, main_view: _PictureMainView) -> None:
         main_view.picture.image = self.image
         self.session_views.append(main_view)
@@ -10856,6 +10968,7 @@ def test_a_new_image_swaps_its_address_and_the_old_one_answers_no_other_image(
         picture: ImageView = child(ImageView, image=path, description="Logo")
         change: ButtonView = child(ButtonView, text="Change")
 
+        @override
         def __attrs_post_init__(self) -> None:
             super().__attrs_post_init__()
             self.change.clicked.connect(self._change)
@@ -10866,6 +10979,7 @@ def test_a_new_image_swaps_its_address_and_the_old_one_answers_no_other_image(
     views: list[ChangedPictureMainView] = []
 
     class ChangedPictureApp(WebApplication[ChangedPictureMainView]):
+        @override
         def setup_session(self, main_view: ChangedPictureMainView) -> None:
             views.append(main_view)
 
@@ -10919,6 +11033,7 @@ def test_a_widget_that_is_no_image_serves_nothing_at_an_image_s_address() -> Non
     views: list[LabelMainView] = []
 
     class LabelApp(WebApplication[LabelMainView]):
+        @override
         def setup_session(self, main_view: LabelMainView) -> None:
             views.append(main_view)
 

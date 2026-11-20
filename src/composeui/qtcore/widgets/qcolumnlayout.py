@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, cast
 
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import QSizePolicy, QSpacerItem, QVBoxLayout
+from typing_extensions import override
 
 if TYPE_CHECKING:
     from qtpy.QtWidgets import QLayoutItem
@@ -27,7 +28,8 @@ class QColumnLayout(QVBoxLayout):
         """Add the spare space, below the views."""
         self.addItem(_SpareSpace(self))
 
-    def expandingDirections(self) -> Qt.Orientation:  # noqa: N802 (Qt's name)
+    @override
+    def expandingDirections(self) -> Qt.Orientation:
         if _grows_without_spare_space(self):
             return Qt.Orientation.Vertical
         return _NONE
@@ -40,7 +42,8 @@ class _SpareSpace(QSpacerItem):
         super().__init__(0, 0, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         self._column = column
 
-    def expandingDirections(self) -> Qt.Orientation:  # noqa: N802 (Qt's name)
+    @override
+    def expandingDirections(self) -> Qt.Orientation:
         if _grows_without_spare_space(self._column):
             return _NONE
         return Qt.Orientation.Vertical
