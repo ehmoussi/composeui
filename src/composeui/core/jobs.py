@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from composeui.core.renderer import Renderer, RendererContainer
     from composeui.core.view import ActionView, ButtonView, LabelView, MainView, View
 
-__all__ = ["CalledInJobError", "Job", "JobCanceledError", "Jobs", "Task"]
+__all__ = ["CalledInJobError", "Job", "JobCanceledError", "JobSlots", "Jobs", "Task"]
 
 LOGGER = logging.getLogger("COMPOSEUI")
 
@@ -45,6 +45,9 @@ Ts = TypeVarTuple("Ts")
 
 #: the job a thread runs, in a job's thread (see `Jobs.start`)
 _CURRENT = threading.local()
+
+#: seconds between two looks of a job waiting for a slot at whether it was canceled
+_SLOT_POLL = 0.1
 
 
 class CalledInJobError(RuntimeError):
@@ -456,6 +459,93 @@ class Task(Generic[R, P, ProgressT]):
         self._error = error
         self.changed.emit()
         self.failed.emit(error)
+
+
+class JobSlots:
+    """A limit on the jobs that run a block at once, the others waiting in the order they came.
+
+    Make it at a module's level: the sessions of a web server share the process, so they
+    share it too, e.g. to run 4 calculations at once for all users. See `slot`.
+    """
+
+    def __init__(self, limit: int) -> None:
+        if limit < 1:
+            # no job would ever get a slot
+            msg = f"JobSlots needs a limit of 1 or more, not {limit}"
+            raise ValueError(msg)
+        self._limit = limit
+        self._condition = threading.Condition()
+        # the jobs waiting for a slot, the first one first, and the jobs holding one
+        self._waiting: collections.deque[Job[Any, Any]] = collections.deque()
+        self._holders: set[Job[Any, Any]] = set()
+
+    @contextlib.contextmanager
+    def slot(
+        self, job: Job[Any, Any], *, on_wait: Callable[[int], None] | None = None
+    ) -> Iterator[None]:
+        """Run the block once `job` gets a slot: in its function, in its thread.
+
+        While no slot is free, the job waits behind the jobs that came before it, and
+        `on_wait` gets its place in the line, from 1, each time the place changes, in the
+        job's thread: e.g. to report it (`Job.report_progress`). A job canceled before it gets
+        a slot raises `JobCanceledError`, also with a slot free. The slot is free again once
+        the block ends, also when it raises. A job takes one slot at a time: asking for a
+        second one, also from `on_wait`, raises `RuntimeError`.
+        """
+        if current_job() is not job:
+            # the main thread waiting would freeze the app, or a web session's requests
+            msg = "JobSlots.slot must be called in the function of its job, in its thread"
+            raise RuntimeError(msg)
+        with self._condition:
+            # also from `on_wait`, while it waits: with a slot left, the job would take two;
+            # without, it would wait for itself
+            if job in self._holders or job in self._waiting:
+                msg = "The job already holds or waits for a slot: it can't ask for a second one"
+                raise RuntimeError(msg)
+            self._take(job, on_wait or _ignore_place)
+        try:
+            yield
+        finally:
+            with self._condition:
+                self._holders.discard(job)
+                self._condition.notify_all()
+
+    def _take(self, job: Job[Any, Any], on_wait: Callable[[int], None]) -> None:
+        """Wait, under the condition, until `job` is first and a slot is free, then take it."""
+        self._waiting.append(job)
+        reported = 0
+        taken = False
+        try:
+            while True:
+                is_free = self._waiting[0] is job and len(self._holders) < self._limit
+                place = 0 if is_free else self._waiting.index(job) + 1
+                if place not in {0, reported}:
+                    reported = place
+                    # outside the lock: on the web, a report takes a session's lock
+                    self._condition.release()
+                    try:
+                        on_wait(place)
+                    finally:
+                        self._condition.acquire()
+                elif job.is_canceled:
+                    msg = "The job stopped waiting for a slot: it was canceled"
+                    raise JobCanceledError(msg)
+                elif is_free:
+                    break
+                else:
+                    self._condition.wait(_SLOT_POLL)
+            self._waiting.popleft()
+            self._holders.add(job)
+            taken = True
+        finally:
+            if not taken:
+                self._waiting.remove(job)
+            # the jobs behind it moved up
+            self._condition.notify_all()
+
+
+def _ignore_place(_place: int) -> None:
+    """Report nothing: a job given to `JobSlots.slot` without `on_wait` waits silently."""
 
 
 @contextlib.contextmanager

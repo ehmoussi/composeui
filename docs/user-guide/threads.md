@@ -166,8 +166,9 @@ assert main_view.output.text == "Step 1\nDone\n"
   or Ctrl+C on Qt.
 - **On the web,** the input of a user can reach the command. `run_process` uses no shell, so
   each item of the list stays one argument. A program can still read an argument that starts
-  with `-` as an option: check the input first. Each session can start a program, and nothing
-  limits how many run at once.
+  with `-` as an option: check the input first. Each session can start a program. To limit
+  how many run at once, see
+  [A limit on the jobs that run at once](#a-limit-on-the-jobs-that-run-at-once).
 - **On Windows,** only the program that `run_process` started is stopped. The programs that
   it started go on, and `run_process` waits at most 2 seconds for the output that they still
   write.
@@ -560,6 +561,72 @@ class PickupsView(DashboardView):
 
 The [Uber pickups example](../../src/examples/uberpickupsframe.py) and the
 [first dashboard](../../src/examples/uberdashboard.py) read their CSV file this way.
+
+## A limit on the jobs that run at once
+
+`JobSlots`, from `composeui.core.jobs`, lets at most a number of jobs run a block at once. The
+other jobs wait in line, in the order that they came. Use it for heavy work, such as a solver:
+on the web, each session can start one, and 10 users would run 10 solvers at once.
+
+Make it at the level of a module, so that every session of the process shares it. In the
+function of a job, run the heavy work in `slot(job)`:
+
+```python
+import sys
+
+from composeui.core.jobs import Job, JobSlots
+from composeui.core.view import ConsoleView, MainView, child, define_view
+
+SOLVER = "print('Done')"
+SOLVER_RUNS = JobSlots(4)  # At most 4 solvers at once, for every session.
+
+
+def run_solver(job: Job[int, str], command: list[str]) -> int:  # in its thread
+    def show_place(place: int) -> None:
+        job.report_progress(f"Waiting for a solver: place {place} in the line\n")
+
+    with SOLVER_RUNS.slot(job, on_wait=show_place):
+        return job.run_process(command, on_output=job.report_progress)
+
+
+@define_view
+class SolverView(MainView):
+    output: ConsoleView = child(ConsoleView)
+
+    def run(self) -> None:
+        job = self.jobs.start(run_solver, [sys.executable, "-c", SOLVER])
+        job.progress.connect(self.output.append)
+
+
+main_view = SolverView()
+main_view.run()
+main_view.jobs.wait()  # Only for a main view with no toolkit.
+assert main_view.output.text == "Done\n"
+```
+
+- **In line.** When no slot is free, the job waits behind the jobs that came before it. A job
+  that gets a slot at once doesn't wait.
+- **Its place.** While the job waits, `on_wait` gets its place in the line, from 1, each time
+  the place changes. It runs in the thread of the job: report the place with
+  `job.report_progress`. Without `on_wait`, the job waits without a report.
+- **Canceled.** A job canceled before it gets a slot raises `JobCanceledError`, also with a
+  slot free. A job canceled while it waits leaves the line, and the jobs behind it move up.
+  New, Open and closing the app cancel the jobs, and so does a session that ends on the web:
+  their jobs leave the line too.
+- **Freed.** The slot is free again when the block ends, also when it raises. Code before or
+  after the block, such as preparing the files of a run, takes no slot. A job canceled in the
+  block keeps its slot until the block ends, as its work may still run: `job.run_process`
+  stops its program, other code reads `job.is_canceled`.
+- **One slot per job.** A job that asks for a second slot raises `RuntimeError`, also from
+  `on_wait` while it waits: without a slot left, it would wait for itself. Call `slot` in the
+  function of its job only. Called on the main thread, it raises `RuntimeError`, as the app
+  would freeze.
+- **Per process.** The limit holds for the jobs of one process. On Qt and Textual, a process
+  has one user, and the limit holds for the jobs of that user. On the web, nothing limits the
+  share of one session: a user who starts many jobs can fill the line, and the jobs of the
+  other users wait behind them.
+- **Reload.** On Qt and Textual, a reload runs the modules of the program's folder again, which
+  makes a new `JobSlots`. The jobs of the old one that still run don't count in the new one.
 
 ## How jobs behave
 
