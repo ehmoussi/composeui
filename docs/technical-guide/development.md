@@ -216,12 +216,11 @@ backend:
 uv sync --group dev --group docs --all-extras
 ```
 
-- **The guides stay Markdown.** MyST reads `docs/*.md` and `docs/user-guide/*.md` as they
-  are. A link from a guide to a file outside `docs/`, such as `../src/examples/pipeform.py`,
+- **The guides stay Markdown.** MyST builds the Markdown pages in `docs/` and its guide
+  directories. A link from a guide to a file outside `docs/`, such as `../src/examples/pipeform.py`,
   goes to that file on GitHub (`docs/conf.py`).
-- **The user guide is a page per topic.** `docs/user-guide.md` lists the pages of
-  `docs/user-guide/` and their sections, and its `toctree` orders them. A new page goes in
-  both.
+- **The user and technical guides have one page per topic.** The first page of each guide lists
+  its pages and their sections. Its `toctree` orders the pages. Add a new page to both lists.
 - **The API reference is built from the docstrings.** Each page in `docs/api/` runs
   `automodule` in an `{eval-rst}` block, because autodoc writes reStructuredText. In a
   docstring, single backticks link to the name they hold. When you add a module to
@@ -232,12 +231,11 @@ uv sync --group dev --group docs --all-extras
   whether its `RENDERERS` has the key. A new widget, or a new backend, is in the catalog
   without a change to `docs/widgets.md`.
 - **A warning fails the build**, as a broken link or a docstring that autodoc cannot read.
-- **`make test` checks the examples and the navigation** (`tests/test_docs.py`). Each name
-  that a Python block of the README, the guides, or the skill imports from `composeui` must
-  exist. A block that defines every name it uses must run, in a scratch directory, and a
-  block that defines `test_` functions must pass under pytest.
-  `docs/user-guide.md` must list the `##` and `###` headings of the guide's pages, and the
-  README's relative links must lead to files.
+- **`tests/test_docs.py` checks examples and navigation.** Each name that a Python block of the
+  README, the guides, or the skill imports from `composeui` must be public. A block that defines
+  every name it uses must run in a scratch directory. A block that defines `test_` functions
+  must pass under pytest. The contents of each guide must list its pages and their `##` and `###`
+  headings. Links in the README to the site or repository must have a target.
 - **The screenshots of the examples are taken by a script.** `make screenshots` runs
   `docs/screenshots.py`, which writes `docs/images/<example>-<backend>.png` for Qt,
   Textual, and the web, in the light theme. The script sets each example up first, for
@@ -263,7 +261,7 @@ run all four type checkers.
 
 A change of the documentation and the benchmarks' results only, in `docs/`, the Markdown files
 and `benchmarks/results/`, runs only the `docs` job. That job also lints the Python files of
-`docs/`.
+`docs/` and runs `tests/test_docs.py`.
 
 On a push to `main` or a `v*` tag, the `pages` job publishes two versions to GitHub Pages.
 Current `main` is at https://ehmoussi.github.io/composeui/. The latest release is at

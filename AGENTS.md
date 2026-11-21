@@ -247,7 +247,7 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   on Windows (`.\make.ps1 translations test`) and macOS (`make translations test`), on
   Python 3.9 and 3.14. A change of
   only the documentation (`docs/`, Markdown files) and benchmark results
-  (`benchmarks/results/`) runs only the docs build and its lint.
+  (`benchmarks/results/`) runs only the docs job: the site build, docs lint, and documentation tests.
   The existing mypy matrix also checks tests. Separate CI jobs run Pyright, Pyrefly and ty
   on tests on Python 3.9.
 
@@ -275,10 +275,10 @@ document owns what, and the checks.
   the imports of every example, and runs each example that defines every name it uses (one
   that defines `test_` functions, under pytest).
 - **Keep the navigation in step.** `docs/_site/llms.txt` has one entry per page of the site: add,
-  rename, or remove it with the page. `docs/user-guide.md` lists the pages of
-  `docs/user-guide/` and their `##` and `###` headings. The contents list of the examples
-  guide follows its `##` headings. Keep headings stable and unique in their page: other
-  pages link to them, and anchors work down to `###` only.
+  rename, or remove it with the page. The contents of `docs/user-guide.md` and
+  `docs/technical-guide.md` list each guide's pages and their `##` and `###` headings.
+  The contents list of the examples guide follows its `##` headings. Keep headings stable and
+  unique in their page: other pages link to them, and anchors work down to `###` only.
 - **Keep the skill in step.** `docs/_site/skills/composeui/SKILL.md` is what users install for their
   agents. When a rule of the API changes (a name, a signal argument, the state rules), change
   it too. Its `composeui-version` and its text name the minor version that it describes: set
