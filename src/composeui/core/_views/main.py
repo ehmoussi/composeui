@@ -608,6 +608,11 @@ class MainView(View):
             data = adapt(data)
         self.jobs.drop()  # working for the study replaced
         _apply_state(self, data)
+        # the study saved the `is_enabled` of the views that the tasks own (`Task.disables`,
+        # `cancel_with`) as it was, e.g. during a run: set it again. The method is private
+        # because only an opened study needs it; public, it would be an API that apps have no
+        # use for
+        self.jobs._set_enabled()  # noqa: SLF001
         _show_checked(self)
 
     def check_state_data(self, data: Any) -> None:
@@ -640,6 +645,10 @@ class MainView(View):
         _show_checked(self)
         # the new view's text is as written in the code
         _retranslate(self, self._tr)
+        # the reset copied the `is_enabled` of the tasks' views from the new view, whose
+        # fields may differ from this one's: a condition of `Task.disables` may read a field
+        # that New keeps, as the study doesn't hold it (see `load_state_data`)
+        self.jobs._set_enabled()  # noqa: SLF001
 
     def save_state(self, filepath: Path) -> None:
         """Save the current state into a json file, with its versions (`file_data`)."""

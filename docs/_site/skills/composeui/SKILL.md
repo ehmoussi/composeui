@@ -259,7 +259,9 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   a view that is not the main view, `self.build_task(work)`. A task's `progress` holds the
   last value only: connect `task.progress_reported` to get each one, e.g. output to append.
   Let the task set its controls' state: `task.disables(*views)` and
-  `task.cancel_with(stop)`, rather than enabling them in each callback. For an input that
+  `task.cancel_with(stop)`, rather than enabling them in each callback. The task owns their
+  `is_enabled`: a view's own condition goes in `disables(view, enabled_if=lambda: ...)`,
+  never in a reactive method that sets `is_enabled` too. For an input that
   changes quickly, such as a slider, call `task.start_latest(*args)`: it replaces the
   current run, and a replaced run's result never shows. A reactive method can call it, but
   must not read the state of the task that it starts.
