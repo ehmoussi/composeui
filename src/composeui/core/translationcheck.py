@@ -35,6 +35,7 @@ import attrs
 from typing_extensions import override
 
 from composeui.core._views.base import _retranslate
+from composeui.core._views.files import _partial_path, _publish
 from composeui.core.translation import CATALOGS_DIR, load_catalog
 
 if TYPE_CHECKING:
@@ -293,7 +294,7 @@ def write_catalog(main_view_class: type[MainView], language: str) -> tuple[Path,
     Its entries are kept, unused ones too. A regional language's new catalog ("fr-CA")
     starts from its base language's: it replaces it. Text ComposeUI's catalog translates
     isn't added: the app's catalog only has it to translate it otherwise.
-    Return the catalog's path and the text added.
+    A failure leaves the catalog as it was. Return the catalog's path and the text added.
     """
     directory, texts = _app_texts(main_view_class)
     catalog = load_catalog(directory, language)
@@ -301,7 +302,15 @@ def write_catalog(main_view_class: type[MainView], language: str) -> tuple[Path,
     catalog.update(dict.fromkeys(added, ""))
     path = directory / f"{language}.json"
     directory.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    # beside it, then over it: a failed write leaves the translator's catalog as it was
+    partial = _partial_path(path)
+    try:
+        partial.write_text(
+            json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+        )
+        _publish(partial, path)
+    finally:
+        partial.unlink(missing_ok=True)
     return path, added
 
 

@@ -122,7 +122,7 @@ catalog, translated as `""` for a translator to fill. It creates the file if nee
 uv run python -m composeui.core.translationcheck examples.pipeform:PipeMainView --write fr
 ```
 
-- The existing entries are kept.
+- The existing entries are kept. A write that fails leaves the catalog as it was.
 - A translation left empty counts as missing, and the text shows as written.
 - `--write` does not add text that the catalog of ComposeUI translates in that language (the
   File menu, OK, and so on).

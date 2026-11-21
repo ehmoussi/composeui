@@ -78,6 +78,10 @@ backends' modules included, can change in any release without an entry here.
 
 ### Fixed
 
+- The translation check's `--write` writes the catalog beside it, then puts it in its place.
+  Before, a write that failed, for example on text that UTF-8 can't encode, left the catalog
+  empty, and the translations in it were lost.
+
 - The translation check reads the app's modules that its views import, not only the modules
   of its views: those of the main view's package, or those beside a main view outside a
   package, such as `app.py`. Before, text made with `T` in another module, such as an
