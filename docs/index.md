@@ -33,7 +33,7 @@ Signals carry the events between the views, the model, and the app.
   shows it (`refresh_attribute`). When the user edits the widget, the renderer writes the
   value back into the view, from the widget's signal.
 
-The [technical guide](technical-guide.md#architecture) explains the architecture in detail.
+The [architecture](technical-guide/architecture.md) page explains how the parts fit together.
 
 ## One app, three backends
 
@@ -78,9 +78,8 @@ To build an app:
 To work on ComposeUI:
 
 - The [GitHub repository](https://github.com/ehmoussi/composeui) holds the source code and issue tracker.
-- The [technical guide](technical-guide.md) explains how ComposeUI works inside: its
-  [architecture](technical-guide.md#architecture), how to add a widget or a backend, the
-  tests, and the checks.
+- The [technical guide](technical-guide.md) explains how ComposeUI works, how to add a widget
+  or a backend, and how to run the tests and checks.
 - The [roadmap](../ROADMAP.md) lists the work that is left.
 
 ```{toctree}

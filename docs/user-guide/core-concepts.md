@@ -17,7 +17,7 @@ shows:
 
 A backend binds each view to a widget with a renderer. The renderer keeps the two in sync in
 both directions, so the app's code never calls it. The
-[technical guide](../technical-guide.md#views-and-renderers) explains renderers.
+[technical guide](../technical-guide/architecture.md#views-and-renderers) explains renderers.
 
 ## How ComposeUI maps to MVVM
 

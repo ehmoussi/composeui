@@ -46,7 +46,8 @@ Each document has one audience:
 | `docs/user-guide.md` | App developers who use ComposeUI | The user guide's introduction, and the list of its pages with their `##` and `###` headings |
 | `docs/user-guide/*.md` | App developers who use ComposeUI | One page per topic, such as tables or charts: one section per feature and widget, and the differences between the backends |
 | `docs/examples-guide.md` | App developers who learn from the example apps | One section per app in `src/examples/`: what it shows, with links to the user guide, and how to run it |
-| `docs/technical-guide.md` | Contributors to ComposeUI | The architecture, adding a widget or a backend, tests, checks, and code style |
+| `docs/technical-guide.md` | Contributors to ComposeUI | The technical guide's introduction and list of pages |
+| `docs/technical-guide/*.md` | Contributors to ComposeUI | The architecture, web backend design, reloading, adding a widget or a backend, and development |
 | `docs/index.md` | Readers of the documentation site | The home page: one line per page of the site, and the `toctree` that orders them |
 | `docs/widgets.md` | App developers who look for a widget | The widget catalog, which the `widget-catalog` directive builds from `composeui.core.view` |
 | `docs/api/*.md` | App developers who need the exact API | One page per module, built from its docstrings by `automodule` |
