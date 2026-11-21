@@ -11,6 +11,12 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `composeui translations` checks an app's translation catalogs, with the options of
+  `python -m composeui.core.translationcheck`. It takes the main view's file, such as
+  `composeui translations app.py`, or its module and class. Both commands now refuse a class
+  that isn't a `MainView`, or an empty or a relative module name, with a message, where the
+  check failed with an error.
+
 - `python -m composeui.core.translationcheck --strict` also fails on the entries that no code
   uses, and `CatalogReport.is_complete` tells whether a catalog has none.
 

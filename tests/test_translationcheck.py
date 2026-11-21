@@ -169,9 +169,17 @@ def test_the_command_fails_only_on_a_catalog_that_isn_t_ok(
     assert main(["tests.translated:TranslatedMainView"]) == 0
     assert "fr.json: 0 missing, 0 with other placeholders, 0 unused" in capsys.readouterr().out
 
-    with pytest.raises(SystemExit):
-        main(["tests.translated:Unknown"])
-    assert "isn't a class" in capsys.readouterr().err
+    # refused: a missing name, a class that isn't a main view (it has no catalogs), or an empty
+    # or a relative module name
+    for spec, refusal in [
+        ("tests.translated:Unknown", "isn't a MainView class"),
+        ("pathlib:Path", "isn't a MainView class"),
+        (":TranslatedMainView", "names no module"),
+        (".translated:TranslatedMainView", "names no module"),
+    ]:
+        with pytest.raises(SystemExit):
+            main([spec])
+        assert f"{spec} {refusal}" in capsys.readouterr().err
 
 
 def _checked_main_view(directory: Path) -> type[TranslatedMainView]:

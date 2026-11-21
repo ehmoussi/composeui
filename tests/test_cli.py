@@ -1,7 +1,8 @@
-"""Tests for the ``composeui`` command: ``composeui run app.py``."""
+"""Tests for the ``composeui`` command: ``composeui run app.py``, ``composeui translations``."""
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
@@ -20,7 +21,7 @@ from composeui.core.registry import RendererType
 from composeui.core.reload import rerun_program
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterator
 
 #: seconds a test waits for a child process before failing
 _TIMEOUT = 30.0
@@ -341,3 +342,105 @@ def test_the_command_shows_the_changed_code_of_a_file_without_run(
     assert first_app[:2] == ["1", backend.upper()]
     assert changed[1] == backend.upper()
     assert (changed[2] == first_app[2]) is in_place
+
+
+#: a translated main view, and the app it would start if the command ran it as `__main__`
+_TRANSLATED_APP = textwrap.dedent(
+    """
+    from __future__ import annotations
+
+    from pathlib import Path
+
+    from composeui.core.view import LabelView, MainView, T, child, define_view
+    {imports}
+
+    @define_view
+    class AppMainView(MainView):
+        translations_dir = Path(__file__).parent / "locales"
+        label: LabelView = child(LabelView, text=T("Hello"))
+
+    if __name__ == "__main__":
+        raise SystemExit("started")
+    """
+)
+
+
+@pytest.fixture
+def translating(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
+    """Run the command from the test's directory, and forget the app's modules after."""
+    monkeypatch.chdir(tmp_path)
+    _keep_the_process(monkeypatch)
+    yield tmp_path
+    # only these: a library imported for the first time stays, else it would be made twice
+    for name, module in list(sys.modules.items()):
+        if Path(getattr(module, "__file__", None) or "/").is_relative_to(tmp_path.resolve()):
+            del sys.modules[name]
+
+
+@pytest.mark.parametrize(
+    ("files", "app", "texts"),
+    [
+        ({"app.py": _TRANSLATED_APP.format(imports="")}, "app.py", {"Hello"}),
+        # a file of a package, imported by its full name: its relative import works
+        (
+            {
+                "studio/__init__.py": "",
+                "studio/app.py": _TRANSLATED_APP.format(imports="from . import messages"),
+                "studio/messages.py": "from composeui.core.view import T\nSAVED = T('Saved')\n",
+            },
+            "studio/app.py",
+            {"Hello", "Saved"},
+        ),
+        # a module of the current directory, which `python -m` would find
+        ({"app.py": _TRANSLATED_APP.format(imports="")}, "app:AppMainView", {"Hello"}),
+    ],
+)
+def test_the_translations_command_checks_the_app_of_a_file_or_a_module_s_class(
+    files: dict[str, str],
+    app: str,
+    texts: set[str],
+    translating: Path,
+    composeui: Callable[..., None],
+) -> None:
+    for name, source in files.items():
+        (translating / name).parent.mkdir(parents=True, exist_ok=True)
+        (translating / name).write_text(source)
+
+    with pytest.raises(SystemExit) as stopped:
+        composeui("translations", app, "--write", "fr")
+
+    # the catalog's new entries are left to translate: the check fails, and no app started
+    assert stopped.value.code == 1
+    catalog = translating / Path(app).parent / "locales" / "fr.json"
+    assert json.loads(catalog.read_text()) == dict.fromkeys(texts, "")
+
+
+@pytest.mark.parametrize(
+    ("app", "message"),
+    [
+        ("missing.py", "no such file: missing.py"),
+        ("app.py", "app.py defines several MainView classes (First, Second): check one as"),
+        ("types.py", "types.py has the name of another module, types: rename the file"),
+        ("no_such_module:AppMainView", "No module named 'no_such_module'"),
+    ],
+)
+def test_the_translations_command_says_why_it_can_t_find_the_app_s_main_view(
+    app: str,
+    message: str,
+    translating: Path,
+    composeui: Callable[..., None],
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (translating / "app.py").write_text(
+        "from composeui.core.view import MainView, define_view\n"
+        "@define_view\nclass First(MainView): ...\n"
+        "@define_view\nclass Second(MainView): ...\n"
+    )
+    # the standard library's `types`, which the command imported before
+    (translating / "types.py").write_text(_TRANSLATED_APP.format(imports=""))
+
+    with pytest.raises(SystemExit) as stopped:
+        composeui("translations", app)
+
+    # `sys.exit` with the text, which Python prints, or the parser's error
+    assert message in f"{stopped.value.code} {capsys.readouterr().err}"

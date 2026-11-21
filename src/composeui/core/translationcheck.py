@@ -5,6 +5,9 @@ Run it on the app's main view. It fails on text a catalog misses or on a transla
 
     python -m composeui.core.translationcheck examples.pipeform:PipeMainView
 
+``composeui translations`` runs it too, and also takes the main view's file, such as
+``app.py``.
+
 With ``--write fr``, it first adds the text ``fr.json`` misses to it, translated as "" for a
 translator to fill. Until then, the text shows as written. With ``--strict``, it also fails
 on the entries no code uses.
@@ -37,11 +40,12 @@ from typing_extensions import override
 from composeui.core._views.base import _retranslate
 from composeui.core._views.files import _partial_path, _publish
 from composeui.core.translation import CATALOGS_DIR, load_catalog
+from composeui.core.view import MainView
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Iterator, Sequence
 
-    from composeui.core.view import MainView, View
+    from composeui.core.view import View
 
 __all__ = ["CatalogReport", "check_main_view", "main", "placeholders"]
 
@@ -331,15 +335,20 @@ def check_main_view(main_view_class: type[MainView]) -> list[CatalogReport]:
     return reports
 
 
-def _main_view_class(spec: str) -> type[MainView]:
+def main_view_class_of(spec: str) -> type[MainView]:
+    """Import the `MainView` class that `spec` names as module:Class."""
     module_name, _, class_name = spec.partition(":")
+    # an empty or a relative name, which `import_module` refuses with another error
+    if not all(part.isidentifier() for part in module_name.split(".")):
+        msg = f"{spec} names no module: expected module:MainViewClass"
+        raise argparse.ArgumentTypeError(msg)
     try:
         module = importlib.import_module(module_name)
     except ImportError as error:
         raise argparse.ArgumentTypeError(str(error)) from error
     cls = getattr(module, class_name, None)
-    if not inspect.isclass(cls):
-        msg = f"{spec} isn't a class: expected module:MainViewClass"
+    if not (inspect.isclass(cls) and issubclass(cls, MainView)):
+        msg = f"{spec} isn't a MainView class: expected module:MainViewClass"
         raise argparse.ArgumentTypeError(msg)
     return cls
 
@@ -350,8 +359,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         prog="python -m composeui.core.translationcheck", description=__doc__.splitlines()[0]
     )
     parser.add_argument(
-        "main_view", type=_main_view_class, help="the app's main view, as module:Class"
+        "main_view", type=main_view_class_of, help="the app's main view, as module:Class"
     )
+    add_options(parser)
+    args = parser.parse_args(argv)
+    return check_and_report(args.main_view, args.write, strict=args.strict)
+
+
+def add_options(parser: argparse.ArgumentParser) -> None:
+    """Add the check's options, which ``composeui translations`` has too."""
     parser.add_argument(
         "--write",
         action="append",
@@ -360,16 +376,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         help='first add the text to translate to LANGUAGE\'s catalog, translated as ""',
     )
     parser.add_argument("--strict", action="store_true", help="also fail on unused entries")
-    args = parser.parse_args(argv)
-    for language in args.write:
-        path, added = write_catalog(args.main_view, language)
+
+
+def check_and_report(
+    main_view_class: type[MainView], languages: Sequence[str], *, strict: bool
+) -> int:
+    """Write the catalogs of `languages`, print the reports, and give the exit status."""
+    for language in languages:
+        path, added = write_catalog(main_view_class, language)
         print(f"{path}: {len(added)} entries added to translate")  # noqa: T201
-    reports = check_main_view(args.main_view)
+    reports = check_main_view(main_view_class)
     for report in reports:
         print(report)  # noqa: T201
     if not reports:
-        print(f"no catalog in {args.main_view.translations_dir}")  # noqa: T201
-    if args.strict:
+        print(f"no catalog in {main_view_class.translations_dir}")  # noqa: T201
+    if strict:
         return 0 if all(report.is_complete for report in reports) else 1
     return 0 if all(report.is_ok for report in reports) else 1
 

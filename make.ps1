@@ -248,7 +248,7 @@ function Invoke-Typecheck {
 function Invoke-Translations {
     $failed = $false
     foreach ($mainView in $TranslatedMainViews) {
-        & uv run python -m composeui.core.translationcheck $mainView --strict
+        & uv run composeui translations $mainView --strict
         if ($LASTEXITCODE -ne 0) { $failed = $true }
     }
     if ($failed) { throw 'translations: some catalogs are out of date' }
