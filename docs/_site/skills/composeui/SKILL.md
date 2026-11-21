@@ -105,7 +105,7 @@ When you assess a need, say which case it is:
 - **Supported by composition:** existing views do it together, such as a `ListView` whose
   rows are each a `HorizontalView` of labels and buttons.
 - **Needs a new widget:** a new view and a renderer on each backend, which is a change to
-  ComposeUI (https://ehmoussi.github.io/composeui/technical-guide.html#add-a-widget). Do not
+  ComposeUI (https://ehmoussi.github.io/composeui/technical-guide/extending.html#add-a-widget). Do not
   draw it with a toolkit in the app: the app then runs on one backend only.
 - **Not in the checked version:** a newer release or `main` can have it. Read the changelog.
 

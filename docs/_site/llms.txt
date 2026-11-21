@@ -40,7 +40,12 @@
 
 ## Contributing
 
-- [Technical guide](https://ehmoussi.github.io/composeui/technical-guide.html): architecture, adding a widget or a backend, development commands, and checks
+- [Technical guide](https://ehmoussi.github.io/composeui/technical-guide.html): index of the pages below
+- [Architecture](https://ehmoussi.github.io/composeui/technical-guide/architecture.html): project layout, the registry, views and renderers, signals, reactive methods, shared data, and view state
+- [Design of the web backend](https://ehmoussi.github.io/composeui/technical-guide/web-backend.html): requests, page updates, scripts, sessions, file transfers, and web tests
+- [Reloading on a change](https://ehmoussi.github.io/composeui/technical-guide/reloading.html): how `--reload` works on Qt, Textual, and the web
+- [Extend ComposeUI](https://ehmoussi.github.io/composeui/technical-guide/extending.html): how to add a widget or a backend
+- [Development](https://ehmoussi.github.io/composeui/technical-guide/development.html): setup, commands, tests, translations, code style, documentation, CI, and releases
 
 ## Optional
 

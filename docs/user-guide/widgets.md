@@ -728,7 +728,7 @@ What each backend does:
 
 A plain generator can't give a file in pieces. In Python, calling a generator runs none of its
 code: its code runs only as its pieces are read, and it can read the views long after the click.
-The [technical guide](../technical-guide.md#downloads-on-the-web) explains the design.
+The [technical guide](../technical-guide/web-backend.md#downloads-on-the-web) explains the design.
 
 ## Slider
 
