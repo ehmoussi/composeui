@@ -237,6 +237,7 @@ from composeui.core._views.tables import (
 )
 from composeui.core.translation import (
     T,
+    join_text,
 )
 
 __all__ = [
@@ -435,6 +436,7 @@ __all__ = [
     "find_in_lines",
     "format_date",
     "grid_cell",
+    "join_text",
     "notify_renderer",
     "parse_date",
     "replace_cell",
