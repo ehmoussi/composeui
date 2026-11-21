@@ -24,7 +24,7 @@ add it yet:
    own distinct risk, such as a toolkit event, threading, or HTTP round-trip
    failure the owner cannot reach. Prefer extending a `pytest.mark.parametrize`
    case or shared fixture (e.g. the `app`/`client`/`rows` fixtures in
-   `tests/test_webrenderer.py`) over a near-duplicate test; consolidate
+   `tests/webcore/conftest.py`) over a near-duplicate test; consolidate
    duplicated setup in the same change.
 4. Does it need a production seam (public helper, flag, wrapper, injection hook,
    extra `RENDERERS` entry) that no production caller needs? If yes, move the
@@ -132,7 +132,7 @@ Chromium. Browser tests are slow and opt-in, so the gate is stricter for them:
 
 - **Only what a browser alone can show.** If the markup or the response proves it
   (an attribute, a fragment, an `HX-*` header, a status code), it belongs in
-  `tests/test_webrenderer.py` with the `TestClient`, even when the user only
+  `tests/webcore/` with the `TestClient`, even when the user only
   notices it in a browser: an `accept` attribute, an `aria-describedby` link, an
   OOB fragment. A browser test owns what happens after the response arrives: the
   scripts in `webcore/static/` (Alt+Shift shortcuts, keeping `aria-invalid` in step
@@ -297,10 +297,10 @@ split discovery into lanes (parallel agents only when the user asks for them):
 
 - core (`src/composeui/core/`, `tests/test_view_state.py`,
   `tests/test_validation.py`, `tests/test_renderer_registry.py`);
-- Qt (`src/composeui/qtcore/`, `tests/test_qtrenderer.py`,
+- Qt (`src/composeui/qtcore/`, `tests/qtcore/`,
   `tests/test_pipeview.py`, `tests/test_statusbar_thread_safety.py`);
-- Textual (`src/composeui/textualcore/`, `tests/test_textual_renderer.py`);
-- web (`src/composeui/webcore/`, `tests/test_webrenderer.py`, and
+- Textual (`src/composeui/textualcore/`, `tests/textualcore/`);
+- web (`src/composeui/webcore/`, `tests/webcore/`, and
   `tests/test_browser.py` for the scripts in `webcore/static/` and htmx behavior);
 - a cross-cutting pattern sweep (same contract asserted in several backends,
   examples used as fixtures, coverage-only tests).

@@ -1,6 +1,6 @@
 """The web backend in a real browser: what only a browser can show.
 
-The HTTP tests in `test_webrenderer.py` check the markup; these check what the page's
+The HTTP tests in `tests/webcore/` check the markup; these check what the page's
 scripts and htmx do with it. Opt in with `make browser-test`, which needs the `browser`
 dependency group and a Chromium from `uv run --group browser playwright install chromium`;
 without them, these tests are skipped.

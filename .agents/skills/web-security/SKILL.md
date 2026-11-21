@@ -99,7 +99,7 @@ the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the overview.
 | Icon files | `routes.py` (`_ICON_HEADERS`) | `default-src 'none'` and `nosniff`: an SVG opened on its own runs no script. |
 | Image files | `routes.py` (`_PICTURE_HEADERS`), `WebImageRenderer` | An `ImageView`'s route answers its own session only, at the digest of the current content, and only what starts as an image (`_image_media_type`). `default-src 'none'` and `nosniff`, so an SVG opened on its own runs no script. `private` cache: a shared proxy keeps no copy. `image` is never loaded from a study. |
 | Downloads | `downloads.py`, `routes.py` (`download`) | `MainView.download` runs the app's code in a POST (a click) or a job's callback, never in the GET: `GET /download/{ticket}` only hands over a file kept under a ticket of 128 random bits, of its own session; the answers stop naming it at its first fetch, and it goes `FETCHED_TTL` later. A `StreamContent` is the exception: the first GET takes its ticket and runs its writer, which `content` made in the POST or the job from what it read there; a `HEAD` doesn't take it. The writer reads no view, a rule of the app's that nothing enforces (see "Downloads on the web" in the technical guide). Without the session it answers 404, not a redirect. A session keeps at most `MAX_DOWNLOADS` files, `MAX_DOWNLOAD_BYTES` of bytes in memory, for `DOWNLOAD_TTL`; a file the app wrote (a `Path`) stays on its disk and doesn't count. The name goes through `_attachment`. |
-| The server's files (`server_roots`) | `serverfiles.py`, `_ServerFiles` in `_renderers/files.py` | A file, folder or save path field, or a table's file path cell, with `server_roots` lists files (or folders) of the server. The page posts an item's name, never a path; the session knows the folder shown. `item_path` refuses a name with a separator, `.`, or a hidden one (starting with a dot), then resolves it (`strict`, links and `..`) and refuses it outside the resolved roots; a NUL character, a missing item and a loop of links are refused too. A file picked must have one of the field's extensions; a folder field picks only the folder shown (`browse-choose`), and a file field refuses that event. A save field picks the folder shown with a typed name that `is_item_name` accepts, never a folder or a link out of the roots, and asks before replacing a file (`browse-replace`). A listing reads at most `MAX_ITEMS` items. Such a field or cell refuses an upload, which its page never sends (`takes_upload`, `file_path_cell`): a crafted one would write in `upload_folder`. On the web, `path` is `None` for a typed path outside the roots (`is_within_roots`), so an app reading `path` stays inside them, and a table refuses a cell's path typed outside them (the cell keeps its text). `tests/test_webrenderer.py` sends crafted names (`..`, absolute paths, links out, NUL); break a check and one of them fails. |
+| The server's files (`server_roots`) | `serverfiles.py`, `_ServerFiles` in `_renderers/files.py` | A file, folder or save path field, or a table's file path cell, with `server_roots` lists files (or folders) of the server. The page posts an item's name, never a path; the session knows the folder shown. `item_path` refuses a name with a separator, `.`, or a hidden one (starting with a dot), then resolves it (`strict`, links and `..`) and refuses it outside the resolved roots; a NUL character, a missing item and a loop of links are refused too. A file picked must have one of the field's extensions; a folder field picks only the folder shown (`browse-choose`), and a file field refuses that event. A save field picks the folder shown with a typed name that `is_item_name` accepts, never a folder or a link out of the roots, and asks before replacing a file (`browse-replace`). A listing reads at most `MAX_ITEMS` items. Such a field or cell refuses an upload, which its page never sends (`takes_upload`, `file_path_cell`): a crafted one would write in `upload_folder`. On the web, `path` is `None` for a typed path outside the roots (`is_within_roots`), so an app reading `path` stays inside them, and a table refuses a cell's path typed outside them (the cell keeps its text). `tests/webcore/test_files.py` sends crafted names (`..`, absolute paths, links out, NUL); break a check and one of them fails. |
 
 ## Rules for a change
 
@@ -151,19 +151,21 @@ the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the overview.
 
 ## Testing
 
-`tests/test_webrenderer.py` (HTTP, `starlette.testclient`):
+`tests/webcore/` (HTTP, `starlette.testclient`):
 
-- Use `_Browser`, not a bare `TestClient`: it sends `Sec-Fetch-Site: same-origin`, as the
-  app's own page does. A bare `TestClient` sends no such header, so its POSTs get 403,
-  which is right for the refusal tests.
-- A new unsafe route goes in `test_a_post_from_another_origin_is_refused`, which runs each
-  route against every refused header set (`cross-site`, `same-site`, `none`, foreign and
-  `null` `Origin`, foreign `Referer`, no header).
-- A new kind of response goes in `test_every_response_carries_the_security_headers`.
-- `test_every_view_text_is_escaped` puts hostile text in every text field of each main
-  view in `_MAIN_VIEW_TYPES`, then parses the page in each state of `_states` (dialogs
-  open, a cell edited, a table searched and filtered). The text must show exactly as set:
-  not as markup, and not escaped twice. A new widget fails
+- Use `_Browser` (`support.py`), not a bare `TestClient`: it sends
+  `Sec-Fetch-Site: same-origin`, as the app's own page does. A bare `TestClient` sends no
+  such header, so its POSTs get 403, which is right for the refusal tests.
+- A new unsafe route goes in `test_a_post_from_another_origin_is_refused`
+  (`test_security.py`), which runs each route against every refused header set
+  (`cross-site`, `same-site`, `none`, foreign and `null` `Origin`, foreign `Referer`, no
+  header).
+- A new kind of response goes in `test_every_response_carries_the_security_headers`
+  (`test_security.py`).
+- `test_every_view_text_is_escaped` (`test_renderer.py`) puts hostile text in every text
+  field of each main view in `_MAIN_VIEW_TYPES`, then parses the page in each state of
+  `_states` (dialogs open, a cell edited, a table searched and filtered). The text must
+  show exactly as set: not as markup, and not escaped twice. A new widget fails
   `test_the_listed_main_views_show_every_web_renderer` until a listed main view shows it;
   text it shows only on demand needs a state in `_states`.
 

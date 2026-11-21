@@ -19,6 +19,9 @@ css/             # source of webcore/static/app.css (`make css`; tools land in c
 js/              # the scripts' type check (`make js-check`; TypeScript lands in js/vendor/)
 src/examples/    # example apps (pipeform.py, pipecatalogue.py, ...), also used by tests; not in the wheel
 tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pilot)
+  qtcore/        # the Qt backend's tests, a module per family, as in _renderers/
+  textualcore/   # the Textual backend's tests, a module per family, as in _renderers/
+  webcore/       # the web backend's tests, a module per family or per other webcore module
 docs/            # the user guide (user-guide/), the examples guide, this guide, the Sphinx site
 ```
 
