@@ -23,14 +23,13 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    ClassVar,
     Generic,
     NamedTuple,
-    Optional,
     TypeVar,
     cast,
 )
 
+import attrs
 import itsdangerous
 import uvicorn
 from starlette.applications import Starlette
@@ -44,7 +43,7 @@ from typing_extensions import override
 
 from composeui.core._views.base import made_signals, view_fields
 from composeui.core._views.tables import FILTER_PATTERNS_VARIABLE
-from composeui.core.application import Application, _add_reference_to_signals
+from composeui.core.application import Application, WebSettings, _add_reference_to_signals
 from composeui.core.jobs import starting_study, stop_running_processes
 from composeui.core.reactivity import start_reactions
 from composeui.core.registry import RendererType
@@ -76,7 +75,7 @@ from composeui.webcore.routes import (
     widget_fragment,
 )
 from composeui.webcore.session import Hibernation, SessionStore
-from composeui.webcore.streaming import MAX_SESSION_STREAMS, MAX_STREAMS, StreamPlaces
+from composeui.webcore.streaming import StreamPlaces
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
@@ -297,10 +296,11 @@ _MIN_SWEEP_INTERVAL = 0.01
 def _lifespan(
     sessions: SessionStore, *, reloading: bool
 ) -> Callable[[Starlette], contextlib.AbstractAsyncContextManager[None]]:
-    """Get the server's lifespan: idle sessions saved to disk while it runs (`session_idle`).
+    """Get the server's lifespan: idle sessions saved to disk while it runs.
 
-    Once it stops, the sessions are closed, their uploads removed, or a ``--reload``
-    server's saved for its next process. The programs that jobs still run are stopped.
+    A session goes to disk once idle for `WebSettings.session_idle`. Once the server stops,
+    the sessions are closed, their uploads removed, or a ``--reload`` server's saved for its
+    next process. The programs that jobs still run are stopped.
     """
 
     @contextlib.asynccontextmanager
@@ -420,38 +420,32 @@ class WebApplication(Application[MainViewT]):
     the view and the signals sit in the template. Every new session then connects the
     callback to its own view and signals, with its own `view` and `main_view`. Connect
     before serving: a session already open keeps the connections it was built with.
+    The server keeps to `settings`: how long sessions live, and how many it serves.
     """
 
     backend = RendererType.WEB
-    #: seconds a session may stay idle before it is dropped
-    session_ttl: ClassVar[float] = 3600.0
-    #: most sessions live at once: past it, a new browser gets 503 until one is dropped
-    #: (each holds a main view, and maybe a model, in memory); those on disk don't count
-    max_sessions: ClassVar[int] = 1000
-    #: seconds a session may stay idle before it's saved to disk and its memory freed; its
-    #: next request opens it again, and its page reloads. None keeps every session in
-    #: memory. A session stays in memory while it holds what a study doesn't (see
-    #: `MainView.can_hibernate`)
-    session_idle: ClassVar[Optional[float]] = None
-    #: most sessions on disk at once: past it, idle sessions stay in memory
-    max_saved_sessions: ClassVar[int] = 10_000
-    #: downloads written as they're sent (`StreamContent`) at once, among all sessions: the
-    #: next wait for one to end. Each takes a thread, and the time its writer takes
-    max_download_streams: ClassVar[int] = MAX_STREAMS
-    #: downloads written as they're sent at once for one session: the next wait for one of its
-    #: own to end, holding no place of the server's. So one browser can't take them all
-    max_session_download_streams: ClassVar[int] = MAX_SESSION_STREAMS
-    #: seconds the server waits, as it stops or restarts (``--reload``), for the requests in
-    #: progress, such as a large download; past it, it ends them. None waits for them all
-    shutdown_timeout: ClassVar[Optional[int]] = 5
-    #: whether table filters take regular expressions; a public app sets it to False, because a
-    #: crafted one can make every session wait for a long time
-    filter_patterns: ClassVar[bool] = True
 
-    def __init__(self, *, build_main_view: Callable[[], MainViewT]) -> None:
+    @override
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        # these were class variables before `WebSettings`: one set in a subclass would now be
+        # ignored without a word, e.g. `filter_patterns = False` that a public app relies on
+        moved = sorted(set(vars(cls)) & {field.name for field in attrs.fields(WebSettings)})
+        if moved:
+            msg = (
+                f"{cls.__name__} sets {', '.join(moved)}, which moved to WebSettings: pass "
+                f"settings=WebSettings(...) to the app, or web_settings=WebSettings(...) to run"
+            )
+            raise TypeError(msg)
+
+    def __init__(
+        self, *, build_main_view: Callable[[], MainViewT], settings: WebSettings | None = None
+    ) -> None:
+        #: the server's limits: `filter_patterns` is read here, the others as it starts
+        self.settings = WebSettings() if settings is None else settings
         self._build_main_view = build_main_view
         self._connections: list[_Connection] = []
-        if not self.filter_patterns:
+        if not self.settings.filter_patterns:
             # the only switch that the tables read, and a reloaded server process inherits it
             os.environ[FILTER_PATTERNS_VARIABLE] = "off"
         super().__init__(build_main_view=build_main_view)
@@ -511,18 +505,19 @@ class WebApplication(Application[MainViewT]):
         check_routes(self.main_view)
         sessions = SessionStore(
             self._new_session,
-            ttl=self.session_ttl,
-            max_sessions=self.max_sessions,
+            ttl=self.settings.session_ttl,
+            max_sessions=self.settings.max_sessions,
             saved=saved_sessions,
             hibernation=None
-            if self.session_idle is None
-            else Hibernation(self.session_idle, self.max_saved_sessions),
+            if self.settings.session_idle is None
+            else Hibernation(self.settings.session_idle, self.settings.max_saved_sessions),
         )
         return create_starlette_app(
             sessions,
             max_upload_size=self.main_view.max_upload_size,
             stream_places=StreamPlaces(
-                self.max_download_streams, self.max_session_download_streams
+                self.settings.max_download_streams,
+                self.settings.max_session_download_streams,
             ),
             secret_key=secret_key,
             reloading=saved_sessions is not None,
@@ -543,7 +538,7 @@ class WebApplication(Application[MainViewT]):
             "port": self._args.port,
             # a download being written would hold the server up until it's sent: past it, it's
             # canceled, and its writer stops at its next write
-            "timeout_graceful_shutdown": self.shutdown_timeout,
+            "timeout_graceful_shutdown": self.settings.shutdown_timeout,
         }
         if not self._args.reload:
             uvicorn.run(self.create_starlette_app(), **server)
@@ -641,10 +636,11 @@ class WebModelApplication(WebApplication[MainViewT], Generic[MainViewT, ModelT])
         build_main_view: Callable[[], MainViewT],
         build_model: Callable[[], ModelT],
         setup_model: Callable[[MainViewT, ModelT], None] | None = None,
+        settings: WebSettings | None = None,
     ) -> None:
         self._build_model = build_model
         self._model_setup = setup_model
-        super().__init__(build_main_view=build_main_view)
+        super().__init__(build_main_view=build_main_view, settings=settings)
 
     @override
     def connect(

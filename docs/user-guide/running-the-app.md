@@ -298,16 +298,18 @@ Read this section before other people use the app, on a network or behind a reve
   starts them all over. The server signs the session cookie with a key that it makes when it
   starts. So after a restart, each browser gets a new, empty session, and the work that its
   user did not save is lost.
-- **Sessions have limits.** The server drops a session after an hour without use
-  (`session_ttl`). It keeps at most 1000 sessions at a time (`max_sessions`). When it is
-  full, a new browser gets an error (503) until a session ends, and the open sessions keep
-  working. A session doesn't end while a request, such as a large download, is in progress. At
-  most 8 files that a [`StreamContent`](widgets.md#large-files) writes are sent at once
-  (`max_download_streams`), and 2 for one session (`max_session_download_streams`). A server
-  that stops waits 5 seconds for the requests in progress (`shutdown_timeout`), then ends them.
-- **Idle sessions can wait on disk.** Set `session_idle`, in seconds, in a subclass of
-  `WebApplication`, for example `session_idle = 300.0`. The server then saves each session that
-  is idle for that long to the system's temporary folder, and frees its memory. Its next request
+- **Sessions have limits.** You can change each limit (see
+  [Change the server's limits](#change-the-servers-limits)). The server drops a session after
+  an hour without use (`session_ttl`). It keeps at most 1000 sessions at a time
+  (`max_sessions`). When it is full, a new browser gets an error (503) until a session ends,
+  and the open sessions keep working. A session doesn't end while a request, such as a large
+  download, is in progress. At most 8 files that a [`StreamContent`](widgets.md#large-files)
+  writes are sent at once (`max_download_streams`), and 2 for one session
+  (`max_session_download_streams`). A server that stops waits 5 seconds for the requests in
+  progress (`shutdown_timeout`), then ends them.
+- **Idle sessions can wait on disk.** Set `session_idle`, in seconds, for example
+  `WebSettings(session_idle=300.0)`. The server then saves each session that is idle for that
+  long to the system's temporary folder, and frees its memory. Its next request
   opens it again, and its page reloads on the same address: the action of that request is
   lost, and the user does it again. A link that downloads, such as a table's CSV or a chart's
   image, fails until the page reloads. The session keeps what a study keeps. It also keeps its
@@ -342,11 +344,11 @@ Read this section before other people use the app, on a network or behind a reve
   it reads it. A file upload's request can be `max_upload_size` plus 1 MiB.
 - **A crafted regular expression can stop the server for a long time.** A table's filter accepts
   regular expressions, and Python can take minutes or more on a crafted one. All the sessions
-  wait until it ends. To refuse them, set `filter_patterns = False` in a subclass of
-  `WebApplication`, or set the environment variable `COMPOSEUI_FILTER_PATTERNS` to `off`. The
-  `.*` toggle of the filter editor then goes away, and a filter between
-  slashes shows an error. A saved filter of this kind is dropped when it loads, and an app's own
-  code that sets one gets a `FilterError`. `filter_patterns` applies to the web only, and the variable to every backend. The values
+  wait until it ends. To refuse them, set `WebSettings(filter_patterns=False)`, or set the
+  environment variable `COMPOSEUI_FILTER_PATTERNS` to `off`. The `.*` toggle of the filter
+  editor then goes away, and a filter between slashes shows an error. A saved filter of this
+  kind is dropped when it loads, and an app's own code that sets one gets a `FilterError`.
+  `filter_patterns` applies to the web only, and the variable to every backend. The values
   `false`, `0` and `no` also refuse them. An app does not start with a value that it cannot read.
 - **Only the app's own pages change a session.** The server refuses a POST from another
   origin (403), as protection against cross-site request forgery. Another origin includes
@@ -364,6 +366,32 @@ Read this section before other people use the app, on a network or behind a reve
 - **Other headers.** Every response also sends `X-Content-Type-Options: nosniff`, so the
   browser keeps to the content type of each file, and `Referrer-Policy: same-origin`, so the
   addresses of the app are not sent to other sites.
+
+### Change the server's limits
+
+Give the limits of the web server to `run` as a `WebSettings`. Each field that you leave out
+keeps its default. Qt and Textual ignore the settings, so the same app runs on every backend.
+
+```python
+from composeui.core.application import WebSettings, run
+from composeui.core.view import MainView, define_view
+
+
+@define_view
+class HelloMainView(MainView):
+    pass
+
+
+if __name__ == "__main__":
+    run(
+        HelloMainView,
+        # for users who keep the page open all day: their sessions wait on disk while idle
+        web_settings=WebSettings(session_ttl=8 * 3600.0, session_idle=300.0),
+    )
+```
+
+The API reference of [`WebSettings`](../api/application.md) describes each field, and when to
+change it. A `WebApplication` or a `WebModelApplication` takes them as `settings=`.
 
 ### Deploy behind nginx
 

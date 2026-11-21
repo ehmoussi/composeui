@@ -706,7 +706,7 @@ def _remove_saved(directory: Path) -> None:
 
 
 class Hibernation(NamedTuple):
-    """When idle sessions go to disk (`WebApplication.session_idle`)."""
+    """When idle sessions go to disk (`WebSettings.session_idle`)."""
 
     #: seconds a session is idle before it's saved and freed
     idle: float

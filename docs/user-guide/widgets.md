@@ -677,11 +677,11 @@ What each backend does:
   `write` waits, so the server holds about 1 MiB of the file at most. An error before the first
   bytes gives a failed download. An error after them breaks the connection, and the browser shows
   a failed download, not a short file. The browser can't resume the download, and doesn't know the
-  file's size. At most `WebApplication.max_download_streams` files (8 by default) are written at
+  file's size. At most `WebSettings.max_download_streams` files (8 by default) are written at
   once on the server, and `max_session_download_streams` (2 by default) for one browser; the next
   wait for one to end. A session's end stops its files. A server
   that stops, or restarts with `--reload`, waits for the files being sent for
-  `WebApplication.shutdown_timeout` seconds (5 by default), then stops them: the browser shows a
+  `WebSettings.shutdown_timeout` seconds (5 by default), then stops them: the browser shows a
   failed download.
 
   The web sends the file in pieces of 256 KiB. A `write` that takes long to write one, for

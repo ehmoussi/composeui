@@ -54,14 +54,11 @@ def serve(port: int, idle: Optional[float]) -> None:
     import uvicorn  # noqa: PLC0415
     from twins.composeui_app import BenchMainView  # noqa: PLC0415
 
+    from composeui.core.application import WebSettings  # noqa: PLC0415
     from composeui.webcore.webapplication import WebApplication  # noqa: PLC0415
 
-    class App(WebApplication[BenchMainView]):
-        session_ttl = 24 * 3600.0
-        max_sessions = 100_000
-        session_idle = idle
-
-    app = App(build_main_view=BenchMainView).create_starlette_app()
+    settings = WebSettings(session_ttl=24 * 3600.0, max_sessions=100_000, session_idle=idle)
+    app = WebApplication(build_main_view=BenchMainView, settings=settings).create_starlette_app()
     directory = app.state.sessions._directory  # noqa: SLF001
     print("" if directory is None else directory, flush=True)  # noqa: T201
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")

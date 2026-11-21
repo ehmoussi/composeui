@@ -13,8 +13,9 @@ import logging.handlers
 import os
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Generic, Protocol, TextIO, TypeVar, cast
+from typing import TYPE_CHECKING, ClassVar, Generic, Optional, Protocol, TextIO, TypeVar, cast
 
+import attrs
 from typing_extensions import TypedDict, TypeVarTuple, Unpack, overload, override
 
 from composeui.core._views.base import _STREAM_HANDLER as VIEW_STREAM_HANDLER
@@ -47,7 +48,15 @@ if TYPE_CHECKING:
     )
     from composeui.core.view import MainView, View
 
-__all__ = ["Application", "ModelApplication", "current_backend", "get_logger", "renders", "run"]
+__all__ = [
+    "Application",
+    "ModelApplication",
+    "WebSettings",
+    "current_backend",
+    "get_logger",
+    "renders",
+    "run",
+]
 
 
 LOGGER = logging.getLogger("COMPOSEUI")
@@ -492,12 +501,55 @@ class ModelApplication(Application[MainViewT], Generic[MainViewT, ModelT]):
 BACKEND_VARIABLE = "COMPOSEUI_BACKEND"
 
 
+@attrs.frozen(kw_only=True)
+class WebSettings:
+    """The limits of a web server: how long its sessions live, and how many it serves.
+
+    Pass them to `run`, which gives them to the web backend only, e.g.
+    ``run(build_main_view, web_settings=WebSettings(session_ttl=8 * 3600.0))``. A
+    `WebApplication` takes them as ``settings``. "Serve the app to other users" in the user
+    guide explains when to change them.
+    """
+
+    #: Seconds without a request before a session ends. Its browser then gets a new, empty
+    #: session, and its user loses what they didn't save. Raise it when users leave the page
+    #: open for long periods, such as a working day.
+    session_ttl: float = 3600.0
+    #: Most sessions in memory at once. Past it, a new browser gets an error (503) until a
+    #: session ends, and the open sessions keep working. Each session holds its main view,
+    #: and its model if the app has one. Sessions on disk don't count.
+    max_sessions: int = 1000
+    #: Seconds without a request before a session is saved to disk and its memory freed.
+    #: Its next request opens it again and reloads its page. None keeps every session in
+    #: memory. Set it when dozens of sessions stay open but idle. A session that holds what
+    #: a study doesn't keep stays in memory (see `MainView.can_hibernate`).
+    session_idle: Optional[float] = None
+    #: Most sessions on disk at once, with `session_idle`. Past it, idle sessions stay in
+    #: memory.
+    max_saved_sessions: int = 10_000
+    #: Most large downloads (`StreamContent`) sent at once, for all sessions. Each takes a
+    #: thread until it is sent, and the next waits for one to end. Raise it when many users
+    #: download large files at the same time.
+    max_download_streams: int = 8
+    #: Most large downloads sent at once for one session, so that one browser can't take
+    #: them all. Its next download waits without taking a place of the server's.
+    max_session_download_streams: int = 2
+    #: Seconds that a server which stops, or restarts with ``--reload``, waits for the
+    #: requests in progress, such as a large download, before it ends them. None waits for
+    #: all of them.
+    shutdown_timeout: Optional[int] = 5
+    #: Whether table filters take regular expressions (``/pattern/``). Set it to False for a
+    #: public app: a crafted expression can make every session wait for a long time.
+    filter_patterns: bool = True
+
+
 def run(
     build_main_view: Callable[[], MainViewT],
     *,
     build_model: Callable[[], ModelT] | None = None,
     setup_model: Callable[[MainViewT, ModelT], None] | None = None,
     default_backend: RendererType = RendererType.WEB,
+    web_settings: WebSettings | None = None,
 ) -> None:
     """Run the app on the backend the command line names, e.g. ``--backend qt``.
 
@@ -506,7 +558,7 @@ def run(
     ``--port``, ``--help``...). Only that backend is imported, so the others' extras
     needn't be installed; without its own, it stops and names the extra. With `build_model`,
     the app has a model, wired to its main view by `setup_model`: once, or per session on the
-    web.
+    web. On the web, the server keeps to `web_settings`; the other backends ignore them.
     """
     if build_model is None and setup_model is not None:
         msg = "setup_model needs a model: pass build_model too"
@@ -534,11 +586,20 @@ def run(
             f"the {args.backend} backend needs {', '.join(missing)}, from the "
             f'{backend.extra} extra: pip install "composeui[{backend.extra}]"'
         )
+    # only the web's applications take settings
+    settings = (
+        {"settings": web_settings}
+        if web_settings is not None and backends[args.backend] is RendererType.WEB
+        else {}
+    )
     app: Application[MainViewT]
     if build_model is None:
-        app = module.APPLICATION(build_main_view=build_main_view)
+        app = module.APPLICATION(build_main_view=build_main_view, **settings)
     else:
         app = module.MODEL_APPLICATION(
-            build_main_view=build_main_view, build_model=build_model, setup_model=setup_model
+            build_main_view=build_main_view,
+            build_model=build_model,
+            setup_model=setup_model,
+            **settings,
         )
     app.run()

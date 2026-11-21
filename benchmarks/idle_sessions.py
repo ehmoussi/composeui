@@ -22,13 +22,13 @@ def serve(port: int) -> None:
     import uvicorn  # noqa: PLC0415
     from twins.composeui_app import BenchMainView  # noqa: PLC0415
 
+    from composeui.core.application import WebSettings  # noqa: PLC0415
     from composeui.webcore.session import Hibernation  # noqa: PLC0415
     from composeui.webcore.webapplication import WebApplication  # noqa: PLC0415
 
-    class App(WebApplication[BenchMainView]):
-        session_idle = 3600.0
-
-    app = App(build_main_view=BenchMainView).create_starlette_app()
+    app = WebApplication(
+        build_main_view=BenchMainView, settings=WebSettings(session_idle=3600.0)
+    ).create_starlette_app()
     store = app.state.sessions
 
     def snapshot() -> dict[str, Any]:

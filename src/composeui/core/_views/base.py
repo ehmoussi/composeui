@@ -84,7 +84,7 @@ GRID_POSITION = "grid_position"
 #: belongs to the app's code and language, not to a study, so it's never saved or loaded
 UI_TEXT = "ui_text"
 #: Field metadata key for a field left out of a study (`OMIT`) that a session keeps when it
-#: is saved and opened again, idle on the web (`WebApplication.session_idle`) or across a
+#: is saved and opened again, idle on the web (`WebSettings.session_idle`) or across a
 #: ``--reload``: where the user is, such as the tab shown, not study data
 SESSION = "session"
 #: what applying structurally wrong state can raise (from cattrs or a field's own
