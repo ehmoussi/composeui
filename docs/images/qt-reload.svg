@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 420" width="1000" height="420" role="img" aria-labelledby="title desc">
+  <title id="title">Reloading on Qt</title>
+  <desc id="desc">The supervisor watches Python files and writes the changed paths to changes.
+    The Qt child takes the request by renaming changes to taken. It saves the study in the main
+    event loop. When only the app's code changes, the child can rerun the code and restore the
+    study in the same window. It removes taken to acknowledge the request. When ComposeUI's
+    code changes or the new view fails to show, the child exits and the supervisor starts a
+    new child, which restores the study.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="head"/>
+    </marker>
+    <style>
+      .card { fill: #ffffff; stroke: #d0d7de; }
+      text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; fill: #1f2937; font-size: 12px; }
+      .muted { fill: #57606a; }
+      .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 11.5px; }
+      .region { font-size: 13px; font-weight: 600; letter-spacing: 0.04em; fill: #57606a; }
+      .title { font-size: 13px; font-weight: 600; }
+      .step { font-size: 11px; font-weight: 700; fill: #ffffff; }
+      .dot { fill: #6366f1; }
+      .child { fill: #eef2ff; stroke: #6366f1; }
+      .child-inner { fill: #ffffff; stroke: #a5b4fc; }
+      .backend { fill: #ecfdf5; stroke: #10b981; }
+      .line { stroke: #57606a; stroke-width: 1.6; fill: none; }
+      .head { fill: #57606a; }
+      @media (prefers-color-scheme: dark) {
+        .card { fill: #161b22; stroke: #30363d; }
+        text { fill: #e6edf3; }
+        .muted, .region { fill: #9198a1; }
+        .step { fill: #ffffff; }
+        .child { fill: #1e1b4b; stroke: #818cf8; }
+        .child-inner { fill: #161b22; stroke: #6366f1; }
+        .backend { fill: #052e1f; stroke: #34d399; }
+        .line { stroke: #9198a1; }
+        .head { fill: #9198a1; }
+      }
+    </style>
+  </defs>
+
+  <rect class="card" x="0.75" y="0.75" width="998.5" height="418.5" rx="12"/>
+
+  <!-- the three regions -->
+  <circle class="dot" cx="30" cy="38" r="10"/><text class="step" x="30" y="42" text-anchor="middle">1</text>
+  <text class="region" x="48" y="43">SUPERVISOR PROCESS</text>
+  <text class="region" x="500" y="43" text-anchor="middle">QT CHILD PROCESS</text>
+  <text class="region" x="840" y="43" text-anchor="middle">RELOAD OUTCOMES</text>
+
+  <!-- 1: the supervisor requests a reload -->
+  <rect class="backend" x="20" y="104" width="280" height="64" rx="8"/>
+  <text class="title" x="160" y="128" text-anchor="middle">Watch Python files</text>
+  <text x="160" y="150" text-anchor="middle">Write changed paths to <tspan class="mono">changes</tspan></text>
+
+  <rect class="child" x="360" y="64" width="280" height="296" rx="10"/>
+
+  <!-- 2: the child takes the request -->
+  <circle class="dot" cx="380" cy="114" r="10"/><text class="step" x="380" y="118" text-anchor="middle">2</text>
+  <rect class="child-inner" x="400" y="104" width="220" height="64" rx="6"/>
+  <text class="title" x="510" y="128" text-anchor="middle">Take the request</text>
+  <text x="510" y="150" text-anchor="middle">Rename <tspan class="mono">changes</tspan> to <tspan class="mono">taken</tspan></text>
+  <line class="line" x1="300" y1="136" x2="398" y2="136" marker-end="url(#arrow)"/>
+
+  <!-- 3: the child saves the study -->
+  <circle class="dot" cx="380" cy="250" r="10"/><text class="step" x="380" y="254" text-anchor="middle">3</text>
+  <rect class="child-inner" x="400" y="240" width="220" height="64" rx="6"/>
+  <text class="title" x="510" y="264" text-anchor="middle">Save the study</text>
+  <text x="510" y="286" text-anchor="middle">In the main event loop</text>
+  <line class="line" x1="510" y1="168" x2="510" y2="238" marker-end="url(#arrow)"/>
+
+  <!-- 4: reload in the same child -->
+  <rect class="backend" x="700" y="82" width="280" height="112" rx="8"/>
+  <circle class="dot" cx="718" cy="100" r="10"/><text class="step" x="718" y="104" text-anchor="middle">4</text>
+  <text class="title" x="840" y="108" text-anchor="middle">Reload in place</text>
+  <text class="muted" x="840" y="127" text-anchor="middle">When only the app's code changed</text>
+  <text x="840" y="152" text-anchor="middle">Rerun the app and restore the study</text>
+  <text x="840" y="170" text-anchor="middle">Keep the same window and remove <tspan class="mono">taken</tspan></text>
+  <path class="line" d="M620,262 C668,262 650,138 698,138" marker-end="url(#arrow)"/>
+
+  <!-- 5: start a new child -->
+  <rect class="backend" x="700" y="226" width="280" height="112" rx="8"/>
+  <circle class="dot" cx="718" cy="244" r="10"/><text class="step" x="718" y="248" text-anchor="middle">5</text>
+  <text class="title" x="840" y="252" text-anchor="middle">Start a new process</text>
+  <text class="muted" x="840" y="271" text-anchor="middle">When ComposeUI's code changed</text>
+  <text x="840" y="292" text-anchor="middle">The old child exits</text>
+  <text x="840" y="308" text-anchor="middle">The supervisor starts a new child</text>
+  <text x="840" y="324" text-anchor="middle">The new child restores the study</text>
+  <line class="line" x1="620" y1="282" x2="698" y2="282" marker-end="url(#arrow)"/>
+
+  <text class="muted" x="500" y="396" text-anchor="middle">If the new main view fails to show, the supervisor also starts a new child.</text>
+</svg>
