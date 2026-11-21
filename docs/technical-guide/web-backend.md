@@ -237,6 +237,8 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
 - **Idle sessions on disk** (`session_idle`). The `SessionStore` tracks four states: in memory,
   being saved, on disk, and being restored.
 
+  ![A request during a save waits. The session stays in memory.](../images/web-session.svg)
+
   1. **Save.** The lifespan's sweep runs `hibernate_idle` in a thread. It saves one idle session
      at a time. `save_to` writes `<id>.partial`, then the store renames the directory to `<id>`.
      If the process crashes before the rename, the next `--reload` process removes the partial
