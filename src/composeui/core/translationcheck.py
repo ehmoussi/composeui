@@ -6,12 +6,14 @@ Run it on the app's main view. It fails on text a catalog misses or on a transla
     python -m composeui.core.translationcheck examples.pipeform:PipeMainView
 
 With ``--write fr``, it first adds the text ``fr.json`` misses to it, translated as "" for a
-translator to fill. Until then, the text shows as written.
+translator to fill. Until then, the text shows as written. With ``--strict``, it also fails
+on the entries no code uses.
 
 The text is found two ways: the string literals passed to ``tr`` or ``T`` (or set in a
-``SqliteTable``'s ``refusals``) in the source of every view of the main view, and the text
-the views translate as they show it, which finds text ``tr`` gets from a variable, e.g. an
-enum's. A table's refusals are found only in a module of a view.
+``SqliteTable``'s ``refusals``) in the source of every view of the main view and in the
+app's modules that they import, and the text the views translate as they show it, which
+finds text ``tr`` gets from a variable, e.g. an enum's. The app's modules are those of the
+main view's package, and those outside a package beside the main view's module.
 """
 
 from __future__ import annotations
@@ -19,11 +21,13 @@ from __future__ import annotations
 import argparse
 import ast
 import importlib
+import importlib.util
 import inspect
 import json
 import re
 import string
 import sys
+from importlib.machinery import PathFinder
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -34,7 +38,7 @@ from composeui.core._views.base import _retranslate
 from composeui.core.translation import CATALOGS_DIR, load_catalog
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Sequence
+    from collections.abc import Callable, Iterable, Iterator, Sequence
 
     from composeui.core.view import MainView, View
 
@@ -57,6 +61,11 @@ class CatalogReport:
     def is_ok(self) -> bool:
         """Tell whether every text is translated with its placeholders."""
         return not self.missing and not self.mismatched
+
+    @property
+    def is_complete(self) -> bool:
+        """Tell whether the catalog is ok and has no unused entries either."""
+        return self.is_ok and not self.unused
 
     @override
     def __str__(self) -> str:
@@ -127,15 +136,91 @@ def _views(view: View) -> Iterator[View]:
 
 
 def source_paths(main_view: MainView) -> set[Path]:
-    """Get the source files of `main_view`'s view classes and their base classes."""
+    """Get the source files of `main_view`'s view classes, their base classes, and imports.
+
+    The imports are the app's modules that these files import, directly or not: text declared
+    with ``T`` in a module without a view, such as an error's message, is the app's too.
+    """
+    is_app_module = _app_modules(type(main_view).__module__)
+    names = {cls.__module__ for view in _views(main_view) for cls in type(view).__mro__}
+    to_read = list(names)
     paths: set[Path] = set()
-    for view in _views(main_view):
-        for cls in type(view).__mro__:
-            module = sys.modules.get(cls.__module__)
-            file = getattr(module, "__file__", None)
-            if file is not None and file.endswith(".py"):
-                paths.add(Path(file))
+    while to_read:
+        name = to_read.pop()
+        file = _module_file(name)
+        if file is None:
+            continue
+        paths.add(file)
+        if is_app_module(name):
+            imported = {
+                prefix
+                for imported in _imported_names(file, name)
+                for prefix in _prefixes(imported)
+                if is_app_module(prefix)
+            }
+            to_read.extend(imported - names)
+            names |= imported
     return paths
+
+
+def _app_modules(home: str) -> Callable[[str], bool]:
+    """Get what tells whether a module is of the app whose main view is in the module `home`.
+
+    The modules of its package, and the modules outside a package beside `home`, as an app
+    made of ``app.py`` and ``dialogs.py`` has. The name alone can't tell these from the
+    installed ones: ``dialogs`` and ``numpy`` are both outside a package.
+    """
+    package = home.partition(".")[0]
+    file = _module_file(home)
+    folder = None if file is None else file.parent
+
+    def is_app_module(name: str) -> bool:
+        if name.partition(".")[0] == package:
+            return True
+        file = _module_file(name)
+        return file is not None and file.parent == folder
+
+    return is_app_module
+
+
+def _module_file(name: str) -> Path | None:
+    """Get the source file of the module `name`, or `None` if `name` isn't a module.
+
+    A module not imported yet, such as one the app imports only in a function, is looked for
+    in its package's folders: `importlib.util.find_spec` would import its package, which runs
+    it, and a module imported late can need what the check lacks, such as a backend.
+    """
+    file = None
+    folders: Sequence[str] | None = sys.path  # where the package so far looks for its modules
+    for prefix in _prefixes(name):
+        module = sys.modules.get(prefix)
+        if module is not None:
+            file, folders = getattr(module, "__file__", None), getattr(module, "__path__", None)
+        else:
+            spec = None if folders is None else PathFinder.find_spec(prefix, folders)
+            if spec is None:  # a name of a module, such as a class
+                return None
+            file, folders = spec.origin, spec.submodule_search_locations
+    return Path(file) if file is not None and file.endswith(".py") else None
+
+
+def _imported_names(file: Path, name: str) -> Iterator[str]:
+    """Yield what the module `name`, in `file`, imports: modules, or names from modules."""
+    package = name if file.name == "__init__.py" else name.rpartition(".")[0]
+    for node in ast.walk(ast.parse(file.read_text(encoding="utf-8"), filename=str(file))):
+        if isinstance(node, ast.Import):
+            yield from (alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            module = importlib.util.resolve_name("." * node.level + (node.module or ""), package)
+            yield module
+            yield from (f"{module}.{alias.name}" for alias in node.names if alias.name != "*")
+
+
+def _prefixes(name: str) -> Iterator[str]:
+    """Yield `name` and the packages it is in, which importing it imports too."""
+    parts = name.split(".")
+    for end in range(1, len(parts) + 1):
+        yield ".".join(parts[:end])
 
 
 def placeholders(text: str) -> set[str] | None:
@@ -251,7 +336,7 @@ def _main_view_class(spec: str) -> type[MainView]:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """Print a report for each catalog of a main view; 1 if one isn't ok, else 0."""
+    """Print a report for each catalog of a main view; 1 if one isn't ok (complete), else 0."""
     parser = argparse.ArgumentParser(
         prog="python -m composeui.core.translationcheck", description=__doc__.splitlines()[0]
     )
@@ -265,6 +350,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         metavar="LANGUAGE",
         help='first add the text to translate to LANGUAGE\'s catalog, translated as ""',
     )
+    parser.add_argument("--strict", action="store_true", help="also fail on unused entries")
     args = parser.parse_args(argv)
     for language in args.write:
         path, added = write_catalog(args.main_view, language)
@@ -274,6 +360,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(report)  # noqa: T201
     if not reports:
         print(f"no catalog in {args.main_view.translations_dir}")  # noqa: T201
+    if args.strict:
+        return 0 if all(report.is_complete for report in reports) else 1
     return 0 if all(report.is_ok for report in reports) else 1
 
 

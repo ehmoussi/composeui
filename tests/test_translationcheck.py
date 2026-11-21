@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import sys
 from pathlib import Path
@@ -13,6 +14,7 @@ from typing_extensions import override
 
 from composeui.core.translation import CATALOGS_DIR, load_catalog
 from composeui.core.translationcheck import (
+    CatalogReport,
     check_catalog,
     check_main_view,
     find_texts,
@@ -270,6 +272,122 @@ def test_a_table_s_refusals_are_text_to_translate() -> None:
     texts = find_texts([Path(pipecatalogue.__file__)])
 
     assert set(pipecatalogue.Pipes.refusals.values()) <= texts
+
+
+def _app_module(imports: str, late_import: str) -> str:
+    """Get the source of a main view's module: `imports` at its top, `late_import` in a method."""
+    return (
+        "from pathlib import Path\n"
+        "from composeui.core.view import define_view\n"
+        "from tests.translated import TranslatedMainView\n"
+        f"{imports}"
+        "@define_view\n"
+        "class AppMainView(TranslatedMainView):\n"
+        "    translations_dir = Path(__file__).parent / 'locales'\n"
+        "    def open_later(self) -> None:\n"
+        f"        {late_import}\n"
+    )
+
+
+def _text_module(text: str) -> str:
+    """Get the source of a module that declares `text` to translate."""
+    return f"from composeui.core.translation import T\nTEXT = T({text!r})\n"
+
+
+def _check_app(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, files: dict[str, str], module: str
+) -> tuple[CatalogReport, set[str]]:
+    """Check the app of `files`, whose main view is in `module`, with its folders on the path.
+
+    Return the report of its catalog and the modules that the check imported.
+    """
+    for name, source in files.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source, encoding="utf-8")
+    for folder in ("app", "library"):
+        monkeypatch.syspath_prepend(str(tmp_path / folder))
+    before = set(sys.modules)
+    try:
+        main_view_class = importlib.import_module(module).AppMainView
+        imported = set(sys.modules)
+        (report,) = check_main_view(main_view_class)
+        return report, set(sys.modules) - imported
+    finally:
+        for name in set(sys.modules) - before:
+            del sys.modules[name]
+
+
+def test_text_in_the_modules_the_app_imports_is_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    files = {
+        "app/studio/__init__.py": "VERSION = 1\n",
+        "app/studio/main_view.py": _app_module(
+            "from . import VERSION, messages\n"
+            "from .loading import load\n"
+            "from .parts.saving import save\n",
+            "import studio.later.dialog",
+        ),
+        # imports the module that imports it, as modules of an app often do
+        "app/studio/messages.py": "from . import main_view\n" + _text_module("Study saved"),
+        "app/studio/loading.py": (
+            "from composeui.core.translation import T\n"
+            "def load() -> None:\n"
+            "    raise ValueError(T('Invalid saved settings'))\n"
+        ),
+        "app/studio/parts/__init__.py": _text_module("A part"),
+        "app/studio/parts/saving.py": "def save() -> None: ...\n",
+        # imported only when the app calls a function: the check reads it, but doesn't run it
+        "app/studio/later/__init__.py": "",
+        "app/studio/later/dialog.py": _text_module("Opened later"),
+        # a module the app doesn't import, such as another app's
+        "app/studio/other.py": _text_module("Another app"),
+        "app/studio/locales/fr.json": '{"Invalid saved settings": "Réglages invalides"}',
+    }
+
+    report, imported = _check_app(tmp_path, monkeypatch, files, "studio.main_view")
+
+    assert imported == set()
+    assert {"Study saved", "A part", "Opened later"} <= set(report.missing)
+    assert "Another app" not in report.missing
+    # translated, and shown by the app though no view's module has it
+    assert "Invalid saved settings" not in report.unused
+
+
+def test_text_in_the_modules_beside_an_app_outside_a_package_is_checked(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    files = {
+        "app/flat_app.py": _app_module(
+            "import flat_dialogs\nimport flat_library\n", "import flat_later"
+        ),
+        "app/flat_dialogs.py": _text_module("A dialog"),
+        "app/flat_later.py": _text_module("Opened later"),
+        "app/locales/fr.json": "{}",
+        # outside a package too, but not beside the app: installed, as `numpy` is
+        "library/flat_library.py": _text_module("A library"),
+    }
+
+    report, imported = _check_app(tmp_path, monkeypatch, files, "flat_app")
+
+    assert imported == set()
+    assert {"A dialog", "Opened later"} <= set(report.missing)
+    assert "A library" not in report.missing
+
+
+def test_the_strict_command_also_fails_on_an_unused_entry(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    main_view_class = _checked_main_view(tmp_path)
+    _, added = write_catalog(main_view_class, "fr")
+    catalog = {text: text for text in added}
+    (tmp_path / "fr.json").write_text(json.dumps({**catalog, "Old text": "Vieux"}), "utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "_FullMainView", main_view_class, raising=False)
+
+    assert main([f"{__name__}:_FullMainView"]) == 0
+    assert main([f"{__name__}:_FullMainView", "--strict"]) == 1
+    assert "1 unused\n  unused: 'Old text'" in capsys.readouterr().out
 
 
 @define_view
