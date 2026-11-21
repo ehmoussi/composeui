@@ -67,6 +67,9 @@ folder starts, but it does not reload, and the command logs a warning.
 Reloading is for development. Before other people use the app, read
 [Serve the app to other users](#serve-the-app-to-other-users).
 
+`composeui translations app.py` checks the app's translation catalogs against its code. See
+[Checking the catalogs](translation.md#checking-the-catalogs).
+
 ### Adapt the views to the backend
 
 The app knows its backend before it builds its main view. So the views can adapt to it as

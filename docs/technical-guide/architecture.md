@@ -6,7 +6,7 @@ This page explains how the core and the backends work together to render views a
 
 ```
 src/composeui/
-  cli.py         # the `composeui` command (`composeui run app.py`)
+  cli.py         # the `composeui` command (`composeui run app.py`, `composeui translations`)
   core/          # toolkit-agnostic: views, signals, renderer base, application, registry
     _views/      # the views, a module per family (view.py exports them)
   qtcore/        # Qt backend via qtpy (QtApplication, qtrenderer.py, custom widgets/)

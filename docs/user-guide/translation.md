@@ -79,11 +79,20 @@ Language menu.
 
 ## Checking the catalogs
 
-Check the app's catalogs against its code, for example in CI:
+Check the app's catalogs against its code, for example in CI. Give `composeui translations` the
+file of the main view, or its module and class:
 
 ```bash
-uv run python -m composeui.core.translationcheck examples.pipeform:PipeMainView
+uv run composeui translations app.py                           # the one MainView class of app.py
+uv run composeui translations examples.pipeform:PipeMainView   # module:Class
 ```
+
+The command imports the file as a module, not as `__main__`. So a `run` call under
+`if __name__ == "__main__":` does not start the app. A file that calls `run` without this
+condition starts the app: add the condition. When the file defines several `MainView` classes,
+give the module and class. The command finds the module in the current folder, as `python -m`
+does. `python -m composeui.core.translationcheck` takes the same module and class, and the
+same options.
 
 The check fails:
 
@@ -96,7 +105,7 @@ It also lists the entries that no code uses any more. With `--strict`, it fails 
 for example in the app's CI, so that old entries don't pile up:
 
 ```bash
-uv run python -m composeui.core.translationcheck examples.pipeform:PipeMainView --strict
+uv run composeui translations examples.pipeform:PipeMainView --strict
 ```
 
 The text that it checks has two parts:
@@ -119,7 +128,7 @@ To start or complete a catalog, `--write fr` first adds the text that `fr.json` 
 catalog, translated as `""` for a translator to fill. It creates the file if needed:
 
 ```bash
-uv run python -m composeui.core.translationcheck examples.pipeform:PipeMainView --write fr
+uv run composeui translations examples.pipeform:PipeMainView --write fr
 ```
 
 - The existing entries are kept. A write that fails leaves the catalog as it was.

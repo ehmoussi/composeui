@@ -51,7 +51,7 @@ TRANSLATED_MAIN_VIEWS := examples.pipeform:PipeMainView \
 .PHONY: translations
 translations:
 	@status=0; for main_view in $(TRANSLATED_MAIN_VIEWS); do \
-		uv run python -m composeui.core.translationcheck $$main_view --strict || status=1; \
+		uv run composeui translations $$main_view --strict || status=1; \
 	done; exit $$status
 
 .PHONY: check
