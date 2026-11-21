@@ -47,12 +47,12 @@ toolkit.
 - `create_renderer(renderer_type, key, view)` imports the renderers module of the backend
   and looks up the key. When the backend does not register the key, it returns `None`, and
   the view is not rendered. So a partial backend works.
-- A renderer class of the `"router"` or `"tabs"` key can set `renders_on_demand = True`, as
-  Qt's do. `Router` and `TabView` read it with `renders_on_demand(renderer_type, key)`.
-  `Router` then renders the shown page, and only the toolbar entry and the dialogs of a
-  page not built yet. `TabView` renders the renderer of each `TabPage`, which shows the
-  tab's title and state, and the tab's dialogs. The renderer builds the views of a page or
-  a tab the first time it shows. The web and Textual render every page and tab.
+- A renderer for the `"router"` or `"tabs"` key can set `renders_on_demand = True`.
+  `Router` and `TabView` read this flag with `renders_on_demand(renderer_type, key)`.
+  With this flag, the backend waits until a page or tab is first shown to render its content.
+  Its navigation entry and dialogs are available before then.
+  Qt and the web use this mode. Textual renders the content of every page and tab up front.
+  See [Pages, tabs, and dialogs](web-backend.md#pages-tabs-and-dialogs) for the web backend.
 
 The three backends register the same keys except for maps, which Textual omits.
 `test_every_backend_registers_the_same_renderer_keys_except_graphical_maps` checks this contract.
