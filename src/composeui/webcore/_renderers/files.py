@@ -417,6 +417,7 @@ class PathInputViewLike(InputViewLike, Protocol):
 class FilePathInputViewLike(PathInputViewLike, Protocol):
     extensions: dict[str, tuple[str, ...]]
     has_reload: bool
+    upload_folder: Path | None
     reload_text: str
     reload_clicked: SignalNoArgs
 
@@ -703,14 +704,28 @@ class WebFilePathInputRenderer(_WebPathInputRenderer[FilePathInputViewLike]):
     def file_types(self) -> list[str]:
         return _file_types(self._view.extensions)
 
+    @property
+    def upload_folder(self) -> Path | None:
+        """Get the folder that keeps the file the picker uploads, the app's; None: a copy."""
+        return self._view.upload_folder
+
     def pick_file(self, path: Path) -> None:
         """Show the path of the file the picker uploaded, and hand it to `path_picked`.
 
-        Raises `UnsupportedEventError` while the field is disabled.
+        Raises `UnsupportedEventError` while the field takes no upload (`takes_upload`).
         """
-        if not self.is_enabled:
+        if not self.takes_upload:
             raise UnsupportedEventError(self, "file")
         self._show_path(path)
+
+    @property
+    def takes_upload(self) -> bool:
+        """Tell whether the field takes an upload: enabled, and without `server_roots`.
+
+        With them, its page uploads nothing, and a crafted upload would write in
+        `upload_folder`.
+        """
+        return self.is_enabled and not self._view.server_roots
 
 
 class WebSavePathInputRenderer(_WebPathInputRenderer[SavePathInputViewLike]):

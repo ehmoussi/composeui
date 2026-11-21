@@ -183,6 +183,13 @@ What each backend shows:
     keeps a copy of the file, and the cell shows the copy's path.
   - At the table's next upload, the session removes each copy whose path no cell of the table
     holds any more. It removes all the copies when it ends.
+  - With `CellWidget.file_path(upload_folder=...)`, the session puts the file in that folder
+    instead, as the [file path input](widgets.md#file-path-input) does. A name that a cell of
+    the table holds is taken too, even after its file is gone: the new file gets a number, and
+    the cell's edit shows that it changed. The file is the app's, and the session doesn't
+    remove it. If no cell holds its path once the edit is over, for example because a
+    `cell_edited` callback refused the edit, the session deletes it.
+    `CellWidget.path_by(..., upload_folder=...)` gives the folder to its widgets that have none.
   - With `server_roots`, the button opens the list of the server's files instead, and a file
     picked there puts its path on the server in the cell.
   - The browser cannot give the page a folder's path, or a path to save to. Without

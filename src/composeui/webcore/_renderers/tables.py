@@ -1061,16 +1061,42 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
         )
 
     def file_path_cell(self, form: Mapping[str, str]) -> tuple[int, int] | None:
-        """Get the file path cell an upload names, if the user can edit it; a stale page's, None."""
+        """Get the file path cell an upload names, if the user can edit it; a stale page's, None.
+
+        None too for a cell with `server_roots`, which lists the server's files: its page
+        uploads nothing, and a crafted upload would write in `upload_folder`.
+        """
         if not self.is_enabled:
             return None
-        return self._widget_cell(form, (CellKind.FILE_PATH,))
+        cell = self._widget_cell(form, (CellKind.FILE_PATH,))
+        widget = None if cell is None else self._view.cell_widget(*cell)
+        return None if widget is None or widget.server_roots else cell
 
     def file_types(self, cell: tuple[int, int]) -> list[str]:
         """Get the file types a file path cell's picker offers, e.g. [".csv"]; empty for any."""
         widget = self._view.cell_widget(*cell)
         assert widget is not None  # a cell `file_path_cell` found
         return _file_types(widget.extensions)
+
+    def upload_folder(self, cell: tuple[int, int]) -> Path | None:
+        """Get the folder that keeps a file path cell's upload, the app's; None: a copy."""
+        widget = self._view.cell_widget(*cell)
+        assert widget is not None  # a cell `file_path_cell` found
+        return widget.upload_folder
+
+    def holds_file(self, path: Path) -> bool:
+        """Tell whether a file path cell names `path`, from its `base_folder` if relative."""
+        path = path.resolve()
+        for row, cells in enumerate(self._view.rows):
+            for column, text in enumerate(cells):
+                widget = self._view.cell_widget(row, column)
+                if (
+                    widget is not None
+                    and widget.kind is CellKind.FILE_PATH
+                    and widget.path(text).resolve() == path
+                ):
+                    return True
+        return False
 
     def file_paths(self) -> set[str]:
         """Get the texts of the file path cells, the paths whose uploads are kept."""

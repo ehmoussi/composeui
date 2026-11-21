@@ -149,8 +149,10 @@ class FilePathInputMixin(PathInputMixin):
     `text` holds the path as typed, and `path` reads it as a path. On Qt and Textual, the
     button opens the toolkit's file dialog. On the web, the browser's picker uploads the
     file. The field then holds the path of the session's copy, kept until the session
-    ends. With `server_roots`, the web's button instead lists the files on the server in
-    those folders, and the field holds the path of the file picked there, not a copy.
+    ends. With `upload_folder`, the web keeps the file in that folder instead, as the
+    app's own file. With `server_roots`, the web's button instead lists the files on the
+    server in those folders, and the field holds the path of the file picked there, not
+    a copy.
     With `has_reload`, a reload button beside them emits `reload_clicked`, e.g. to read
     the file again once it changed.
     """
@@ -161,6 +163,10 @@ class FilePathInputMixin(PathInputMixin):
         factory=dict[str, tuple[str, ...]], metadata={OMIT: True}
     )
     has_reload: bool = attrs.field(default=False)
+    #: the folder that keeps the file the web's "…" uploads, under its own name, numbered
+    #: if a file has it (``data-1.csv``): the app's, never removed by the session. None: a
+    #: copy that the session keeps. Qt and Textual pick the user's file, without a copy.
+    upload_folder: Optional[Path] = attrs.field(default=None, metadata={OMIT: True})
     #: the names of the "…" and reload buttons, as a tooltip and a screen reader show them
     browse_text: str = attrs.field(default=T("Choose a file"), metadata={UI_TEXT: True})
     reload_text: str = attrs.field(default=T("Reload"), metadata={UI_TEXT: True})
