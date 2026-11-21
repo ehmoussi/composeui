@@ -116,11 +116,11 @@ tables (`model.runs.add(...)`).
   because `ALTER TABLE ... ADD COLUMN` cannot add all of them. Opening a database, its
   migrations included, stops after `open_time_limit` seconds (30 by default).
 - **Writing from a job.** The function of a [job](threads.md) can write to
-  the tables: the model's lock lets one thread at a time use the connection. The `changed`
-  signal of a write in a job is emitted on the main thread, through
-  `job.call_on_main_thread`, so the views refresh there. New and Open drop the jobs before
-  they replace the database. Check `job.is_canceled` in the transaction that writes, so a
-  canceled job never writes into the next study:
+  the tables: the model's lock lets one thread at a time use the connection. After a commit,
+  `job.call_on_main_thread` delivers the `changed` signal with the same
+  [threading rules as other job callbacks](threads.md#how-jobs-behave). New and Open drop the
+  jobs before they replace the database. Check `job.is_canceled` in the transaction that
+  writes, so a canceled job never writes into the next study:
 
   ```python
   def sweep(job: Job[int], model: PipeModel, radii: list[float]) -> int:  # in its thread

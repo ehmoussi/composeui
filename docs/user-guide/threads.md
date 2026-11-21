@@ -19,8 +19,7 @@ triggers the action again while a run is in progress.
 
 Use `jobs.start(...)` when both exports matter. The second export can start before the
 first one finishes. Connect `finished` to each job so both completions appear in the
-log. The export function does not touch the view; the callback updates it on the main
-thread.
+log. Update the view in the callback, not in the export function.
 
 ```python
 import csv
@@ -58,8 +57,8 @@ main_view.jobs.wait()  # Only for a main view with no toolkit.
 
 Use a different destination for each export. The jobs can finish in either order.
 
-- **Errors.** When the function raises, the `failed` signal of its job emits the exception
-  on the main thread, where a callback shows it (see [Failures](#how-jobs-behave)).
+- **Errors.** Connect `failed` to show an error. See [How jobs behave](#how-jobs-behave)
+  for which exceptions it emits.
 - **Callbacks** connected to the signals of a job get the `main_view` and `model` that they
   ask for, as for any signal.
 - **Running or not.** `jobs.is_running` tells whether any job runs. `jobs.running_changed`
@@ -73,9 +72,9 @@ them.
 ## Progress and canceling
 
 - **Progress.** In the function, `job.report_progress(value)` reports a value of your
-  choice, such as a count, a percentage, or a message. `job.progress` emits each value on
-  the main thread, in the order of the reports, before `finished` or `failed`. Connect it
-  as `finished` and `failed` are. Its callbacks can ask for `main_view` and `model` too.
+  choice, such as a count, a percentage, or a message. `job.progress` emits each value
+  in the order of the reports, before `finished` or `failed`. Connect it as `finished`
+  and `failed` are. Its callbacks can ask for `main_view` and `model` too.
   - Annotate the function's job as `Job[ResultT, ProgressT]`: the second type is the type
     of the values, and of the callbacks' argument. `Job[ResultT]` is a job without
     progress: its `ProgressT` is `None`.
@@ -83,9 +82,10 @@ them.
   - On Qt and Textual, the values reported while the main thread is busy come to it
     together. `job.progress` emits each one, and the reactive methods that they change run
     once after them, not once per value. So a job can report often, such as after each file
-    that it copies. On the web, each value comes at once, in the job's thread.
-  - `job.call_on_main_thread(callback)` runs any other callback on the main thread, in the
-    same order and with the same rule for a dropped job.
+    that it copies.
+  - `job.call_on_main_thread(callback)` runs a callback in order with progress reports,
+    before the job's outcome. It uses the same [thread as the job's signals](#how-jobs-behave).
+    A dropped job does not run pending callbacks.
 - **Canceling.** `job.cancel()`, or `jobs.cancel()` for all the jobs, asks the functions to
   stop. Python cannot stop a thread, so each function checks `job.is_canceled`, or waits with
   `job.sleep(seconds)`, which returns False once the job is canceled. The function still
@@ -251,7 +251,7 @@ Use `main_view.jobs.task(work)` in the main view, or
 [`self.build_task(work)`](#a-task-of-another-view) in another view.
 
 - **Its state.** These attributes are read-only.
-  - `is_running` stays true until the outcome of the run comes to the main thread.
+  - `is_running` stays true until the task receives the outcome.
   - `progress` holds the last value reported, also once the run is over.
   - `result` holds the result of a run that succeeded, and `error` the exception of a run
     that failed. `progress`, `result`, and `error` are `None` while they have no value.
@@ -276,8 +276,8 @@ Use `main_view.jobs.task(work)` in the main view, or
 - **Callbacks and types.** The callbacks of `changed`, `progress_reported`, `finished`, and
   `failed` can ask for `main_view` and `model`. The annotations of the function give the
   types of `result`, `progress`, and the arguments of `start`.
-- **The main thread.** Create a task and call its `start` on the main thread. From the
-  function of a job, both raise `CalledInJobError`.
+- **Where to start.** Create and start a task from app setup or a callback. From the
+  function of a job, both operations raise `CalledInJobError`.
 - **Errors.** A task follows the [rules of a job](#how-jobs-behave) for failures and
   programming errors. After a programming error, `error` and `result` are `None`,
   `has_result` is false, and the task can start a new run.
@@ -390,8 +390,8 @@ assert main_view.results.text == "Big cats"
 - **Its state.** `start_latest` clears `progress` and `error`, and emits `changed` with
   `is_running` true. `result` keeps the last result until the outcome of the new run. It
   returns nothing. While its run is in progress, `start` returns `False`, as for a run of `start`.
-- **The main thread.** As `start`, call it on the main thread. From the function of a job, it
-  raises `CalledInJobError`.
+- **Where to start.** As with `start`, call it from app setup or a callback. From the
+  function of a job, it raises `CalledInJobError`.
 - **From a reactive method.** A [reactive method](reactive-methods.md#slow-work-in-a-task) can
   call `start_latest` with the fields that it reads, and another one show the result.
 
@@ -672,14 +672,16 @@ assert main_view.output.text == "Done\n"
 
 These rules hold for every job, and for the jobs of a task.
 
-- **On the main thread only.** Call `jobs.start`, `jobs.cancel`, and `jobs.drop` from a
-  callback, never from the function of a job. The jobs are not locked, because only the main
-  thread changes them (`job.cancel()` works from any thread). Called from the function of a
-  job, they raise `CalledInJobError`. To start another job, return what it needs, and start
-  it from the callback that gets it.
-- **Failures.** When the function raises, the job's `failed` signal emits the exception on
-  the main thread. Connect a callback to it to show the error, and to clear what shows
-  that the work runs. Do not do it in the function of the job.
+- **Where callbacks run.** Qt and Textual deliver job signals and callbacks on the UI thread.
+  On the web, after the main view renders, they run on the job's thread under the session
+  lock. This prevents a request and a job callback from changing the same session at the
+  same time. Callbacks queued before rendering run as part of rendering.
+- **Work and callbacks.** Call `jobs.start`, `jobs.cancel`, and `jobs.drop` from app setup
+  or a callback. They raise `CalledInJobError` from the function of a job. To start another
+  job, return what it needs, and start it from the callback that gets it. `job.cancel()`
+  works from any thread.
+- **Failures.** When a job fails, `failed` emits the exception. Connect it to show the
+  error and clear the progress indicator. Do this in the callback, not in the job function.
   - A `RefusedError` (`composeui.core.model`) logs a warning with its message, without a
     traceback. Raise it for an expected refusal, for example of bad input or of a rule of
     the app.
@@ -694,8 +696,8 @@ These rules hold for every job, and for the jobs of a task.
   of the job. The job chooses by the type of the exception, not by its cause.
   - Python reports its traceback through `threading.excepthook`. `failed` does not emit
     it, and a [task](#reusable-loading-tasks) does not keep it as its `error`.
-  - The job still stops on the main thread: it no longer counts as running, and its task,
-    if any, goes back to idle and emits `changed`. The other jobs go on.
+  - The job no longer counts as running. Its task, if any, goes back to idle and emits
+    `changed`. The other jobs go on.
   - Without a toolkit, `jobs.wait()` runs this clean-up. It does not raise the error again.
   - A dropped job reports its programming errors too.
 - **New, Open, and closing the app** cancel the running jobs and drop their results,

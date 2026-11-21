@@ -12,7 +12,7 @@ shows:
 | Model (`composeui.core.model`) | The app's data beside the views. It is optional. `SqliteModel` keeps the data in a [SQLite database](sqlite-model.md). |
 | Study | The file that the File menu saves and opens: the state of the views, and the data of the model. The `extension` of the main view names its file type. See [Saving and loading state](building-views.md#saving-and-loading-state). |
 | Backend | The toolkit that shows the views: Qt, Textual, or the web. `run(MainViewClass)` starts the app on the backend that `--backend` names. See [Backends](running-the-app.md#backends). |
-| Jobs (`composeui.core.jobs`) | `main_view.jobs`: functions that [run in threads](threads.md). Their results are emitted on the main thread. |
+| Jobs (`composeui.core.jobs`) | `main_view.jobs`: functions that [run in worker threads](threads.md). They report their results through signals. |
 | Task | `main_view.jobs.task(work)`, or `view.build_task(work)` in another view: a job that a view runs again and again, with its state (`is_running`, `progress`, `result`), and its `changed`, `finished`, and `failed` signals. See [Reusable loading tasks](threads.md#reusable-loading-tasks). |
 
 A backend binds each view to a widget with a renderer. The renderer keeps the two in sync in

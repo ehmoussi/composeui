@@ -573,9 +573,10 @@ main_view.readings.source = DataFrameSource(
   source has one. A lazy frame, such as a Polars `LazyFrame`, needs an `id_column`: its
   rows have no position of their own. The source then reads only the columns it needs.
 - **Set a new `frame` to change the rows.** The source emits `changed`, and the table
-  reads the rows again. Set it on the main thread, for example from a job's result. The new
-  frame must hold the columns of the source, else the source raises a `ValueError`. Their
-  types can differ. To show other columns, give the table a new `DataFrameSource`.
+  reads the rows again. If a job builds the frame, set it in the job's `finished` callback,
+  not in the job function. The new frame must hold the columns of the source, else the
+  source raises a `ValueError`. Their types can differ. To show other columns, give the
+  table a new `DataFrameSource`.
 - **New rows clear the selection of a source without an `id_column`.** A position does not
   say which row it was. The same applies to a new `DataFrameSource` on the table, and even
   when the rows are equal. `selection_changed` emits `[]`. To keep the selection when the

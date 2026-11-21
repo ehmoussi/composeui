@@ -585,8 +585,8 @@ It is a [button](#buttons) too: its `variant` is `SECONDARY` by default, and `cl
 before the file is made. The state saves none of its fields: the app's code sets them.
 
 To give a file without a button, call the main view's `download(filename, content, media_type)`,
-for example from a job's `finished` callback. Call it on the main thread. While no backend shows
-the main view, as in a test, `main_view.downloads` keeps the files (see
+for example from a job's `finished` callback, not from the job function. While no backend
+shows the main view, as in a test, `main_view.downloads` keeps the files (see
 [Test a download](testing.md#test-a-download)).
 
 What each backend does with the file:
@@ -1176,12 +1176,16 @@ The user selects and copies the text on each backend. What each backend shows:
 
 ## The File menu and picking a file
 
-The File menu, a `FileMenu`, has New, Open, Save, Save As, and Exit. Save writes into the
-study's file, Save As into a file that the user picks (see
-[Saving and loading state](building-views.md#saving-and-loading-state)). New, Open, and Exit ask
-before they lose the unsaved changes of the study (see
-[Unsaved changes](building-views.md#unsaved-changes)). An app without studies sets
-`has_file_menu = False` on its `MainView` to leave out the File menu.
+The standard File menu (`FileMenu`) provides study commands:
+
+- **Qt and Textual:** New, Open, Save, Save As, and Exit. Save writes into the study's file.
+  Save As asks for a file.
+- **The web:** New, Open, and Save in the page header. Open uploads a study. Save downloads
+  it instead of writing into the original file. There is no Save As or Exit.
+
+See [Saving and loading state](building-views.md#saving-and-loading-state) and
+[Unsaved changes](building-views.md#unsaved-changes). To leave out the File menu, set
+`has_file_menu = False` on the `MainView`.
 
 A `PickFileAction` is a menu or toolbar action that picks a file for the app to read (not a
 study). `extensions` names the types that it offers, for example
