@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 390" width="1000" height="390" role="img" aria-labelledby="title desc">
+  <title id="title">A web download uses two requests</title>
+  <desc id="desc">In the default path, htmx posts the DownloadView click. The app calls content,
+    and the web session stores the result under a ticket. The POST returns HTML with the ticket
+    link, not the file. The browser follows the link with a GET. That response sends the file.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="head"/>
+    </marker>
+    <style>
+      .card { fill: #ffffff; stroke: #d0d7de; }
+      text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; fill: #1f2937; font-size: 12px; }
+      .muted { fill: #57606a; }
+      .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 11.5px; }
+      .title { font-size: 14px; font-weight: 600; }
+      .step { font-size: 11px; font-weight: 700; fill: #ffffff; }
+      .dot { fill: #6366f1; }
+      .browser { fill: #ecfdf5; stroke: #10b981; }
+      .server { fill: #f6f8fa; stroke: #8c959f; }
+      .note { fill: #ffffff; stroke: #d0d7de; }
+      .lifeline { stroke: #d0d7de; stroke-width: 1.5; stroke-dasharray: 5 5; }
+      .line { stroke: #57606a; stroke-width: 1.6; fill: none; }
+      .reply { stroke: #57606a; stroke-width: 1.6; fill: none; stroke-dasharray: 6 4; }
+      .head { fill: #57606a; }
+      @media (prefers-color-scheme: dark) {
+        .card { fill: #161b22; stroke: #30363d; }
+        text { fill: #e6edf3; }
+        .muted { fill: #9198a1; }
+        .step { fill: #ffffff; }
+        .browser { fill: #052e1f; stroke: #34d399; }
+        .server { fill: #21262d; stroke: #6e7681; }
+        .note { fill: #0d1117; stroke: #30363d; }
+        .lifeline { stroke: #30363d; }
+        .line, .reply { stroke: #9198a1; }
+        .head { fill: #9198a1; }
+      }
+    </style>
+  </defs>
+
+  <rect class="card" x="0.75" y="0.75" width="998.5" height="388.5" rx="12"/>
+
+  <rect class="browser" x="20" y="20" width="160" height="56" rx="8"/>
+  <text class="title" x="100" y="44" text-anchor="middle">Browser</text>
+  <text class="muted" x="100" y="63" text-anchor="middle">htmx, page.js</text>
+
+  <rect class="server" x="780" y="20" width="160" height="56" rx="8"/>
+  <text class="title" x="860" y="44" text-anchor="middle">Web backend</text>
+  <text class="muted mono" x="860" y="63" text-anchor="middle">routes.py, session.py</text>
+
+  <line class="lifeline" x1="100" y1="76" x2="100" y2="370"/>
+  <line class="lifeline" x1="860" y1="76" x2="860" y2="370"/>
+
+  <!-- 1: the click -->
+  <circle class="dot" cx="30" cy="112" r="10"/><text class="step" x="30" y="116" text-anchor="middle">1</text>
+  <text class="mono" x="480" y="104" text-anchor="middle">POST /widget/{id}</text>
+  <text class="mono" x="480" y="119" text-anchor="middle">event=click</text>
+  <line class="line" x1="100" y1="128" x2="858" y2="128" marker-end="url(#arrow)"/>
+
+  <!-- 2: the session stores the result -->
+  <circle class="dot" cx="722" cy="172" r="10"/><text class="step" x="722" y="176" text-anchor="middle">2</text>
+  <rect class="note" x="740" y="150" width="240" height="44" rx="6"/>
+  <text x="860" y="168" text-anchor="middle">Call <tspan class="mono">content</tspan> and store</text>
+  <text x="860" y="184" text-anchor="middle">the result under a ticket</text>
+
+  <!-- 3: the POST response -->
+  <circle class="dot" cx="30" cy="226" r="10"/><text class="step" x="30" y="230" text-anchor="middle">3</text>
+  <text x="480" y="232" text-anchor="middle">HTML with a ticket link, not the file</text>
+  <line class="reply" x1="860" y1="242" x2="102" y2="242" marker-end="url(#arrow)"/>
+
+  <!-- 4: the browser follows the link -->
+  <circle class="dot" cx="30" cy="282" r="10"/><text class="step" x="30" y="286" text-anchor="middle">4</text>
+  <text class="mono" x="480" y="274" text-anchor="middle">GET /download/{ticket}</text>
+  <text x="480" y="289" text-anchor="middle">The browser follows the link</text>
+  <line class="line" x1="100" y1="298" x2="858" y2="298" marker-end="url(#arrow)"/>
+
+  <!-- 5: the GET response -->
+  <circle class="dot" cx="30" cy="338" r="10"/><text class="step" x="30" y="342" text-anchor="middle">5</text>
+  <text x="480" y="344" text-anchor="middle">File response</text>
+  <line class="reply" x1="860" y1="354" x2="102" y2="354" marker-end="url(#arrow)"/>
+</svg>
