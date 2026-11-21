@@ -1,9 +1,8 @@
 # Reloading on a change
 
-`--reload` runs the app's changed code each time that a Python file is saved. The user guide says
-what the user sees
-([Reloading the app on a change](../user-guide/running-the-app.md#reloading-the-app-on-a-change)).
-Qt and Textual use `composeui.core.reload`, without a toolkit. The web uses uvicorn's reload.
+With `--reload`, a change to a watched Python file triggers a reload. Qt and Textual use
+`composeui.core.reload`. The web uses uvicorn's reload. The user guide explains
+[what the user sees](../user-guide/running-the-app.md#reloading-the-app-on-a-change).
 
 Each backend runs the program again from `__main__`. So `composeui run` (`composeui/cli.py`) gives
 the file's `__main__` the module spec of `composeui.cli`. It keeps the file's path in the
@@ -27,10 +26,10 @@ On Qt, `--reload` works like this:
    second. watchfiles polls everywhere on WSL by default, and its polling misses changes.
 3. **The change request.** On a change, the supervisor writes the paths of the changed files
    to the `changes` file of the scratch directory. The app looks for it every 200 ms, and
-   takes it: it renames it to `taken` (`take_changes`). From then on, the supervisor waits
-   for the app as long as the app needs. While a modal dialog is open, the app waits until
-   it closes: a dialog's own event loop also runs the timer, and its callback goes on with
-   the app after it. Then the app saves the study to the same directory
+   takes the request by renaming the file to `taken` (`take_changes`). Once the app takes the
+   request, the supervisor waits without a timeout. The timer can take the request in a dialog's
+   nested event loop. The callback returns without reloading while that loop runs. Back in the
+   main event loop, the app saves the study to the same directory
    (`save_reloaded_state`): the view state, the model's data, and in `session.json` the
    study file's path, whether the study has unsaved changes, the language shown, and the state
    of a new main view of this code.

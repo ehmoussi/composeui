@@ -36,14 +36,18 @@ make docs    # Sphinx + MyST site in docs/_build/html, warnings as errors (needs
 make screenshots   # docs/images/<example>-<backend>.png for the docs and README (Chromium)
 ```
 
-On Windows without `make`, run the same targets in PowerShell with `make.ps1`
-(`.\make.ps1 check test`; `-Examples pipeform, batman` for `EXAMPLES`, `-TailwindPlatform`
-for `TAILWIND_PLATFORM`, `-TscPlatform` for `TSC_PLATFORM`). Keep it in step with the `Makefile`, including its
-`$TranslatedMainViews` list (`TRANSLATED_MAIN_VIEWS`).
+On Windows without `make`, the matching targets are in `make.ps1`. Run
+`.\make.ps1 translations test` to match the Windows CI job. The Linux `check` job runs
+`make mypy`. The `browser` job runs `make js-check`. Locally, `make check` includes both.
+In PowerShell, use `-Examples pipeform, batman` for `EXAMPLES`, `-TailwindPlatform` for
+`TAILWIND_PLATFORM`, and `-TscPlatform` for `TSC_PLATFORM`. Keep `make.ps1` in step with the
+`Makefile`, including its `$TranslatedMainViews` list (`TRANSLATED_MAIN_VIEWS`).
 
 `make mypy` checks source, examples and tests together. It installs the `browser` group and
 all extras so every test import resolves; Chromium is not needed. The other checker targets
-also install the `typecheck` group. The same targets are available in `make.ps1`.
+also install the `typecheck` group. The locked version of Playwright's `greenlet` dependency has
+no prebuilt wheel for Python 3.9 on Windows x64. Use Python 3.13 to install the `browser` group
+on this platform, or use a C++20 compiler to build `greenlet`.
 
 Run a single test file or test:
 

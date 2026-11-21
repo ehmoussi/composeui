@@ -32,15 +32,22 @@ make docs          # build the documentation site into docs/_build/html
 make screenshots   # the screenshots of the examples guide, on every backend
 ```
 
-On Windows without `make`, run the same targets in PowerShell with `make.ps1`, such as
-`.\make.ps1 check test`. Pass `EXAMPLES` as `-Examples pipeform, batman` and
-`TAILWIND_PLATFORM` as `-TailwindPlatform`, and `TSC_PLATFORM` as `-TscPlatform`. When you change a target in the `Makefile`,
-change it in `make.ps1` too.
+On Windows without `make`, use the matching targets in `make.ps1`. To run the same checks as
+the Windows job in CI, run `.\make.ps1 translations test`. The Linux `check` job runs
+`make mypy`. The `browser` job runs `make js-check`. Locally, `make check` includes both.
+
+In PowerShell, pass `EXAMPLES` as `-Examples pipeform, batman`, `TAILWIND_PLATFORM` as
+`-TailwindPlatform`, and `TSC_PLATFORM` as `-TscPlatform`. When you change a target in the
+`Makefile`, change it in `make.ps1` too.
 
 `make mypy` checks source, examples, and tests together. It installs the `browser` group and
 all extras so every test import resolves; Chromium is not needed. The other checker targets
 also install the `typecheck` group. Use an individual target to run one checker, or
-`.\make.ps1 typecheck` on Windows.
+run `make typecheck` to run all four.
+
+The `browser` group includes Playwright. The locked version of its `greenlet` dependency
+has no prebuilt wheel for Python 3.9 on Windows x64. To install that group on this platform,
+use Python 3.13, as the browser job does, or use a C++20 compiler to build `greenlet`.
 
 Run the examples with `uv run python -m examples.pipeform --backend qt`, or `textual`, or
 `web`.

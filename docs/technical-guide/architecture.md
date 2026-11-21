@@ -24,11 +24,10 @@ docs/            # the user guide (user-guide/), the examples guide, this guide,
 
 ## The core imports no backend
 
-`composeui.core` never imports a backend (Qt, Textual, Starlette) at import time.
-The Qt binding lives entirely in `composeui.qtcore`. Python imports it only when a view
-renders with `RendererType.QT`. The same is true for Textual and the web.
-`tests/test_renderer_registry.py` checks that importing `composeui.core.view` imports no
-toolkit.
+Importing `composeui.core` does not load Qt, Textual, or the web backend. When an app calls
+`run`, it imports the application module for the selected backend before starting the app.
+When a view needs a renderer, the registry imports the renderers module for that backend.
+`tests/test_renderer_registry.py` checks that importing `composeui.core.view` loads no toolkit.
 
 ## The registry
 
@@ -86,8 +85,8 @@ Qt uses the same families in `qtcore/_renderers/`. `qtrenderer.py` holds the bas
 not through that mapping. `forms.py` owns `_widget_of` and the single form-row widget cache.
 `containers.py` owns the shared layout and dialog-parent helpers. `navigation.py` holds the
 main renderer, window, router and sidebar. `graphics.py` loads `maprenderer.py` only when a
-map is rendered, so an app without maps does not load Qt Quick. These moves preserve signal
-order, dialog state and on-demand page and tab rendering.
+map is rendered. An app without maps does not load Qt Quick. When you move a renderer,
+preserve signal order, dialog state, and on-demand rendering of pages and tabs.
 
 Textual uses the same families in `textualcore/_renderers/`. `textualrenderer.py` holds the
 base `TextualWidgetRenderer` and shared thread and mount helpers, including `_refresh_tree`.
@@ -96,8 +95,8 @@ directly, not through that mapping. `forms.py` owns `_widget_of` and the form-ro
 so layouts and dialogs share one widget per row. `actions.py` keeps `_ComposeUIApp` beside
 the actions: the app dispatches their events and manages their key bindings. This also keeps
 the toolbar's app check and the app's action-renderer check in one module, without a cycle.
-`navigation.py` holds the main renderer, router and sidebar. These moves preserve mount
-order, worker dispatch and dialog state.
+`navigation.py` holds the main renderer, router and sidebar. When you move a renderer,
+preserve mount order, worker dispatch, and dialog state.
 
 A renderer (`composeui.core.renderer.Renderer`) binds a view to a toolkit object, its
 rendered object. It syncs them in both directions:

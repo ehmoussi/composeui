@@ -9,9 +9,14 @@ This page explains how to add a widget or a backend to ComposeUI.
    Set its `_renderer_key` and give it a class docstring: the
    [widget catalog](development.md#documentation-site) shows its first paragraph.
 
+   The examples below show only parts of `LabelView` and its Qt renderer. They omit imports,
+   style handling, and line wrapping.
+
    ```python
    @define_view
    class LabelView(LabelMixin, View):
+       """A label that shows text."""
+
        _renderer_key = "label"
    ```
 
@@ -31,15 +36,21 @@ This page explains how to add a widget or a backend to ComposeUI.
                }
            )
 
+       @override
        def render(self) -> None:
            if self._rendered_object is None:
-               self._rendered_object = QLabel()
+               self._rendered_object = plain_label()
                self.refresh()
 
        @staticmethod
        def _refresh_text(_view: LabelViewLike, rendered_object: QLabel, value: str) -> None:
            rendered_object.setText(value)
    ```
+
+   `plain_label()` tells Qt to display text as plain text, not as rich text. See the
+   implementations for [Qt](../../src/composeui/qtcore/_renderers/content.py),
+   [Textual](../../src/composeui/textualcore/_renderers/content.py), and
+   [the web](../../src/composeui/webcore/_renderers/content.py).
 
    When the user can change the widget, `render` also connects the widget's signal to a
    method. The method sets the view attribute inside `stop_refresh()`, as `QtInputRenderer`
@@ -53,7 +64,9 @@ This page explains how to add a widget or a backend to ComposeUI.
    [Requests and updates](web-backend.md#requests-and-updates)).
 
 3. Add tests for each backend that exercise the real rendered widgets. See
-   [Tests](development.md#tests).
+   [Tests](development.md#tests). For example, `test_label_renderer_pushes_view_state_to_the_widget`
+   in the [Qt renderer tests](../../tests/test_qtrenderer.py) checks that changing the view updates
+   the widget.
 4. Document the widget in the [user guide](../user-guide.md), and delete its item in
    [`ROADMAP.md`](../../ROADMAP.md). When an example app uses the widget, update the
    [examples guide](../examples-guide.md) too.
