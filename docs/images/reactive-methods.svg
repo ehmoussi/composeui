@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 320" width="1000" height="320" role="img" aria-labelledby="title desc">
+  <title id="title">Two quantity changes, one update to the order total</title>
+  <desc id="desc">On its first run, show_total reads quantity.value, which is 2, and sets the
+    label to Total: 30 EUR. ComposeUI records the field as an input. Inside one batch, two
+    writes change the quantity to 3 and then to 4. Both writes queue the same rerun, and the
+    label still shows 30 EUR. When the outermost batch ends, show_total runs once, reads 4,
+    and sets the label to Total: 60 EUR. It records its inputs again.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="head"/>
+    </marker>
+    <style>
+      .card { fill: #ffffff; stroke: #d0d7de; }
+      text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; fill: #1f2937; font-size: 12px; }
+      .muted { fill: #57606a; }
+      .mono { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 11.5px; }
+      .region { font-size: 13px; font-weight: 600; letter-spacing: 0.04em; fill: #57606a; }
+      .title { font-size: 13px; font-weight: 600; }
+      .step { font-size: 11px; font-weight: 700; fill: #ffffff; }
+      .dot { fill: #6366f1; }
+      .core { fill: #eef2ff; stroke: #6366f1; }
+      .core-inner { fill: #ffffff; stroke: #a5b4fc; }
+      .backend { fill: #ecfdf5; stroke: #10b981; }
+      .line { stroke: #57606a; stroke-width: 1.6; fill: none; }
+      .head { fill: #57606a; }
+      @media (prefers-color-scheme: dark) {
+        .card { fill: #161b22; stroke: #30363d; }
+        text { fill: #e6edf3; }
+        .muted, .region { fill: #9198a1; }
+        .step { fill: #ffffff; }
+        .core { fill: #1e1b4b; stroke: #818cf8; }
+        .core-inner { fill: #161b22; stroke: #6366f1; }
+        .backend { fill: #052e1f; stroke: #34d399; }
+        .line { stroke: #9198a1; }
+        .head { fill: #9198a1; }
+      }
+    </style>
+  </defs>
+
+  <rect class="card" x="0.75" y="0.75" width="998.5" height="318.5" rx="12"/>
+
+  <!-- 1: the first run records the input -->
+  <circle class="dot" cx="30" cy="38" r="10"/><text class="step" x="30" y="42" text-anchor="middle">1</text>
+  <text class="region" x="48" y="43">FIRST RUN</text>
+  <rect class="core" x="20" y="72" width="256" height="200" rx="10"/>
+  <text class="title" x="148" y="110" text-anchor="middle"><tspan class="mono">show_total()</tspan> runs</text>
+  <text x="148" y="137" text-anchor="middle">Reads 2 from <tspan class="mono">quantity.value</tspan></text>
+  <text x="148" y="157" text-anchor="middle">ComposeUI records the field as an input</text>
+  <rect class="backend" x="54" y="214" width="188" height="39" rx="6"/>
+  <text class="mono" x="148" y="238" text-anchor="middle">Total: 30 EUR</text>
+
+  <!-- 2: two writes queue one rerun while the label stays the same -->
+  <circle class="dot" cx="340" cy="38" r="10"/><text class="step" x="340" y="42" text-anchor="middle">2</text>
+  <text class="region" x="358" y="43">INSIDE THE BATCH</text>
+  <rect class="core" x="330" y="72" width="340" height="200" rx="10"/>
+  <text class="title" x="500" y="99" text-anchor="middle">Two writes to the tracked field</text>
+  <rect class="core-inner" x="346" y="112" width="144" height="38" rx="6"/>
+  <text class="mono" x="418" y="135" text-anchor="middle">quantity.value = 3</text>
+  <rect class="core-inner" x="510" y="112" width="144" height="38" rx="6"/>
+  <text class="mono" x="582" y="135" text-anchor="middle">quantity.value = 4</text>
+  <line class="line" x1="490" y1="131" x2="508" y2="131" marker-end="url(#arrow)"/>
+  <path class="line" d="M418,150 V164 H582 V150"/>
+  <line class="line" x1="500" y1="164" x2="500" y2="174" marker-end="url(#arrow)"/>
+  <rect class="core-inner" x="380" y="176" width="240" height="29" rx="6"/>
+  <text x="500" y="195" text-anchor="middle">One rerun waits for the batch to end</text>
+  <rect class="backend" x="406" y="214" width="188" height="39" rx="6"/>
+  <text class="mono" x="500" y="238" text-anchor="middle">Total: 30 EUR</text>
+  <line class="line" x1="276" y1="172" x2="328" y2="172" marker-end="url(#arrow)"/>
+
+  <!-- 3: the queued method updates the label -->
+  <circle class="dot" cx="734" cy="38" r="10"/><text class="step" x="734" y="42" text-anchor="middle">3</text>
+  <text class="region" x="752" y="43">OUTERMOST BATCH ENDS</text>
+  <rect class="core" x="724" y="72" width="256" height="200" rx="10"/>
+  <text class="title" x="852" y="110" text-anchor="middle"><tspan class="mono">show_total()</tspan> runs once</text>
+  <text x="852" y="137" text-anchor="middle">Reads the latest quantity, 4</text>
+  <text x="852" y="157" text-anchor="middle">ComposeUI records the inputs again</text>
+  <rect class="backend" x="758" y="214" width="188" height="39" rx="6"/>
+  <text class="mono" x="852" y="238" text-anchor="middle">Total: 60 EUR</text>
+  <line class="line" x1="670" y1="172" x2="722" y2="172" marker-end="url(#arrow)"/>
+
+  <text class="muted" x="500" y="300" text-anchor="middle">The quantity changes immediately. The total changes only when the method runs.</text>
+</svg>

@@ -150,8 +150,12 @@ Callbacks run outside the lock, including the immediate call from `now=True`.
 ## Reactive methods
 
 `composeui.core.reactivity` runs the [reactive methods](../user-guide/reactive-methods.md) of the
-views. Field tracking starts with the first `@reactive` method or the first call to a helper
-that follows its inputs:
+views. The diagram follows `show_total` from that guide's order example, with delivery unchecked.
+
+![The order total changes from 30 EUR to 60 EUR at batch end.](../images/reactive-methods.svg)
+
+Field tracking starts with the first `@reactive` method or the first call to a helper that follows
+its inputs:
 
 - **The view classes wait.** `@define_view` registers each view class. When field tracking
   starts, ComposeUI sets up the registered classes. It sets up later classes as they register.
