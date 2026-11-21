@@ -169,7 +169,7 @@ from tests.filters import FiltersMainView
 from tests.folderform import StudyMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
-from tests.horizontal import ButtonsMainView, HorizontalMainView
+from tests.horizontal import ButtonsMainView, HorizontalMainView, ManyButtonsMainView
 from tests.hours import HoursMainView
 from tests.listview import PIPES, Pipe, PipeExpander, PipesMainView
 from tests.lonerows import LoneRowsMainView
@@ -1510,7 +1510,12 @@ async def test_buttons_with_no_share_pack_at_their_row_s_start_or_end() -> None:
 
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
-        for row, packed_at_end in ((view.start, False), (view.end, True)):
+        for row, packed_at_end in (
+            (view.start, False),
+            (view.end, True),
+            # the table with a share hidden: the free width still goes before the buttons
+            (view.beside_hidden, True),
+        ):
             first, second = widget(row.first).region, widget(row.second).region
             row_region = widget(row).region
             # as wide as their text, side by side
@@ -1520,6 +1525,50 @@ async def test_buttons_with_no_share_pack_at_their_row_s_start_or_end() -> None:
                 assert second.right == row_region.right
             else:
                 assert first.x == row_region.x
+
+
+@pytest.mark.asyncio
+async def test_buttons_with_no_share_wrap_onto_lines_as_wide_as_their_row() -> None:
+    view = ManyButtonsMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    def widget(of: View) -> Widget:
+        assert isinstance(of.renderer, TextualWidgetRenderer)
+        assert isinstance(of.renderer.widget, Widget)
+        return of.renderer.widget
+
+    async with app.run_test(size=(80, 40)) as pilot:
+        await pilot.pause()
+        bottom = 0
+        for row, packed_at_end in (
+            (view.start, False),
+            (view.end, True),
+            (view.beside.buttons, False),
+        ):
+            row_region = widget(row).region
+            boxes = [widget(button).region for button in row.buttons]
+            # each within the row: none cut off
+            assert all(row_region.contains_region(box) for box in boxes)
+            first, last = boxes[0], boxes[-1]
+            # side by side, the last ones on another line, and the row as tall as its lines
+            assert boxes[1].y == first.y
+            assert last.y >= first.bottom
+            assert row_region.y >= bottom
+            bottom = last.bottom
+            if packed_at_end:
+                assert last.right == row_region.right
+            else:
+                assert first.x == row_region.x
+        # a note longer than the row wraps within it, its button beside or below it
+        row_region = widget(view.noted).region
+        note, retry = widget(view.noted.note).region, widget(view.noted.retry).region
+        assert row_region.contains_region(note)
+        assert note.height > 1
+        assert row_region.contains_region(retry)
+        assert widget(view.below).region.y >= max(note.bottom, retry.bottom)
 
 
 @pytest.mark.asyncio

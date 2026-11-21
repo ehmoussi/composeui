@@ -76,8 +76,9 @@ class HorizontalView(View):
     ``rooms: TableView = attrs.field(factory=TableView, metadata={STRETCH: 3})``. When the
     metadata is unset, the share is the view's `default_stretch` (1). A view with a share
     of 0 keeps its content's width, as a button does by default. When all views do,
-    `align` packs them at the row's start or end: a subclass sets ``align = Align.END``.
-    On the web, a row narrower than 42rem stacks its views, unless none takes a share.
+    `align` packs them at the row's start or end: a subclass sets ``align = Align.END``,
+    and the views that don't fit the row's width go on the next line. When a view takes a
+    share, a row narrower than 42rem stacks its views on the web.
     """
 
     _renderer_key = "horizontal"

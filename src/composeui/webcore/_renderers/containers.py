@@ -123,7 +123,9 @@ class WebHorizontalRenderer(WebRenderer[HorizontalView]):
     Each view sits in a cell carrying its share, an inline style rather than a class
     per share; the cell hides with its view, which swaps on its own. A row narrower than
     42rem stacks its views instead, as a column, unless none has a share (e.g. buttons):
-    the share is a variable only the wide row's cells use.
+    the share is a variable only the wide row's cells use. A cell without a share is as
+    wide as its view, or narrower down to its view's minimum. When no view has a share,
+    each keeps its own width, and those that don't fit the row go on the next line.
     """
 
     _role = "horizontal"
@@ -137,25 +139,34 @@ class WebHorizontalRenderer(WebRenderer[HorizontalView]):
     def to_html(self, *, oob: bool = False) -> Markup:
         stretched_views = self._view.stretched_views
         if not any(stretch > 0 for _, stretch in stretched_views):
-            # as wide as their content: a container query would measure them as 0 wide
+            # as wide as their content, up to the row's width, where a label wraps: a
+            # container query would measure them as 0 wide
             cells = Markup("").join(
                 Markup(
-                    '<div class="min-w-0 has-[>[hidden]]:hidden" style="flex: none">{}</div>'
+                    '<div class="min-w-0 max-w-full has-[>[hidden]]:hidden" style="flex: none">'
+                    "{}</div>"
                 ).format(_view_html(view))
                 for view, _ in stretched_views
                 if _is_shown(view)
             )
             align = " justify-end" if self._view.align is Align.END else ""
-            return Markup('<div {root_attributes} class="flex gap-6{align}">{cells}</div>').format(
-                root_attributes=self._root_attributes(oob=oob), align=align, cells=cells
-            )
+            return Markup(
+                '<div {root_attributes} class="flex flex-wrap gap-6{align}">{cells}</div>'
+            ).format(root_attributes=self._root_attributes(oob=oob), align=align, cells=cells)
         cells = Markup("").join(
             Markup(
-                '<div class="min-w-0 has-[>[hidden]]:hidden @2xl:flex-(--share)"'
-                # no share: as wide as its content
-                ' style="--share: {}">'
+                '<div class="{}has-[>[hidden]]:hidden @2xl:flex-(--share)" style="--share: {}">'
                 "{}</div>"
-            ).format(f"{stretch} 1 0%" if stretch > 0 else "none", _view_html(view))
+            ).format(
+                *(
+                    ("min-w-0 ", f"{stretch} 1 0%")
+                    if stretch > 0
+                    # no share: as wide as its content, narrower only down to its content's
+                    # own minimum: a row of buttons within wraps rather than overflows
+                    else ("", "0 1 auto")
+                ),
+                _view_html(view),
+            )
             for view, stretch in stretched_views
             if _is_shown(view)
         )
