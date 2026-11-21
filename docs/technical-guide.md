@@ -594,6 +594,14 @@ section covers what users see.
   through Starlette: a study is small. A replaced upload stays until `jobs.is_running` is false:
   nothing says which file a job reads, and a job may not have opened it yet. Holding a file
   through the app's code would bring the same failure back each time an app forgets.
+- **An upload in the app's folder.** With `upload_folder`, `_keep_in_folder` takes the name
+  first with an empty file opened exclusively, so two sessions never share it. A name that a
+  table's cell holds counts as taken, even with its file gone: the same text would reach the
+  cell, and no edit would say that the file changed. The file is written beside the name, then
+  replaces it. The session never tracks the file. It deletes it only when no cell holds its
+  path at the end of the edit, since the app would never learn of it. A path with
+  `server_roots` refuses any upload, because its page sends none and a crafted one would write
+  in that folder.
 - **A long upload and the order.** A file's post takes its turn (`order.py`) once its whole body
   has arrived, so a later post runs first after `ORDER_TIMEOUT`. Waiting for the upload would
   hold every click for as long as the network takes. So `page.js` marks only the upload's own

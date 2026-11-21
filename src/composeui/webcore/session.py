@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
 from composeui.core._views.dialogs import dialogs_in
+from composeui.core._views.files import _partial_path, _publish
 from composeui.core.model import InvalidStateError
 from composeui.core.reactivity import batch, stop_reactions
 from composeui.core.registry import RendererType
@@ -71,6 +72,72 @@ LOGGER = logging.getLogger("COMPOSEUI")
 def safe_filename(name: str) -> str:
     """Reduce `name` to letters, digits, `.`, `_` and `-`, safe in a response header."""
     return re.sub(r"[^A-Za-z0-9._-]+", "-", name).strip("-.") or "state"
+
+
+#: the names Windows gives its devices, in any case and with any type: "NUL.csv" is no file
+_DEVICE_NAMES = frozenset(
+    {"con", "prn", "aux", "nul", *(f"{port}{n}" for port in ("com", "lpt") for n in range(1, 10))}
+)
+
+
+def _upload_name(filename: str) -> str:
+    """Get the name that keeps the file the user named `filename`: safe, short, of its type.
+
+    Neither a hidden file's name, which the server's file lists leave out, nor a device's.
+    """
+    suffix = Path(filename).suffix.lower()
+    name = safe_filename(Path(filename).name)
+    # a name of other letters alone, e.g. "データ.csv", would lose its type
+    if not name.lower().endswith(suffix):
+        name = safe_filename(f"upload{suffix}")
+    # a system's limit is near 255 bytes; the end of the name holds its type
+    name = name[-_MAX_FILE_NAME_LENGTH:]
+    if name.startswith(".") or name.split(".")[0].lower() in _DEVICE_NAMES:
+        name = "upload-" + name[-(_MAX_FILE_NAME_LENGTH - len("upload-")) :]
+    return name
+
+
+def _keep_in_folder(
+    folder: Path, name: str, received: Path, is_held: Callable[[Path], bool]
+) -> Path:
+    """Move `received` into `folder`, the app's, as `name`, numbered if taken; get its path.
+
+    A name is taken by a file, or by a path `is_held` says a widget holds: a file gone from
+    under a cell's path would come back with other content, and no edit would say so. The
+    name is taken first, by an empty file: two uploads of one name, from two sessions,
+    never get the same. The file is written beside it, then replaces it: the name holds
+    nothing, then the whole file, never a part of it.
+    """
+    folder = folder.expanduser()
+    stem, suffix = Path(name).stem, Path(name).suffix
+    path, number = folder / name, 1
+    while True:
+        try:
+            if not is_held(path):
+                path.open("xb").close()
+                break
+        except FileExistsError:
+            pass
+        path = folder / f"{stem}-{number}{suffix}"
+        number += 1
+    partial = _partial_path(path)
+    try:
+        shutil.move(str(received), str(partial))
+        _publish(partial, path)  # with the mode the folder gives a new file
+    except BaseException:
+        partial.unlink(missing_ok=True)
+        path.unlink(missing_ok=True)
+        raise
+    return path
+
+
+def _no_path(_path: Path) -> bool:
+    return False
+
+
+def _write_error(error: OSError) -> str:
+    """Say why a file can't be written, e.g. "permission denied", without naming its path."""
+    return (error.strerror or "the file can't be written").lower()
 
 
 def _views(main_view: MainView) -> Iterator[View]:
@@ -335,16 +402,13 @@ class WebSession(RenderTarget):
         The file then has its own name: for an action, gone once its callbacks have run. For
         a file field, kept until the session ends or the field's next upload, and then until
         the jobs are over (see `_remove_replaced_uploads`). For a cell, until the session ends
-        or a table's upload finds no cell holding its path. One of a type they don't offer is
-        refused in the status bar. Returns what `handle_event` does.
+        or a table's upload finds no cell holding its path. With an `upload_folder`, the file
+        is the app's, in that folder: removed only if, once the edit is over, no cell holds
+        its path. One of a type they don't offer is refused in the status bar. Returns what
+        `handle_event` does.
         """
         suffix = Path(filename).suffix.lower()
-        name = safe_filename(Path(filename).name)
-        # a name of other letters alone, e.g. "データ.csv", would lose its type
-        if not name.lower().endswith(suffix):
-            name = safe_filename(f"upload{suffix}")
-        # a system's limit is near 255 bytes; the end of the name holds its type
-        name = name[-_MAX_FILE_NAME_LENGTH:]
+        name = _upload_name(filename)
         with self.lock:
             # after its session: its body took a while, and nothing would remove what is kept
             renderer = None if self.has_ended else self.renderers.get(widget_id)
@@ -361,23 +425,40 @@ class WebSession(RenderTarget):
             else:
                 return None
             # before the move below replaces the file that the field holds
-            if isinstance(renderer, (WebFilePathInputRenderer, WebFileUploadRenderer)) and (
-                not renderer.is_enabled
+            if (isinstance(renderer, WebFileUploadRenderer) and not renderer.is_enabled) or (
+                isinstance(renderer, WebFilePathInputRenderer) and not renderer.takes_upload
             ):
                 raise UnsupportedEventError(renderer, "file")
             if types and suffix not in types:
                 return self._refuse_file(filename, f"expected a {' or '.join(types)} file")
             apply = self._applying_upload(renderer, cell, Path(filename).name, media_type)
+            folder = self._upload_folder(renderer, cell)
             try:
-                path = self._moved_upload(renderer, widget_id, name, received)
-            except OSError:  # not the app's callbacks' errors, which aren't about the disk
-                return self._refuse_file(filename, _NO_ROOM)
+                path = self._moved_upload(renderer, widget_id, name, received, folder)
+            except OSError as error:  # not the app's callbacks' errors, about something else
+                return self._refuse_file(
+                    filename, _NO_ROOM if folder is None else _write_error(error)
+                )
             try:
                 return self._respond(functools.partial(apply, path))
             finally:
-                # an action's file is gone once its callbacks have run
-                if isinstance(renderer, WebActionRenderer):
-                    shutil.rmtree(path.parent, ignore_errors=True)
+                self._remove_unused_upload(renderer, folder, path)
+
+    @staticmethod
+    def _upload_folder(
+        renderer: WebTableRenderer
+        | WebActionRenderer
+        | WebFilePathInputRenderer
+        | WebFileUploadRenderer,
+        cell: tuple[int, int] | None,
+    ) -> Path | None:
+        """Get the app's folder that keeps the upload of `renderer`, if it gives one."""
+        if isinstance(renderer, WebTableRenderer):
+            assert cell is not None  # a cell `file_path_cell` found
+            return renderer.upload_folder(cell)
+        if isinstance(renderer, WebFilePathInputRenderer):
+            return renderer.upload_folder
+        return None
 
     def _applying_upload(
         self,
@@ -405,8 +486,15 @@ class WebSession(RenderTarget):
         widget_id: str,
         name: str,
         received: Path,
+        folder: Path | None,
     ) -> Path:
-        """Move a received file where the session keeps it for `renderer`; get its path."""
+        """Move a received file where the session keeps it for `renderer`; get its path.
+
+        In `folder`, the app's, if any.
+        """
+        if folder is not None:
+            is_held = renderer.holds_file if isinstance(renderer, WebTableRenderer) else _no_path
+            return _keep_in_folder(folder, name, received, is_held)
         if isinstance(renderer, WebActionRenderer):
             path = Path(tempfile.mkdtemp(prefix="composeui-"), name)
             shutil.move(str(received), str(path))
@@ -420,6 +508,28 @@ class WebSession(RenderTarget):
         # only now: a move that fails leaves the field with the file it holds
         self._hold_upload(widget_id, directory)
         return directory / name
+
+    @staticmethod
+    def _remove_unused_upload(
+        renderer: WebTableRenderer
+        | WebActionRenderer
+        | WebFilePathInputRenderer
+        | WebFileUploadRenderer,
+        folder: Path | None,
+        path: Path,
+    ) -> None:
+        """Remove an upload that its callbacks are done with."""
+        # an action's file is gone once its callbacks have run
+        if isinstance(renderer, WebActionRenderer):
+            shutil.rmtree(path.parent, ignore_errors=True)
+        # in the app's folder, e.g. the edit refused: the app has no use for it, and would
+        # never remove it
+        elif (
+            folder is not None
+            and isinstance(renderer, WebTableRenderer)
+            and not renderer.holds_file(path)
+        ):
+            path.unlink(missing_ok=True)
 
     @staticmethod
     def _hand_over(renderer: WebFileUploadRenderer, name: str, media_type: str, path: Path) -> None:

@@ -467,6 +467,8 @@ class CellWidget:
     A file path cell is typed in, and its "…" button picks a file, as `FilePathInputView`'s
     does: the toolkit's file dialog on Qt and Textual, an upload on the web, whose copy the
     session keeps while a cell holds its path. `cell_edited` then emits the file's path.
+    With `upload_folder`, the web keeps the upload in that folder instead, as the app's
+    own file, unless no cell holds its path once the edit is over, e.g. refused.
     Its button is enabled only in an editable column. With `server_roots`, the web lists
     the server's files in them instead, and refuses a path typed outside them: the cell
     keeps its text, and the status bar says why. A folder path cell and a save path cell
@@ -497,6 +499,9 @@ class CellWidget:
     server_roots: tuple[Path, ...] = attrs.field(default=(), converter=_to_paths)
     #: the folder of a path cell's relative path (see `PathInputMixin.base_folder`)
     base_folder: Optional[Path] = None
+    #: the folder that keeps a file path's upload on the web (see
+    #: `FilePathInputMixin.upload_folder`)
+    upload_folder: Optional[Path] = None
     #: whether a save path's user agrees to replace a file that exists, before it's picked
     confirms_overwrite: bool = True
     #: for `path_by`: the column of the row's kind, and the path widget of each kind
@@ -514,15 +519,21 @@ class CellWidget:
     def for_row(self, cells: Sequence[str]) -> Optional[CellWidget]:
         """Get the widget of a cell of the row `cells`: for `path_by`, its kind's, if any.
 
-        A kind's widget without a `base_folder` takes this one's.
+        A kind's widget without a `base_folder` or an `upload_folder` takes this one's.
         """
         if self.kind is not CellKind.PATH_BY_KIND:
             return self
         kind = cells[self.kind_column] if self.kind_column < len(cells) else ""
         editor = self.editors.get(kind)
-        if editor is None or editor.base_folder is not None or self.base_folder is None:
-            return editor
-        return attrs.evolve(editor, base_folder=self.base_folder)
+        if editor is None:
+            return None
+        inherited = {
+            name: getattr(self, name)
+            for name in ("base_folder", "upload_folder")
+            if getattr(editor, name) is None and getattr(self, name) is not None
+        }
+        # most rows: the editor itself, not a copy made for each cell drawn
+        return attrs.evolve(editor, **inherited) if inherited else editor
 
     def path(self, text: str) -> Path:
         """Get the path a path cell's `text` names: from `base_folder` if relative."""
@@ -564,6 +575,7 @@ class CellWidget:
         text: str = T("Choose a file"),
         server_roots: Iterable[Path] = (),
         base_folder: Optional[Path] = None,
+        upload_folder: Optional[Path] = None,
     ) -> CellWidget:
         return cls(
             CellKind.FILE_PATH,
@@ -571,6 +583,7 @@ class CellWidget:
             extensions=dict(extensions or {}),
             server_roots=_to_paths(server_roots),
             base_folder=base_folder,
+            upload_folder=upload_folder,
         )
 
     @classmethod
@@ -613,11 +626,13 @@ class CellWidget:
         kind_column: int,
         editors: Mapping[str, CellWidget],
         base_folder: Optional[Path] = None,
+        upload_folder: Optional[Path] = None,
     ) -> CellWidget:
         """Get a path cell whose widget is that of the row's kind, the text of `kind_column`.
 
         `editors` are file, folder or save path widgets, by kind. A row whose kind has none
-        shows a plain cell. `base_folder` is that of the widgets that have none.
+        shows a plain cell. `base_folder` and `upload_folder` are those of the widgets that
+        have none.
         """
         for kind, editor in editors.items():
             if not editor.kind.is_path:
@@ -629,6 +644,7 @@ class CellWidget:
             kind_column=kind_column,
             editors=dict(editors),
             base_folder=base_folder,
+            upload_folder=upload_folder,
         )
 
 

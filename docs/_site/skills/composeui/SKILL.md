@@ -198,6 +198,10 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   outside them. A `FolderPathInputView` takes a folder, and a `SavePathInputView` a file to
   save, the same way; on the web, without `server_roots`, their path is typed. Give only
   folders that every user of the app may see.
+- **Keep an uploaded file with `upload_folder`**, for example in a study's folder, rather than
+  copying the session's copy before it goes: give it to the file path input, or to
+  `CellWidget.file_path(...)`. The web then saves the upload there, under a free name, and never
+  deletes it.
   See https://ehmoussi.github.io/composeui/user-guide/widgets.html#files-on-the-server
 - **Read a relative path from the study's folder with `base_folder`**, not the process's
   working folder: `path` reads the text from it, and a path picked inside it stays relative.

@@ -28,6 +28,11 @@ backends' modules included, can change in any release without an entry here.
   keeps what each confirmation is about in a field of its own.
 - `Task.progress_reported` emits each progress value of a task's run once, for output that
   a callback appends. `Task.changed` also emits for a start, a cancel and an outcome.
+- `upload_folder`, on `FilePathInputView` and on `CellWidget.file_path` and `path_by`, keeps
+  the file that the web uploads in a folder of the app, such as the study's folder, under a
+  name that no file there has. The session never deletes it, so the app no longer copies the
+  upload before the session deletes its copy. Qt and Textual pick the user's own file, as
+  before.
 - `Job.raise_if_canceled()` stops a canceled job's function with `JobCanceledError`.
 - `Job.run_process(command)` runs a program from a job and returns its exit code. It passes
   the output and the errors to `on_output` as text, decoded from `encoding` (UTF-8 by
@@ -55,6 +60,10 @@ backends' modules included, can change in any release without an entry here.
 
 ### Fixed
 
+- On the web, an uploaded file whose name, once cut to its length limit, starts with a dot,
+  or that names a Windows device, such as `NUL.csv`, is kept under a name that starts with
+  `upload-`. Before, the first was a hidden file, which the lists of the server's files leave
+  out, and Windows lost the second.
 - `View.refusing` and `OkCancelDialogView.refusing` tell mypy that they catch the refusal.
   mypy no longer reports the code after the `with` block as unreachable.
 - A `LabelView` wraps a long line to the width of its page on every backend, and breaks a

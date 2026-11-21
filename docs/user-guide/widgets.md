@@ -225,13 +225,15 @@ class DataForm(FormView):
   refuses a file of another type.
 - **`path_picked`** emits the path of a file that the user picks with the "…" button. A typed
   path comes through the signals of any text field: `text_edited` and `editing_finished`.
+- **`upload_folder`** keeps the file that the web uploads in a folder of the app, such as the
+  study's folder, as the web's entry below says.
 - **`has_reload`** adds a reload button beside the "…" button. It emits
   `reload_clicked`, for example to read the file again after it changed.
 - **`browse_text`** and **`reload_text`** name the two buttons in a tooltip and for a screen
   reader. The catalogs translate them.
 
-The state saves `text` and `has_reload`, but not `extensions`, `server_roots`, or `base_folder`,
-which the app sets.
+The state saves `text` and `has_reload`, but not `extensions`, `server_roots`, `base_folder`, or
+`upload_folder`, which the app sets.
 
 What the "…" button opens:
 
@@ -242,6 +244,12 @@ What the "…" button opens:
   session deletes the copy after the field's next upload, once the main view's jobs are over, or
   when the session ends. With `server_roots`, the web lists the server's files instead (see
   [Files on the server](#files-on-the-server)).
+- **The web, with `upload_folder`,** puts the uploaded file in that folder, under the name the
+  user gave, reduced to letters, digits, `.`, `_` and `-`. When a file has that name already,
+  the upload gets a number, such as `data-1.csv`: it never replaces a file. The field shows the file's path, relative to `base_folder` when it
+  is in it. The file is the app's: the session never deletes it. When the folder can't take
+  the file, for example because it doesn't exist, the field keeps its path, and the status
+  bar says why. Qt and Textual ignore `upload_folder`: the user picks a file of their own.
 
 [`src/examples/markdownviewer.py`](../../src/examples/markdownviewer.py) opens a Markdown file
 with a file path input, and reads the file again when the user presses reload.

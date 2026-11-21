@@ -1503,17 +1503,32 @@ def test_an_upload_that_arrives_after_its_session_ended_stays_nowhere(
     assert list(tmp_path.iterdir()) == []
 
 
-def test_a_very_long_file_name_is_cut_and_keeps_its_type() -> None:
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "x" * 300 + ".csv",
+        "x" + "." * 300 + ".csv",  # cut, it would start with a dot: a hidden file
+        "NUL.csv",  # a device on Windows, not a file
+        "com1.data.csv",
+    ],
+    ids=["long", "cut-to-a-dot", "device", "device-of-two-types"],
+)
+def test_an_uploaded_file_s_name_is_cut_keeps_its_type_and_names_a_shown_file(
+    filename: str,
+) -> None:
     main_view = DataFileMainView()
     session = WebSession(main_view)
     measurements = main_view.form.measurements
     field = _part(measurements, "field")
 
-    _pick_file(session, field.widget_id, "x" * 300 + ".csv", b"1,2")
+    _pick_file(session, field.widget_id, filename, b"1,2")
 
-    assert measurements.path is not None
-    assert measurements.path.suffix == ".csv"
-    assert measurements.path.read_bytes() == b"1,2"
+    path = measurements.path
+    assert path is not None
+    assert (path.suffix, path.read_bytes()) == (".csv", b"1,2")
+    assert len(path.name) <= 200
+    assert not path.name.startswith(".")
+    assert path.name.split(".")[0].lower() not in ("nul", "com1")
     session.close()
 
 
@@ -2003,13 +2018,27 @@ def test_a_date_input_is_typed_in_the_language_s_format_or_picked_in_the_browser
 
 
 def _pick_file(
-    session: WebSession, widget_id: str, name: str, content: bytes, media_type: str = ""
+    session: WebSession,
+    widget_id: str,
+    name: str,
+    content: bytes,
+    media_type: str = "",
 ) -> tuple[str, str | None] | None:
     """Hand the session a file as the route does, once the file has arrived."""
     with tempfile.TemporaryDirectory() as directory:
         received = Path(directory, "upload")
         received.write_bytes(content)
         return session.pick_file(widget_id, name, received, None, media_type)
+
+
+def _pick_cell_file(
+    session: WebSession, table_id: str, row: int, name: str, content: bytes
+) -> tuple[str, str | None] | None:
+    """Hand the session a file for a table's cell, of the row and column 1, as the route does."""
+    with tempfile.TemporaryDirectory() as directory:
+        received = Path(directory, "upload")
+        received.write_bytes(content)
+        return session.pick_file(table_id, name, received, {"row": str(row), "column": "1"})
 
 
 def _store_of_data_files(saved: Path) -> SessionStore:
@@ -2380,6 +2409,26 @@ def test_a_file_path_is_typed_or_uploaded_its_copy_kept_until_the_session_ends()
     assert not picked[-1][0].exists()
 
 
+def test_a_file_path_s_upload_stays_in_the_app_s_folder_under_a_free_name(
+    tmp_path: Path,
+) -> None:
+    main_view = DataFileMainView()
+    measurements = main_view.form.measurements
+    measurements.upload_folder = tmp_path
+    session = WebSession(main_view)
+    field = _part(measurements, "field")
+    picked: list[Path] = []
+    measurements.path_picked.connect(picked.append)
+    _pick_file(session, field.widget_id, "flows.csv", b"1,2")
+    _pick_file(session, field.widget_id, "flows.csv", b"3")
+    session.close()
+    # the app's files: neither the next upload nor the session's end removes them
+    assert picked == [tmp_path / "flows.csv", tmp_path / "flows-1.csv"]
+    assert [path.read_bytes() for path in picked] == [b"1,2", b"3"]
+    assert measurements.text == str(tmp_path / "flows-1.csv")
+    assert sorted(path.name for path in tmp_path.iterdir()) == ["flows-1.csv", "flows.csv"]
+
+
 def _server_files(main_view: StudyFileMainView, root: Path) -> WebRenderer[Any]:
     """Render `main_view` with its study's files in `root`, its `.export` files; its field."""
     main_view.study.extensions = {"Code_Aster": (".export",)}
@@ -2481,6 +2530,24 @@ def test_a_file_path_with_server_roots_keeps_to_them_whatever_the_page_sends(
     ]:
         handle_event(field, "change", {"value": typed})
         assert study.path == path, typed
+
+
+def test_a_path_that_lists_the_server_s_files_refuses_an_upload_its_page_never_sends(
+    tmp_path: Path,
+) -> None:
+    # crafted: it would write in `upload_folder`, e.g. a folder of the roots
+    main_view = StudyFileMainView()
+    main_view.study.server_roots = (tmp_path,)
+    main_view.study.upload_folder = tmp_path
+    session = WebSession(main_view)
+    with pytest.raises(UnsupportedEventError):
+        _pick_file(session, _part(main_view.study, "field").widget_id, "beam.export", b"")
+    table_view = DataFilesTableMainView()
+    table = table_view.inputs
+    table.cell_widgets = {1: CellWidget.file_path(server_roots=(tmp_path,), upload_folder=tmp_path)}
+    session = WebSession(table_view)
+    _pick_cell_file(session, _widget_id(table.renderer), 0, "flows.csv", b"1,2")
+    assert (table.rows[0][1], list(tmp_path.iterdir())) == ("", [])
 
 
 #: pieces of the names a page could post for an item: separators, dots, a link out of
@@ -9139,6 +9206,82 @@ def test_a_table_s_file_path_is_uploaded_or_typed_its_copy_kept_while_a_cell_hol
         _swapped(body, table_id)
         assert "disabled" in _element(client.get("/").text, f"{table_id}-cell-0-1").attributes
         assert [edit[:2] for edit in edits] == [(0, 1), (1, 1), (0, 1), (1, 1), (1, 1)]
+
+
+def test_a_table_s_file_path_upload_stays_in_the_app_s_folder_under_a_free_name(
+    tmp_path: Path,
+) -> None:
+    main_view = DataFilesTableMainView()
+    table = main_view.inputs
+    table.cell_widgets = {
+        1: CellWidget.file_path({"CSV": (".csv",)}, base_folder=tmp_path, upload_folder=tmp_path)
+    }
+    session = WebSession(main_view)
+    table_id = _widget_id(table.renderer)
+    edits: list[str] = []
+    table.cell_edited.connect(lambda _row, _column, text: edits.append(text))
+    (tmp_path / "flows.csv").write_bytes(b"theirs")
+    _pick_cell_file(session, table_id, 0, "flows.csv", b"1,2")
+    # a name taken gets a number: the file that has it stays as it was
+    assert (edits, table.rows[0][1]) == (["flows-1.csv"], "flows-1.csv")
+    assert (tmp_path / "flows.csv").read_bytes() == b"theirs"
+    assert (tmp_path / "flows-1.csv").read_bytes() == b"1,2"
+    # a name that a cell holds is taken, even once its file is gone: the edit says the file
+    # changed
+    (tmp_path / "flows-1.csv").unlink()
+    _pick_cell_file(session, table_id, 0, "flows.csv", b"3")
+    assert (edits[-1], (tmp_path / "flows-2.csv").read_bytes()) == ("flows-2.csv", b"3")
+    # the app's file: neither a cell letting it go, the next upload, nor the session's end
+    # removes it
+    table.rows = [["Flows", ""], ["Levels", ""]]
+    _pick_cell_file(session, table_id, 1, "levels.csv", b"4")
+    session.close()
+    assert sorted(path.name for path in tmp_path.iterdir()) == [
+        "flows-2.csv",
+        "flows.csv",
+        "levels.csv",
+    ]
+
+
+def test_a_table_s_upload_that_no_cell_takes_leaves_nothing_in_the_app_s_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    main_view = DataFilesTableMainView()
+    main_view.status_bar.timeout = 0
+    table = main_view.inputs
+    folder = tmp_path / "inputs"
+    # the row's kind's widget takes the folder of `path_by`
+    editors = {"Flows": CellWidget.file_path({"CSV": (".csv",)})}
+    table.cell_widgets = {1: CellWidget.path_by(0, editors, upload_folder=folder)}
+    session = WebSession(main_view)
+    table_id = _widget_id(table.renderer)
+    # a folder that can't take the file: the cell keeps its text, the status bar says why
+    result = _pick_cell_file(session, table_id, 0, "flows.csv", b"1,2")
+    assert result is not None
+    status = _swapped(result[0], _widget_id(main_view.status_bar.renderer))
+    assert status.text == "Can't open 'flows.csv': no such file or directory."
+    assert (table.rows[0][1], folder.exists()) == ("", False)
+
+    folder.mkdir()
+    # a disk full as the file is written: neither its name nor a part of it stays
+    with monkeypatch.context() as patch:
+
+        def fill_the_disk(_partial: Path, _path: Path) -> None:
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+        patch.setattr("composeui.webcore.session._publish", fill_the_disk)
+        result = _pick_cell_file(session, table_id, 0, "flows.csv", b"1,2")
+    assert result is not None
+    status = _swapped(result[0], _widget_id(main_view.status_bar.renderer))
+    assert status.text == "Can't open 'flows.csv': no space left on device."
+    assert (table.rows[0][1], list(folder.iterdir())) == ("", [])
+
+    def refuse(_row: int, _column: int, _text: str) -> None:
+        raise EditRefusedError
+
+    table.cell_edited.connect(refuse)
+    _pick_cell_file(session, table_id, 0, "flows.csv", b"1,2")
+    assert (table.rows[0][1], list(folder.iterdir())) == ("", [])
 
 
 def test_disabling_a_container_disables_the_views_in_it() -> None:
