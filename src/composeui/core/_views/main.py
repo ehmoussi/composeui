@@ -724,7 +724,7 @@ class MainView(View):
     def can_hibernate(self) -> bool:
         """Tell whether the web may save this session to disk while it's idle, and free it.
 
-        See `WebApplication.session_idle`. An app returns False while the session holds what
+        See `WebSettings.session_idle`. An app returns False while the session holds what
         its views' state and its model's data don't, e.g. an object that a callback built
         from the user's input: the session then stays in memory.
         """

@@ -715,14 +715,14 @@ Only the GET changes: it runs `write` (`webcore/streaming.py`).
   writer that doesn't write for a while holds them that long.
 - **A server that stops.** uvicorn's graceful shutdown waits for the open answers before the
   lifespan closes the sessions, and tells the app nothing. So `run` gives uvicorn
-  `WebApplication.shutdown_timeout` as `timeout_graceful_shutdown`, which the processes of a
+  `WebSettings.shutdown_timeout` as `timeout_graceful_shutdown`, which the processes of a
   `--reload` server get too. Past it, uvicorn cancels the answers, and their `finally` cancels
   the streams. A writer that doesn't write still holds the stop until its next write.
 - **Errors.** The answer waits for the first piece before it sends its headers. A writer that
   fails before it gets a 500, and the error is logged. One that fails after it raises
   `StreamFailedError`, which breaks the connection: the browser shows a failed download, not a
   short file.
-- **Limits.** At most `WebApplication.max_download_streams` streams run at once on the server,
+- **Limits.** At most `WebSettings.max_download_streams` streams run at once on the server,
   and `max_session_download_streams` for one session (`StreamPlaces`, AnyIO `CapacityLimiter`s);
   the next wait. A stream takes its session's place first: one that waits for it holds none of
   the server's, so one browser that reads slowly can't take them all. A client that opens many

@@ -39,6 +39,13 @@ backends' modules included, can change in any release without an entry here.
 - On Qt and Textual, what jobs hand to the main thread while it is busy comes to it
   together: each progress value is still emitted, and the reactive methods run once after
   them, not once per value.
+- The web server's limits move from class variables of `WebApplication` to `WebSettings`.
+  `run(..., web_settings=WebSettings(session_ttl=..., session_idle=...))` sets them, so an
+  app that uses `run` no longer keeps the defaults. A `WebApplication` or a
+  `WebModelApplication` takes them as `settings=`. An app that set `session_ttl`,
+  `max_sessions`, `session_idle`, `max_saved_sessions`, `max_download_streams`,
+  `max_session_download_streams`, `shutdown_timeout` or `filter_patterns` in a subclass now
+  passes them in a `WebSettings`: a subclass that still sets one fails with a `TypeError`.
 
 ### Fixed
 

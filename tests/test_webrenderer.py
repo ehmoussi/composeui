@@ -71,7 +71,7 @@ from composeui.core._views.actions import SaveAsAction
 from composeui.core._views.base import made_signals
 from composeui.core._views.files import DOWNLOAD_CHUNK_SIZE, DownloadCanceledError
 from composeui.core._views.tables import SOURCE_TABLE_WINDOW
-from composeui.core.application import ModelApplication
+from composeui.core.application import ModelApplication, WebSettings
 from composeui.core.model import Model, RefusedError
 from composeui.core.registry import RendererType
 from composeui.core.renderer import NoRenderedObjectError, RendererContainer
@@ -204,7 +204,7 @@ from examples.pipeform import PipeMainView
 from examples.pipesweep import PipeSweepMainView
 from examples.studyinputs import INPUT_FOLDER, OUTPUT_FILE, PATH, StudyInputsMainView
 from examples.taskview import TaskMainView
-from examples.webhello import Colour, GreetingStyle, HelloApp, HelloMainView, NameRowView
+from examples.webhello import Colour, GreetingStyle, HelloMainView, NameRowView
 from tests.bookings import BookingMainView
 from tests.buildings import SiteMainView, SitePlanMainView, styled_site
 from tests.charts import ChartPagesMainView
@@ -279,11 +279,11 @@ class _Browser(TestClient):
         super().__init__(app, headers={"Sec-Fetch-Site": "same-origin", **(headers or {})})
 
 
-class _HelloApp(HelloApp):
+class _HelloApp(WebApplication[HelloMainView]):
     """The hello app, keeping each session's main view through the real session hook."""
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, settings: WebSettings | None = None) -> None:
+        super().__init__(build_main_view=HelloMainView, settings=settings)
         self.session_views: list[HelloMainView] = []
 
     @override
@@ -4346,12 +4346,12 @@ def test_a_session_is_built_once_and_kept_across_reloads(app: _HelloApp) -> None
     assert 'value="Bob"' in page
 
 
-class _ShortLivedHelloApp(_HelloApp):
-    session_ttl = 0.0  # every session is already idle for too long by its next request
+#: every session is already idle for too long by its next request
+_SHORT_LIVED = WebSettings(session_ttl=0.0)
 
 
 def test_an_idle_session_expires() -> None:
-    app = _ShortLivedHelloApp()
+    app = _HelloApp(_SHORT_LIVED)
     with _Browser(app.create_starlette_app()) as client:
         client.get("/")
         expired_view = app.session_views[0]
@@ -4389,26 +4389,22 @@ def test_a_session_that_expires_cancels_its_jobs() -> None:
         if not job.sleep(30):
             canceled.set()
 
-    class WorkingApp(_ShortLivedHelloApp):
+    class WorkingApp(_HelloApp):
         @override
         def setup_session(self, main_view: HelloMainView) -> None:
             super().setup_session(main_view)
             main_view.jobs.start(work)
 
-    with _Browser(WorkingApp().create_starlette_app()) as client:
+    with _Browser(WorkingApp(_SHORT_LIVED).create_starlette_app()) as client:
         client.get("/")
         client.get("/jobs")  # finds the session expired, and starts no other
 
     assert canceled.wait(10)
 
 
-class _TwoSessionsHelloApp(_HelloApp):
-    max_sessions = 2
-
-
 def test_a_full_server_refuses_new_sessions_but_keeps_its_own() -> None:
     """Requests without a cookie, which anyone can send, can't push out a user's session."""
-    app = _TwoSessionsHelloApp()
+    app = _HelloApp(WebSettings(max_sessions=2))
     web = app.create_starlette_app()
     with _Browser(web) as alice, _Browser(web) as bob, _Browser(web) as carol:
         alice.get("/")
@@ -5032,13 +5028,19 @@ def test_a_reload_server_s_next_process_removes_a_session_cut_short_by_a_crash(
     assert not cut.exists()
 
 
+#: sessions saved to disk once idle: the sweep's interval too, on the real clock
+_IDLE = WebSettings(session_idle=0.05)
+
+
 class _IdleGuestbookApp(WebModelApplication[HelloMainView, _ReleasedModel]):
     """The hello app with a model, its sessions saved to disk once idle on the test's clock."""
 
-    session_idle = 0.05  # the sweep's interval too, on the real clock
-
-    def __init__(self, build_model: Callable[[], _ReleasedModel] = _ReleasedModel) -> None:
-        super().__init__(build_main_view=HelloMainView, build_model=build_model)
+    def __init__(
+        self,
+        build_model: Callable[[], _ReleasedModel] = _ReleasedModel,
+        settings: WebSettings = _IDLE,
+    ) -> None:
+        super().__init__(build_main_view=HelloMainView, build_model=build_model, settings=settings)
         self.session_views: list[HelloMainView] = []
         self.models: list[_ReleasedModel] = []
 
@@ -5122,17 +5124,13 @@ def test_a_model_that_fails_to_close_leaves_its_session_on_disk_and_the_server_s
     assert "Can't save the idle sessions to disk." in caplog.text
 
 
-class _OneIdleGuestbookApp(_IdleGuestbookApp):
-    max_sessions = 1
-
-
 def test_a_full_server_keeps_a_session_on_disk_for_its_browser() -> None:
     """A browser whose session waits on disk gets no new session that would take its cookie.
 
     Even when a slot frees just after the server found none: e.g. the sweep saves another
     session then. Its lookup and a new session are one decision.
     """
-    app = _OneIdleGuestbookApp()
+    app = _IdleGuestbookApp(settings=attrs.evolve(_IDLE, max_sessions=1))
     web = app.create_starlette_app()
     store: SessionStore = web.state.sessions
     clock = _Clock()
@@ -5210,10 +5208,12 @@ class _LoadedNotesMainView(MainView):
 class _IdleNotesApp(WebModelApplication[_LoadedNotesMainView, _ReleasedModel]):
     """`_LoadedNotesMainView` served, its sessions saved to disk once idle on the test's clock."""
 
-    session_idle = 0.05
-
     def __init__(self) -> None:
-        super().__init__(build_main_view=_LoadedNotesMainView, build_model=_ReleasedModel)
+        super().__init__(
+            build_main_view=_LoadedNotesMainView,
+            build_model=_ReleasedModel,
+            settings=_IDLE,
+        )
         self.session_views: list[_LoadedNotesMainView] = []
         self.models: list[_ReleasedModel] = []
 
@@ -7385,8 +7385,8 @@ def test_a_session_keeps_its_newest_files_within_its_limits(
 class _ReportApp(WebApplication[ReportMainView]):
     """The report app, keeping each session's main view."""
 
-    def __init__(self) -> None:
-        super().__init__(build_main_view=ReportMainView)
+    def __init__(self, settings: WebSettings | None = None) -> None:
+        super().__init__(build_main_view=ReportMainView, settings=settings)
         self.views: list[ReportMainView] = []
 
     @override
@@ -7573,10 +7573,7 @@ async def test_a_stream_canceled_midway_waits_for_its_writer_to_end() -> None:
 
 
 def test_the_server_writes_at_most_its_streams_at_once_the_next_waiting() -> None:
-    class OneStreamApp(_ReportApp):
-        max_download_streams = 1
-
-    app = OneStreamApp()
+    app = _ReportApp(WebSettings(max_download_streams=1))
     starlette_app = app.create_starlette_app()
     limiter = starlette_app.state.stream_places.server
     first_writing, release, second_started = threading.Event(), threading.Event(), threading.Event()
@@ -7624,11 +7621,7 @@ def _session_of(starlette_app: Starlette, client: TestClient) -> WebSession:
 def test_a_session_writes_at_most_its_streams_at_once_leaving_the_others_to_other_browsers() -> (
     None
 ):
-    class OneStreamPerSessionApp(_ReportApp):
-        max_download_streams = 2
-        max_session_download_streams = 1
-
-    app = OneStreamPerSessionApp()
+    app = _ReportApp(WebSettings(max_download_streams=2, max_session_download_streams=1))
     starlette_app = app.create_starlette_app()
     first_writing, release, second_started = threading.Event(), threading.Event(), threading.Event()
 
@@ -7675,10 +7668,7 @@ def test_a_session_writes_at_most_its_streams_at_once_leaving_the_others_to_othe
 
 
 def test_a_session_that_ends_stops_its_streams_and_starts_none() -> None:
-    class OneStreamApp(_ReportApp):
-        max_download_streams = 1
-
-    app = OneStreamApp()
+    app = _ReportApp(WebSettings(max_download_streams=1))
     starlette_app = app.create_starlette_app()
     limiter = starlette_app.state.stream_places.server
     started, go = threading.Event(), threading.Event()
@@ -7719,6 +7709,7 @@ def test_a_session_that_ends_stops_its_streams_and_starts_none() -> None:
 _ENDLESS_EXPORT_APP = """
 import os, pathlib, sys, time
 from composeui.core.view import DownloadView, MainView, StreamContent, child, define_view
+from composeui.core.application import WebSettings
 from composeui.webcore.webapplication import WebApplication
 
 def write(sink):
@@ -7738,10 +7729,9 @@ class ExportMainView(MainView):
         super().__attrs_post_init__()
         self.export.content = lambda: StreamContent(write)
 
-class ExportApp(WebApplication[ExportMainView]):
-    shutdown_timeout = 1
-
-ExportApp(build_main_view=ExportMainView).run()
+WebApplication(
+    build_main_view=ExportMainView, settings=WebSettings(shutdown_timeout=1)
+).run()
 """
 
 
@@ -10118,12 +10108,21 @@ def test_a_web_app_refuses_regular_expressions_when_it_or_its_operator_says_so(
 ) -> None:
     monkeypatch.setenv("COMPOSEUI_FILTER_PATTERNS", operator_setting)
 
-    class RoomsApp(WebApplication[SortedRoomsMainView]):
-        filter_patterns = app_setting
-
-    rooms = RoomsApp(build_main_view=SortedRoomsMainView).main_view.rooms
+    rooms = WebApplication(
+        build_main_view=SortedRoomsMainView, settings=WebSettings(filter_patterns=app_setting)
+    ).main_view.rooms
     assert rooms.filter_takes_pattern(0) is is_taken
     assert (rooms.filter_error(0, "/^k/") is None) is is_taken
+
+
+def test_a_web_app_refuses_a_subclass_that_sets_a_setting_as_a_class_variable() -> None:
+    """A setting that moved to `WebSettings` stops the app, rather than being ignored."""
+    with pytest.raises(
+        TypeError, match=r"PublicApp sets filter_patterns, which moved to WebSettings"
+    ):
+
+        class PublicApp(WebApplication[SortedRoomsMainView]):
+            filter_patterns = False
 
 
 def test_a_post_can_t_filter_by_a_regular_expression_when_they_are_turned_off(

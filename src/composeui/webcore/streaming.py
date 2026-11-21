@@ -4,8 +4,8 @@
 writer on a thread of its own, outside the session's lock, and sends the pieces that it
 writes. The writer waits while `MAX_QUEUED_BYTES` wait to be sent: a slow browser slows it
 down, and a file of any size takes little memory. At most
-`WebApplication.max_download_streams` run at once on the server, and
-`WebApplication.max_session_download_streams` for one session; the next wait for one to end.
+`WebSettings.max_download_streams` run at once on the server, and
+`WebSettings.max_session_download_streams` for one session; the next wait for one to end.
 
 The thread and the answer end apart. A browser that leaves, or the session's end, cancels
 the stream: the writer's next write raises. The answer then waits for the thread, so that
@@ -27,6 +27,7 @@ from starlette.responses import PlainTextResponse, Response, StreamingResponse
 from typing_extensions import override
 
 from composeui.core._views.files import DOWNLOAD_CHUNK_SIZE, DownloadCanceledError, DownloadSink
+from composeui.core.application import WebSettings
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable, Mapping
@@ -38,13 +39,9 @@ if TYPE_CHECKING:
 
 #: the most bytes written and not sent yet, for one stream: past it, the writer waits
 MAX_QUEUED_BYTES = 4 * DOWNLOAD_CHUNK_SIZE
-#: streams written at once on the server, by default (`WebApplication.max_download_streams`)
-MAX_STREAMS = 8
-#: streams written at once for one session, by default
-#: (`WebApplication.max_session_download_streams`)
-MAX_SESSION_STREAMS = 2
 
 LOGGER = logging.getLogger("COMPOSEUI")
+_DEFAULTS = WebSettings()
 _NO_STORE = {"Cache-Control": "no-store"}
 
 
@@ -55,7 +52,11 @@ class StreamPlaces:
     its session's holds none of the server's. So one browser can't take them all.
     """
 
-    def __init__(self, total: int = MAX_STREAMS, per_session: int = MAX_SESSION_STREAMS) -> None:
+    def __init__(
+        self,
+        total: int = _DEFAULTS.max_download_streams,
+        per_session: int = _DEFAULTS.max_session_download_streams,
+    ) -> None:
         #: the server's places
         self.server = anyio.CapacityLimiter(total)
         self._per_session = per_session

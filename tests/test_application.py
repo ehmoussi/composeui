@@ -9,7 +9,7 @@ import subprocess
 import sys
 import textwrap
 import threading
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import attrs
 import pytest
@@ -19,6 +19,7 @@ from composeui.core.application import (
     BACKEND_VARIABLE,
     Application,
     ModelApplication,
+    WebSettings,
     _LogFile,
     check_writable,
     current_backend,
@@ -125,6 +126,37 @@ def test_run_starts_the_backend_the_command_line_names(
     assert app_arguments == rest
     # for a process the app starts again, e.g. the web's `--reload` server
     assert os.environ[BACKEND_VARIABLE] == backend.name.lower()
+
+
+@pytest.mark.parametrize("has_model", [False, True])
+@pytest.mark.parametrize("backend", list(RendererType))
+def test_run_gives_the_web_settings_to_the_web_backend_only(
+    backend: RendererType, monkeypatch: pytest.MonkeyPatch, *, has_model: bool
+) -> None:
+    # Any: only the web's app has the `settings` that the test reads
+    started: list[Any] = []
+    module = pytest.importorskip(backend.value.applications)
+    application = module.MODEL_APPLICATION if has_model else module.APPLICATION
+
+    def record(app: Any) -> None:
+        started.append(app)
+
+    monkeypatch.setattr(application, "run", record)
+    monkeypatch.setattr("sys.argv", ["count", "--backend", backend.name.lower()])
+    monkeypatch.delenv(BACKEND_VARIABLE, raising=False)
+    settings = WebSettings(session_ttl=60.0)
+
+    run(
+        _CountMainView,
+        build_model=Model if has_model else None,
+        web_settings=settings,
+    )
+
+    # Qt and Textual take no settings: passing them would fail to build the app
+    (app,) = started
+    assert type(app) is application
+    if backend is RendererType.WEB:
+        assert app.settings is settings
 
 
 @pytest.mark.parametrize("kind", ["APPLICATION", "MODEL_APPLICATION"])
