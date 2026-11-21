@@ -325,7 +325,8 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   map. Follow OpenStreetMap's tile policy.
   See https://ehmoussi.github.io/composeui/user-guide/maps.html
 - **Mark user-visible text for translation** with `T("...")` or `self.tr("...")`
-  (`T` is in `composeui.core.view`).
+  (`T` is in `composeui.core.view`). Join translated text with `join_text(separator, parts)`,
+  not `str.join`, whose result stays in its language.
   See https://ehmoussi.github.io/composeui/user-guide/translation.html
 - **Ask a confirmation with `dialog.ask(on_accept, on_reject=None)`**, not a field that
   keeps what the dialog is about: it opens the dialog and calls one function once the user

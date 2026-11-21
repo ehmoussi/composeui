@@ -15,11 +15,11 @@ from typing import TYPE_CHECKING, Any, Callable, Protocol, runtime_checkable
 from typing_extensions import override
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Iterable, Mapping, Sequence
 
     from typing_extensions import Self
 
-__all__ = ["T", "TranslatedText", "translator"]
+__all__ = ["T", "TranslatedText", "join_text", "translator"]
 
 #: translates a text as written in the code into a language
 Translate = Callable[[str], str]
@@ -144,8 +144,8 @@ class TranslatedText(str):  # noqa: SLOT000
 
     `MainView.set_language` translates it again wherever a view keeps it: in a field, a
     list (a table's headers) or a dict's keys (a choice's labels). Formatting it keeps the
-    arguments, to format the next translation with them. Other str methods return a plain
-    str, which stays in its language.
+    arguments, to format the next translation with them. Text that `join_text` joins
+    follows too. Other str methods return a plain str, which stays in its language.
 
     Built from `text` alone (as `T`), it is the text as written. It is translated once a
     view keeps it and the main view sets a language. Use it for text declared where no
@@ -186,6 +186,45 @@ class TranslatedText(str):  # noqa: SLOT000
         args = tuple(translate_again(arg, translate) for arg in args)
         kwargs = {key: translate_again(value, translate) for key, value in kwargs.items()}
         return TranslatedText(text.format(*args, **kwargs), self.source, (args, kwargs))
+
+
+class _JoinedText(TranslatedText):
+    """Text `join_text` joined, joining its separator and parts again once translated."""
+
+    #: the parts, as given, each `TranslatedText` or a plain str
+    parts: tuple[str, ...]
+
+    def __new__(cls, separator: str, parts: tuple[str, ...]) -> Self:
+        # the separator stays the source: nothing looks the joined text up in a catalog
+        self = super().__new__(cls, separator.join(parts), separator)
+        self.parts = parts
+        return self
+
+    @override
+    def __getnewargs__(self) -> tuple[str, tuple[str, ...]]:  # type: ignore[override]
+        return (self.source, self.parts)
+
+    @override
+    def format(self, *args: Any, **kwargs: Any) -> TranslatedText:
+        msg = "format the parts of a joined text, then join them"
+        raise TypeError(msg)
+
+    @override
+    def translated(self, translate: Translate) -> TranslatedText:
+        return _JoinedText(
+            translate_again(self.source, translate),
+            tuple(translate_again(part, translate) for part in self.parts),
+        )
+
+
+def join_text(separator: str, parts: Iterable[str]) -> TranslatedText:
+    """Join `parts` with `separator`, as `str.join` does, as text that follows the language.
+
+    `MainView.set_language` translates the separator and each part that is `TranslatedText`
+    again, then joins them again: ``join_text(" · ", [self.tr("Mesh"), name])``. Format each
+    part before joining them.
+    """
+    return _JoinedText(separator, tuple(parts))
 
 
 #: text to translate, as written in the code, wherever it's declared:

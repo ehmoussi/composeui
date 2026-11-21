@@ -18,6 +18,7 @@ from composeui.core.application import _add_reference_to_signals
 from composeui.core.translation import (
     T,
     TranslatedText,
+    join_text,
     load_catalog,
     no_translation,
     translate_again,
@@ -272,9 +273,13 @@ _FRENCH = {
     "{n} rooms": "{n} pièces",
     "{a} and {b}": "{b} et {a}",
     "{} of {}": "{} de {}",
+    " or ": " ou ",
 }
 
-#: text as a tree: a word, a number, or a text formatted with the texts under it
+#: the separators of joined text: one translated, one no one translates
+_SEPARATORS = (" or ", " · ")
+
+#: text as a tree: a word, a number, or a text formatted or joined with the texts under it
 _Text = Any
 
 
@@ -288,6 +293,7 @@ def _texts() -> st.SearchStrategy[_Text]:
                 st.sampled_from(["{a} and {b}", "{} of {}"]),
                 st.lists(inner, min_size=2, max_size=2),
             ),
+            st.tuples(st.sampled_from(_SEPARATORS), st.lists(inner, max_size=3)),
         ),
         max_leaves=6,
     )
@@ -301,6 +307,9 @@ def _as_written(text: _Text) -> Any:
         return text if text == "plain" else T(text)
     source, under = text
     values = [_as_written(value) for value in under]
+    if source in _SEPARATORS:
+        separator = T(source) if source == " or " else source
+        return join_text(separator, [str(v) if isinstance(v, int) else v for v in values])
     if source == "{n} rooms":
         return T(source).format(n=values[0])
     return (
@@ -318,6 +327,8 @@ def _built_in(text: _Text, translate: Any) -> Any:
         return text if text == "plain" else translate(text)
     source, under = text
     values = [str(_built_in(value, translate)) for value in under]
+    if source in _SEPARATORS:
+        return (translate(source) if source == " or " else source).join(values)
     if source == "{n} rooms":
         return translate(source).format(n=values[0])
     if source == "{} of {}":
@@ -329,7 +340,10 @@ def _built_in(text: _Text, translate: Any) -> Any:
 def test_text_translated_again_is_the_text_built_in_that_language(
     texts: list[_Text], kind: type
 ) -> None:
+    looked_up: set[str] = set()
+
     def french(text: str) -> str:
+        looked_up.add(text)
         return _FRENCH.get(text, text)
 
     def shown(value: Any) -> Any:
@@ -347,6 +361,8 @@ def test_text_translated_again_is_the_text_built_in_that_language(
         else:
             assert [shown(value) for value in held] == expected
         assert type(held) is kind  # a tuple stays a tuple
+    # only text as written: a catalog never needs a joined text
+    assert looked_up <= _FRENCH.keys()
 
 
 def test_text_made_from_a_translation_stays_in_its_language(tmp_path: Path) -> None:
@@ -361,10 +377,22 @@ def test_text_made_from_a_translation_stays_in_its_language(tmp_path: Path) -> N
 
 def test_a_copied_translation_remembers_its_text() -> None:
     text = TranslatedText("Rouge {n}", "Red {n}").format(n=TranslatedText("un", "one"))
+    joined = join_text(" · ", [text, TranslatedText("Bleu", "Blue")])
 
-    for copied in (copy.copy(text), copy.deepcopy(text)):
-        assert copied == "Rouge un"
-        assert copied.translated(no_translation) == "Red one"
+    for original, shown, written in (
+        (text, "Rouge un", "Red one"),
+        (joined, "Rouge un · Bleu", "Red one · Blue"),
+    ):
+        for copied in (copy.copy(original), copy.deepcopy(original)):
+            assert copied == shown
+            assert copied.translated(no_translation) == written
+
+
+def test_formatting_a_joined_text_fails_rather_than_losing_the_language() -> None:
+    joined = join_text(" · ", [T("{n} rooms")])
+
+    with pytest.raises(TypeError, match="format the parts"):
+        joined.format(n=2)
 
 
 def test_new_keeps_the_language_of_text_set_where_the_view_is_built(tmp_path: Path) -> None:

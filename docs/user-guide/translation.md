@@ -50,9 +50,13 @@ base language (`fr.json`). Text that no catalog translates shows as written.
 
 - **Formatted text follows too.** `self.tr("Picked {color}").format(color=self.tr("Red"))`
   is formatted again in the new language, and its translated arguments are translated too.
+- **Joined text follows too, with `join_text`** (from `composeui.core.view`).
+  `join_text(" · ", [self.tr("Inputs: {n}").format(n=1), self.tr("Mesh ready")])` joins the
+  parts again in the new language. `" · ".join(...)` gives a `str` that stays in its language.
+  Format each part before joining them: formatting the joined text raises a `TypeError`.
 - **Text set without `tr` stays as it is,** and so does text made from a translation
-  (`self.tr("Name") + ":"`, an f-string). For text that a view builds from other text,
-  override `retranslate`. It runs once when the view is built, then on each change of
+  (`self.tr("Name") + ":"`, an f-string, `str.join`). For text that a view builds from other
+  text, override `retranslate`. It runs once when the view is built, then on each change of
   language, once the text is translated.
 - **A choice keeps its value.** The value stays selected when its labels change. A study
   saves it by a key that no language changes: the name of an enum member, a string value

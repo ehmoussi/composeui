@@ -11,6 +11,9 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `join_text(separator, parts)`, in `composeui.core.view` and `composeui.core.translation`,
+  joins text that follows the language: `MainView.set_language` translates the separator and
+  the parts again, then joins them again. `str.join` gives text that stays in its language.
 - `Task.disables(*views, enabled_if=...)` keeps a view's own condition, such as a path to fill
   first: the views are enabled only while the task is not running and the condition is true.
   Before, an app that set `is_enabled` itself saw the end of each run enable the views again.
