@@ -263,6 +263,9 @@ class Task(Generic[R, P, ProgressT]):
         self._progress: ProgressT | None = None
         self._result: R | None = None
         self._error: Exception | None = None
+        # set the `is_enabled` of the views of `disables` and `cancel_with`: an opened study
+        # loads it as it saved it, e.g. during a run, so `Jobs._set_enabled` sets it again
+        self._enablers: list[Callable[[], None]] = []
         self._reset()
 
     @property
@@ -367,18 +370,29 @@ class Task(Generic[R, P, ProgressT]):
             job.cancel()
             self.changed.emit()
 
-    def disables(self, *views: View) -> None:
+    def disables(self, *views: View, enabled_if: Callable[[], bool] | None = None) -> None:
         """Disable `views` while this task runs, from now on, e.g. the fields of its run.
 
         The task sets their `is_enabled` at each start and outcome, a failure or a
-        cancel's included, and when New or Open drop the run.
+        cancel's included, and when New or Open drop the run. It owns `is_enabled`: for a
+        view with a condition of its own, e.g. a field to fill first, give `enabled_if`.
+        The views are then enabled only while the task isn't running and it returns True,
+        checked again each time a view field or a task's state that it read changes.
         """
 
-        def follow() -> None:
-            for view in views:
-                view.is_enabled = not self.is_running
+        def update(view: View) -> None:
+            view.is_enabled = not self.is_running and (enabled_if is None or enabled_if())
 
-        self.changed.connect(follow, now=True)
+        def update_all() -> None:
+            for view in views:
+                update(view)
+
+        self._enablers.append(update_all)
+        self.changed.connect(update_all, now=True)
+        if enabled_if is not None:
+            for view in views:
+                # as a reactive method of `view`: the condition's reads are its inputs
+                follow(view, "disables", functools.partial(update, view))
 
     def cancel_with(self, *controls: ButtonView | ActionView) -> None:
         """Cancel the run when one of `controls` is clicked or triggered, from now on.
@@ -388,14 +402,15 @@ class Task(Generic[R, P, ProgressT]):
         """
         from composeui.core.view import ActionView  # noqa: PLC0415 (it imports this module)
 
-        def follow() -> None:
+        def update() -> None:
             for control in controls:
                 control.is_enabled = self.is_running and not self.is_canceled
 
         for control in controls:
             signal = control.triggered if isinstance(control, ActionView) else control.clicked
             signal.connect(self.cancel)
-        self.changed.connect(follow, now=True)
+        self._enablers.append(update)
+        self.changed.connect(update, now=True)
 
     def show_state(
         self,
@@ -427,6 +442,11 @@ class Task(Generic[R, P, ProgressT]):
 
         # as a reactive method of `status`: the task's state is its input
         follow(status, "show_state", show_state)
+
+    def _set_enabled(self) -> None:
+        """Enable or disable the views of `disables` and `cancel_with` for this task's state."""
+        for enable in self._enablers:
+            enable()
 
     def _reset(self) -> None:
         self._job = None
@@ -1047,6 +1067,13 @@ class Jobs:
             # unless a callback before removed its list's row: its widgets may be deleted
             if task._jobs is self:  # noqa: SLF001 (shared task lifecycle)
                 task.changed.emit()
+
+    @batch()
+    def _set_enabled(self) -> None:
+        """Enable or disable the views that the tasks own, e.g. once a study is loaded."""
+        for task in self._live_tasks():
+            # a method of `Task` that only its jobs call: not for apps
+            task._set_enabled()  # noqa: SLF001
 
     def wait(self, timeout: float = 10.0) -> None:
         """Wait for every job to be over, and emit the results here: for a main view not rendered.

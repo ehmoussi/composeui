@@ -11,6 +11,9 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `Task.disables(*views, enabled_if=...)` keeps a view's own condition, such as a path to fill
+  first: the views are enabled only while the task is not running and the condition is true.
+  Before, an app that set `is_enabled` itself saw the end of each run enable the views again.
 - `JobSlots`, in `composeui.core.jobs`, lets at most a number of jobs run a block at once, for
   every session of the process. The other jobs wait in line, first come first served, and
   `on_wait` gets each job's place. A job canceled while it waits leaves the line.
@@ -60,6 +63,9 @@ backends' modules included, can change in any release without an entry here.
 
 ### Fixed
 
+- Opening a study saved during a run enables the views of `Task.disables` and disables the
+  controls of `Task.cancel_with`, as Open drops the run. Before, they kept their state in the
+  saved study: the fields stayed disabled and Stop enabled, with no run going on.
 - On the web, an uploaded file whose name, once cut to its length limit, starts with a dot,
   or that names a Windows device, such as `NUL.csv`, is kept under a name that starts with
   `upload-`. Before, the first was a hidden file, which the lists of the server's files leave

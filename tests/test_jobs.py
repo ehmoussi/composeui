@@ -11,6 +11,7 @@ import threading
 import weakref
 from typing import TYPE_CHECKING, cast
 
+import attrs
 import pytest
 from typing_extensions import override
 
@@ -20,6 +21,7 @@ from composeui.core.model import Model, RefusedError
 from composeui.core.reactivity import reactive, start_reactions
 from composeui.core.registry import RendererType
 from composeui.core.view import (
+    OMIT,
     ActionView,
     ButtonView,
     InputView,
@@ -114,6 +116,31 @@ class _Rows(ListView[int]):
 class _PanelsView(MainView):
     panel: _Panel = child(_Panel)
     rows: _Rows = child(_Rows)
+
+
+@define_view
+class _SolverView(MainView):
+    """A main view whose task enables and disables views, with `disables` and `cancel_with`."""
+
+    #: not in the study, e.g. a setting of the app: New and Open keep it
+    path: InputView = attrs.field(
+        factory=lambda: InputView(text="study.comm"), metadata={OMIT: True}
+    )
+    study: InputView = child(InputView)
+    open_file: ButtonView = child(ButtonView)
+    stop: ButtonView = child(ButtonView)
+
+    @override
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.release = threading.Event()
+        self.solver = self.jobs.task(self._solve)
+        self.solver.disables(self.study)
+        self.solver.disables(self.open_file, enabled_if=lambda: self.path.text != "")
+        self.solver.cancel_with(self.stop)
+
+    def _solve(self, _job: Job[None]) -> None:
+        assert self.release.wait(5)
 
 
 def test_a_job_s_result_is_emitted_with_what_its_callbacks_ask_for(
@@ -903,6 +930,66 @@ def test_a_task_disables_its_views_while_it_runs_and_enables_its_stop_until_aske
     view.reset_state()
     assert (source.is_enabled, stop.is_enabled) == (True, False)
     view.jobs.wait()
+
+
+def test_a_view_that_a_task_disables_keeps_its_own_condition_after_the_run() -> None:
+    view = MainView()
+    started, release = threading.Event(), threading.Event()
+
+    def work(_job: Job[None]) -> None:
+        started.set()
+        assert release.wait(5)
+
+    task = view.jobs.task(work)
+    path, open_file = InputView(), ButtonView()
+    task.disables(open_file, enabled_if=lambda: path.text != "")
+    states = [open_file.is_enabled]
+    path.text = "study.comm"
+    states.append(open_file.is_enabled)
+    try:
+        task.start()
+        assert started.wait(5)
+        states.append(open_file.is_enabled)
+        path.text = ""  # cleared during the run
+        path.text = "other.comm"  # filled again: the run still disables it
+        states.append(open_file.is_enabled)
+        path.text = ""
+    finally:
+        release.set()
+        view.jobs.wait()
+    states.append(open_file.is_enabled)  # the run is over, the path still empty
+    path.text = "study.comm"
+    states.append(open_file.is_enabled)
+    assert states == [False, True, False, False, False, True]
+
+
+def test_opening_a_study_saved_during_a_run_enables_the_task_s_views_as_no_run_goes_on(
+    tmp_path: Path,
+) -> None:
+    view = _SolverView()
+    view.solver.start()
+    try:
+        view.save_state(tmp_path / "study.json")
+    finally:
+        view.release.set()
+        view.jobs.wait()
+    view.load_state(tmp_path / "study.json")
+    assert not view.solver.is_running
+    assert (view.study.is_enabled, view.open_file.is_enabled, view.stop.is_enabled) == (
+        True,
+        True,
+        False,
+    )
+
+
+def test_new_keeps_the_condition_of_a_view_on_a_field_that_the_study_doesn_t_hold() -> None:
+    view = _SolverView()
+    view.path.text = ""
+    assert not view.open_file.is_enabled
+    view.reset_state()
+    assert view.path.text == ""
+    # a newly built main view, whose path is filled, enables it
+    assert not view.open_file.is_enabled
 
 
 def test_canceling_a_task_at_startup_leaves_other_jobs_running() -> None:

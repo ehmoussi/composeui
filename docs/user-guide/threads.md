@@ -514,7 +514,17 @@ assert main_view.solver.result == "beam.comm: stopped"
   it is asked to stop. `task.cancel()` sets `is_canceled`, and `changed` emits: a
   `changed` callback can show "Stopping..." until the run is over.
 - **The task's views.** The task alone sets their `is_enabled`: do not set it from another
-  callback too.
+  callback or a reactive method too. For a view with a condition of its own, give it to
+  `disables` as `enabled_if`. The view is then enabled only while the task is not running
+  and the condition is true:
+
+  ```python
+  self.solver.disables(self.run, enabled_if=lambda: self.form.study.text != "")
+  ```
+
+  The task checks the condition again each time a view field that it reads changes, as a
+  [reactive method](reactive-methods.md) does. An empty study then disables Run, also after
+  a run.
 
 ## Data shared by the sessions
 
