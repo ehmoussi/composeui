@@ -21,7 +21,7 @@ from composeui.core.translationcheck import (
     main,
     write_catalog,
 )
-from composeui.core.view import define_view
+from composeui.core.view import LabelView, T, child, define_view
 from examples import pipecatalogue
 from examples.pipeform import PipeMainView
 from tests.translated import TranslatedMainView
@@ -233,6 +233,25 @@ def test_a_regional_catalog_starts_from_its_base_language_s(tmp_path: Path) -> N
     assert path == tmp_path / "fr-CA.json"
     assert json.loads(path.read_text("utf-8"))["Size"] == "Taille"
     assert "Size" not in added
+
+
+@define_view
+class _UnwritableMainView(TranslatedMainView):
+    # a lone surrogate, which UTF-8 can't encode: writing the catalog fails once it started
+    unwritable: LabelView = child(LabelView, text=T(chr(0xD800)))
+
+
+def test_a_catalog_that_fails_to_be_written_stays_as_it_was(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "fr.json").write_text('{"Size": "Taille"}', "utf-8")
+    monkeypatch.setattr(_UnwritableMainView, "translations_dir", tmp_path)
+
+    with pytest.raises(UnicodeEncodeError):
+        write_catalog(_UnwritableMainView, "fr")
+
+    assert [path.name for path in tmp_path.iterdir()] == ["fr.json"]
+    assert (tmp_path / "fr.json").read_text("utf-8") == '{"Size": "Taille"}'
 
 
 def test_text_translated_as_empty_is_missing(tmp_path: Path) -> None:
