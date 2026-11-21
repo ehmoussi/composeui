@@ -24,6 +24,7 @@ from composeui.core.view import (
     CellKind,
     CellWidget,
     ConsoleView,
+    DownloadedFile,
     FilePathInputView,
     FormView,
     GroupFormView,
@@ -626,4 +627,20 @@ def test_an_app_s_test_reads_the_files_it_gives_without_a_backend() -> None:
     assert [(file.filename, file.content) for file in app.main_view.downloads] == [
         ("report é.csv", b"a,b\n1,2\n"),  # without the folder
         ("later.csv", b"a,b\n1,2\n"),
+    ]
+
+
+def test_a_download_view_gives_the_name_and_type_its_content_chooses_at_the_click() -> None:
+    main_view = Application(build_main_view=ReportMainView).main_view
+
+    # a type that no extension gives: not guessed from the name
+    main_view.report = DownloadedFile("runs/run-1.out", b"one", "text/plain")
+    main_view.export.clicked.emit()
+    main_view.report = DownloadedFile("run-2.out", b"two", "text/plain")
+    main_view.later.clicked.emit()
+    main_view.jobs.wait()
+
+    assert [(file.filename, file.content, file.media_type) for file in main_view.downloads] == [
+        ("run-1.out", b"one", "text/plain"),  # without the folder
+        ("run-2.out", b"two", "text/plain"),
     ]
