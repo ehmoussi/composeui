@@ -302,7 +302,9 @@ def test_a_process_stopping_on_sigterm_gets_its_last_output_to_on_output() -> No
             if "ready" in "".join(output):
                 job.cancel()
 
-        return job.run_process([sys.executable, "-c", script], on_output=on_output)
+        # a busy machine can be slow to run the handler: no SIGKILL before it does
+        command = [sys.executable, "-c", script]
+        return job.run_process(command, on_output=on_output, grace=60)
 
     assert isinstance(_outcome(work), JobCanceledError)
     assert "".join(output) == "ready\nsaved\n"

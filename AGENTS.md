@@ -238,7 +238,9 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - `make test` fails below 100% coverage of lines and branches (`fail_under` in
   `pyproject.toml`, child processes included). A new line comes with its test, or with a
   `# pragma: no cover` that says why no test reaches it. A line only POSIX runs gets a
-  `# posix only` comment, which coverage leaves out on Windows (`make.ps1`).
+  `# posix only` comment, which coverage leaves out on Windows (`make.ps1`). A line only
+  Windows runs gets a `# windows only` comment, which coverage leaves out elsewhere
+  (`Makefile`).
 - `make check test` must be clean before committing; CI (`.github/workflows/ci.yml`) runs the
   same checks on Python 3.9 to 3.14 for every pull request and push to `main`, and the tests
   on Windows (`.\make.ps1 translations test`) and macOS (`make translations test`), on

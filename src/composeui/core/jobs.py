@@ -12,12 +12,13 @@ import logging
 import operator
 import os
 import queue
+import selectors
 import signal
 import subprocess
 import threading
 import time
 import weakref
-from typing import IO, TYPE_CHECKING, Any, Callable, Generic
+from typing import IO, TYPE_CHECKING, Any, Callable, Generic, Optional
 
 from typing_extensions import Concatenate, ParamSpec, TypeVar, TypeVarTuple, Unpack
 
@@ -199,35 +200,27 @@ class Job(Generic[R, ProgressT]):
         )
         with _RUNNING_LOCK:
             _RUNNING[process] = grace
-        # the text of both streams, each with the callback it goes to, in the order it's read
-        output: queue.SimpleQueue[tuple[Callable[[str], object] | None, str]]
-        output = queue.SimpleQueue()
-        streams = [(process.stdout, on_output), (process.stderr, on_errors)]
-        readers = [
-            threading.Thread(
-                target=_read_output,
-                args=(stream, decoder(errors="replace"), target, output),
-                name="composeui-output",
-                daemon=True,
-            )
-            for stream, target in streams
+        streams = [
+            (stream, target)
+            for stream, target in [(process.stdout, on_output), (process.stderr, on_errors)]
             if stream is not None
         ]
+        output = _PROCESS_OUTPUT(streams, decoder)
         started = time.monotonic()
         try:
-            for reader in readers:
-                reader.start()
+            output.start()
             while process.poll() is None:
                 self.raise_if_canceled()
                 _raise_past(timeout, started, command)
-                _pass_output(output, _PROCESS_POLL)
+                output.pass_output(_PROCESS_POLL)
         except (JobCanceledError, subprocess.TimeoutExpired):
-            _end_process(process, grace, readers, output)
+            _end_process(process, grace, output)
             raise
         except BaseException:
             _stop(process, grace)  # e.g. `on_output` failed: it isn't called again
+            output.close()
             raise
-        _end_process(process, grace, readers, output)
+        _end_process(process, grace, output)
         return process.returncode
 
 
@@ -580,11 +573,122 @@ def _debounced(
     return work(job, *args, **kwargs)
 
 
-def _read_output(
+#: a stream of a process, with the callback its text goes to
+_Stream = tuple[IO[bytes], Optional[Callable[[str], object]]]
+#: a text read, with the callback it goes to
+_Part = tuple[Optional[Callable[[str], object]], str]
+
+
+class _SelectedOutput:  # posix only
+    """The output of a process, read in the job's thread as it comes.
+
+    Once the process's session is gone, all that it wrote is in the pipes already: the rest
+    of the output is read without waiting for another thread, which a busy machine can hold.
+    """
+
+    def __init__(
+        self, streams: list[_Stream], decoder: Callable[..., codecs.IncrementalDecoder]
+    ) -> None:
+        self._selector = selectors.DefaultSelector()
+        for stream, target in streams:
+            # what the selector gives back: its file is only known to have a number
+            self._selector.register(
+                stream, selectors.EVENT_READ, (stream, target, decoder(errors="replace"))
+            )
+
+    def start(self) -> None:
+        """Nothing to start: the job's thread reads."""
+
+    def pass_output(self, wait: float) -> None:
+        """Give its callback the text that came, waiting up to `wait` seconds for some."""
+        _give(self._read(wait))
+
+    def finish(self) -> None:
+        """Give its callback the rest of the text, once the process's session is gone."""
+        parts: list[_Part] = []
+        # a process that left the session can hold a pipe and write on: what the session
+        # left is at the start of the pipe, which holds less than these reads take
+        for _ in range(_OUTPUT_END_READS):
+            parts.extend(self._read(0.0))
+        _give(parts)
+
+    def close(self) -> None:
+        """Close the pipes still open."""
+        for key in list(self._selector.get_map().values()):
+            self._unregister(key.data[0])
+        self._selector.close()
+
+    def _read(self, wait: float) -> list[_Part]:
+        """Read each pipe that has text or its end, waiting up to `wait` seconds for one."""
+        parts = []
+        for key, _ in self._selector.select(wait):
+            stream, target, decoder = key.data
+            # what the process has written, without waiting for a whole chunk
+            data = os.read(key.fd, _OUTPUT_CHUNK)
+            parts.append((target, decoder.decode(data, final=data == b"")))
+            if data == b"":
+                self._unregister(stream)
+        return parts
+
+    def _unregister(self, stream: IO[bytes]) -> None:
+        """Stop reading `stream`, and close it."""
+        self._selector.unregister(stream)
+        stream.close()
+
+
+class _ThreadedOutput:  # windows only
+    """The output of a process, read by a thread per pipe: Windows can't select a pipe."""
+
+    def __init__(
+        self, streams: list[_Stream], decoder: Callable[..., codecs.IncrementalDecoder]
+    ) -> None:
+        # the text of both streams, with the callback it goes to, in the order it's read
+        self._output: queue.SimpleQueue[_Part] = queue.SimpleQueue()
+        self._readers = [
+            threading.Thread(
+                target=_read_output,
+                args=(stream, decoder(errors="replace"), target, self._output),
+                name="composeui-output",
+                daemon=True,
+            )
+            for stream, target in streams
+        ]
+
+    def start(self) -> None:
+        """Start the threads that read."""
+        for reader in self._readers:
+            reader.start()
+
+    def pass_output(self, wait: float) -> None:
+        """Give its callback the text read so far, waiting up to `wait` seconds for some."""
+        parts = []
+        try:
+            if wait > 0:
+                parts.append(self._output.get(timeout=wait))
+            while True:
+                parts.append(self._output.get_nowait())
+        except queue.Empty:
+            pass
+        _give(parts)
+
+    def finish(self) -> None:
+        """Give its callback the rest of the text, once the process is stopped."""
+        # what's left is a pipe's buffer, unless a process that the stopped one started
+        # holds the output: it isn't waited for
+        deadline = time.monotonic() + _OUTPUT_END_WAIT
+        for reader in self._readers:
+            reader.join(max(deadline - time.monotonic(), 0.0))
+        self.pass_output(0.0)
+
+    def close(self) -> None:
+        """Nothing to close: each thread closes its pipe at its end."""
+
+
+def _read_output(  # windows only
     stream: IO[bytes],
     decoder: codecs.IncrementalDecoder,
     target: Callable[[str], object] | None,
-    output: queue.SimpleQueue[tuple[Callable[[str], object] | None, str]],
+    output: queue.SimpleQueue[_Part],
 ) -> None:
     """Put the text that `stream` gives in `output`, for `target`, until its end.
 
@@ -597,18 +701,8 @@ def _read_output(
     output.put((target, decoder.decode(b"", final=True)))
 
 
-def _pass_output(
-    output: queue.SimpleQueue[tuple[Callable[[str], object] | None, str]], wait: float
-) -> None:
-    """Give its callback all the text read so far, waiting up to `wait` seconds for some."""
-    parts = []
-    try:
-        if wait > 0:
-            parts.append(output.get(timeout=wait))
-        while True:
-            parts.append(output.get_nowait())
-    except queue.Empty:
-        pass
+def _give(parts: list[_Part]) -> None:
+    """Give each text of `parts` to its callback."""
     # each text that follows one for the same callback goes with it, in one call
     for target, texts in itertools.groupby(parts, key=operator.itemgetter(0)):
         text = "".join(text for _, text in texts)
@@ -627,17 +721,14 @@ def _raise_past(
 def _end_process(
     process: subprocess.Popen[bytes],
     grace: float,
-    readers: list[threading.Thread],
-    output: queue.SimpleQueue[tuple[Callable[[str], object] | None, str]],
+    output: _SelectedOutput | _ThreadedOutput,
 ) -> None:
     """Stop `process` if it runs, and give its callbacks the rest of its output."""
-    _stop(process, grace)
-    # what's left is a pipe's buffer, unless a process left holds the output, e.g. one
-    # started on Windows: it isn't waited for
-    deadline = time.monotonic() + _OUTPUT_END_WAIT
-    for reader in readers:
-        reader.join(max(deadline - time.monotonic(), 0.0))
-    _pass_output(output, 0.0)
+    try:
+        _stop(process, grace)
+        output.finish()
+    finally:
+        output.close()
 
 
 def _stop(process: subprocess.Popen[bytes], grace: float) -> None:
@@ -707,8 +798,13 @@ atexit.register(stop_running_processes)
 _PROCESS_POLL = 0.05
 #: the most bytes of a process's output read at once
 _OUTPUT_CHUNK = 65536
-#: seconds to read the rest of a process's output, once it's stopped
+#: on POSIX, the most reads of a pipe once its process's session is gone: more than a pipe
+#: holds (1 MiB on Linux, unless enlarged, 64 KiB on macOS)
+_OUTPUT_END_READS = 16
+#: on Windows, seconds to read the rest of a process's output, once it's stopped
 _OUTPUT_END_WAIT = 2.0
+# how the output of a process run by `Job.run_process` is read
+_PROCESS_OUTPUT = _SelectedOutput if os.name == "posix" else _ThreadedOutput
 
 
 class Jobs:

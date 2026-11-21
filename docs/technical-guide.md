@@ -1061,6 +1061,9 @@ Every behavior change needs a test in `tests/`.
 - A line that only POSIX runs, such as the kill of a process that ignores its
   termination, gets a `# posix only` comment. On Windows, `make.ps1` sets
   `COMPOSEUI_POSIX_ONLY`, and coverage leaves these lines out.
+- A line that only Windows runs, such as the threads that read a process's output, gets a
+  `# windows only` comment. On Linux and macOS, the `Makefile` sets
+  `COMPOSEUI_WINDOWS_ONLY`, and coverage leaves these lines out.
 
 ### Translations
 
