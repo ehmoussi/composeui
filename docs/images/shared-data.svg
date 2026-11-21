@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 535" width="1000" height="535" role="img" aria-labelledby="title desc">
+  <title id="title">One shared load, two jobs</title>
+  <desc id="desc">Job A starts a shared load in a separate thread and waits. Job B joins
+    the same load instead of starting another one. If only Job A cancels, the load continues
+    for Job B. If only Job B cancels, it continues for Job A. If both jobs cancel while the
+    load is running, ComposeUI asks it to stop and discards any result.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="head"/>
+    </marker>
+    <style>
+      .card { fill: #ffffff; stroke: #d0d7de; }
+      text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; fill: #1f2937; font-size: 12px; }
+      .muted { fill: #57606a; }
+      .region { font-size: 13px; font-weight: 600; letter-spacing: 0.04em; fill: #57606a; }
+      .title { font-size: 14px; font-weight: 600; }
+      .job { fill: #ecfdf5; stroke: #10b981; }
+      .load { fill: #eef2ff; stroke: #6366f1; }
+      .active { fill: #c7d2fe; stroke: #6366f1; }
+      .note { fill: #ffffff; stroke: #d0d7de; }
+      .lifeline { stroke: #d0d7de; stroke-width: 1.5; stroke-dasharray: 5 5; }
+      .line { stroke: #57606a; stroke-width: 1.6; fill: none; }
+      .head { fill: #57606a; }
+      @media (prefers-color-scheme: dark) {
+        .card { fill: #161b22; stroke: #30363d; }
+        text { fill: #e6edf3; }
+        .muted, .region { fill: #9198a1; }
+        .job { fill: #052e1f; stroke: #34d399; }
+        .load { fill: #1e1b4b; stroke: #818cf8; }
+        .active { fill: #3730a3; stroke: #818cf8; }
+        .note { fill: #0d1117; stroke: #30363d; }
+        .lifeline { stroke: #30363d; }
+        .line { stroke: #9198a1; }
+        .head { fill: #9198a1; }
+      }
+    </style>
+  </defs>
+
+  <rect class="card" x="0.75" y="0.75" width="998.5" height="533.5" rx="12"/>
+
+  <!-- the first job starts the load; the second joins it -->
+  <text class="region" x="500" y="33" text-anchor="middle">HOW TWO JOBS SHARE ONE LOAD</text>
+
+  <rect class="job" x="70" y="52" width="160" height="56" rx="8"/>
+  <text class="title" x="150" y="76" text-anchor="middle">Job A</text>
+  <text class="muted" x="150" y="95" text-anchor="middle">First job</text>
+
+  <rect class="load" x="420" y="52" width="160" height="56" rx="8"/>
+  <text class="title" x="500" y="76" text-anchor="middle">Shared load</text>
+  <text class="muted" x="500" y="95" text-anchor="middle">Separate thread</text>
+
+  <rect class="job" x="770" y="52" width="160" height="56" rx="8"/>
+  <text class="title" x="850" y="76" text-anchor="middle">Job B</text>
+  <text class="muted" x="850" y="95" text-anchor="middle">Second job</text>
+
+  <line class="lifeline" x1="150" y1="108" x2="150" y2="197"/>
+  <line class="lifeline" x1="500" y1="108" x2="500" y2="144"/>
+  <line class="lifeline" x1="850" y1="108" x2="850" y2="197"/>
+  <rect class="active" x="494" y="144" width="12" height="53" rx="3"/>
+
+  <text x="323" y="133" text-anchor="middle">Starts the load and waits</text>
+  <line class="line" x1="150" y1="144" x2="492" y2="144" marker-end="url(#arrow)"/>
+  <text x="677" y="174" text-anchor="middle">Joins the running load and waits</text>
+  <line class="line" x1="850" y1="185" x2="508" y2="185" marker-end="url(#arrow)"/>
+  <text class="muted" x="500" y="222" text-anchor="middle">Both jobs wait for the same result.</text>
+
+  <text class="region" x="500" y="261" text-anchor="middle">CANCELLATION WHILE THE LOAD IS RUNNING</text>
+  <text class="muted" x="159" y="292" text-anchor="middle">Who cancels</text>
+  <text class="muted" x="500" y="292" text-anchor="middle">What happens to the load</text>
+  <text class="muted" x="841" y="292" text-anchor="middle">Result if the load succeeds</text>
+
+  <!-- only Job A cancels -->
+  <rect class="note" x="44" y="307" width="230" height="56" rx="8"/>
+  <text class="title" x="159" y="340" text-anchor="middle">Only Job A cancels</text>
+  <line class="line" x1="274" y1="335" x2="342" y2="335" marker-end="url(#arrow)"/>
+  <rect class="load" x="344" y="307" width="312" height="56" rx="8"/>
+  <text class="title" x="500" y="331" text-anchor="middle">The load continues</text>
+  <text class="muted" x="500" y="350" text-anchor="middle">Job B is still waiting</text>
+  <line class="line" x1="656" y1="335" x2="724" y2="335" marker-end="url(#arrow)"/>
+  <rect class="job" x="726" y="307" width="230" height="56" rx="8"/>
+  <text class="title" x="841" y="340" text-anchor="middle">Job B gets the value</text>
+
+  <!-- only Job B cancels -->
+  <rect class="note" x="44" y="381" width="230" height="56" rx="8"/>
+  <text class="title" x="159" y="414" text-anchor="middle">Only Job B cancels</text>
+  <line class="line" x1="274" y1="409" x2="342" y2="409" marker-end="url(#arrow)"/>
+  <rect class="load" x="344" y="381" width="312" height="56" rx="8"/>
+  <text class="title" x="500" y="405" text-anchor="middle">The load continues</text>
+  <text class="muted" x="500" y="424" text-anchor="middle">Job A is still waiting</text>
+  <line class="line" x1="656" y1="409" x2="724" y2="409" marker-end="url(#arrow)"/>
+  <rect class="job" x="726" y="381" width="230" height="56" rx="8"/>
+  <text class="title" x="841" y="414" text-anchor="middle">Job A gets the value</text>
+
+  <!-- both jobs cancel -->
+  <rect class="note" x="44" y="455" width="230" height="56" rx="8"/>
+  <text class="title" x="159" y="488" text-anchor="middle">Both jobs cancel</text>
+  <line class="line" x1="274" y1="483" x2="342" y2="483" marker-end="url(#arrow)"/>
+  <rect class="load" x="344" y="455" width="312" height="56" rx="8"/>
+  <text class="title" x="500" y="479" text-anchor="middle">ComposeUI asks the load to stop</text>
+  <text class="muted" x="500" y="498" text-anchor="middle">No job is still waiting</text>
+  <line class="line" x1="656" y1="483" x2="724" y2="483" marker-end="url(#arrow)"/>
+  <rect class="note" x="726" y="455" width="230" height="56" rx="8"/>
+  <text class="title" x="841" y="488" text-anchor="middle">Any result is discarded</text>
+</svg>

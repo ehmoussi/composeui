@@ -193,7 +193,11 @@ its inputs:
 ## Shared data
 
 `composeui.core.shared` loads a value once per process for the jobs of every session
-(`shared_data`). Its state changes under one `threading.Condition`:
+(`shared_data`).
+
+![Two jobs share a load. It continues while another job waits.](../images/shared-data.svg)
+
+The state changes under one `threading.Condition`:
 
 - **A run per load.** The first job makes a `_Run`, which runs the load in a daemon thread of
   its own, not in that job's thread. So the job that started it can be canceled while the others
