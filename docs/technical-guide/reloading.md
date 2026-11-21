@@ -11,6 +11,10 @@ variable.
 
 ## Reloading on Qt
 
+The diagram shows the two reload paths when the Qt app takes the request and saves the study.
+
+![Qt saves the study before it reloads in place or restarts.](../images/qt-reload.svg)
+
 On Qt, `--reload` works like this:
 
 1. **A supervisor process.** With `--reload`, the process that the user starts runs
