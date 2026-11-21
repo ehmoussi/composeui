@@ -11,6 +11,9 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `JobSlots`, in `composeui.core.jobs`, lets at most a number of jobs run a block at once, for
+  every session of the process. The other jobs wait in line, first come first served, and
+  `on_wait` gets each job's place. A job canceled while it waits leaves the line.
 - `DownloadView.content` can return a `DownloadedFile`, whose name and media type replace the
   view's `filename` and `media_type`: an app names the file at the click, for example after the
   selected run.

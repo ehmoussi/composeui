@@ -142,6 +142,7 @@ not in the package: run them from a clone of the repository (see
     - [Show a task's state](user-guide/threads.md#show-a-tasks-state)
     - [Disable views while a task runs](user-guide/threads.md#disable-views-while-a-task-runs)
   - [Data shared by the sessions](user-guide/threads.md#data-shared-by-the-sessions)
+  - [A limit on the jobs that run at once](user-guide/threads.md#a-limit-on-the-jobs-that-run-at-once)
   - [How jobs behave](user-guide/threads.md#how-jobs-behave)
 - [A SQLite model](user-guide/sqlite-model.md)
 - [Importing CSV data](user-guide/csv-import.md)
