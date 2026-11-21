@@ -33,102 +33,71 @@ the Open and Save actions transfer a study file. For request order and session l
   call (at most `MAX_STATE_SIZE`) until the answer, a post of its own. A second upload replaces
   them. A session that asks doesn't hibernate (an open dialog), so the bytes never need saving.
   A file of another type, or too large, is refused before the question.
-- **Save, not a download.** Only Save's post (`POST /state/download`) takes the study as saved.
-  `GET /state` downloads it and changes nothing: a link from another site reaches it, and the
-  user may never get the file.
+- **Save and download a study.** The Save form sends `POST /state/download` without htmx.
+  The response contains the study file, and the session marks the study as saved. `GET /state`
+  downloads the study without marking it as saved. A link can request the file without an
+  explicit Save action, and the user may never get the file.
 
 ## Downloads on the web
 
-A browser downloads a file only from a GET: htmx reads the answer to a POST, and puts it in the
-page. The question is where the app's `content` runs. The design keeps it out of every GET.
+Unlike the Save form, `DownloadView` sends its POST through htmx, which reads the response
+for page updates. The POST does not return the file. Instead, the session gives the browser
+a link with a ticket. The browser follows the link to receive the file.
 
-**The steps.**
+### Download steps
 
-1. The click on a `DownloadView` is an htmx POST, like any other click. `content` runs there, and
-   `MainView.download` gives its result to `WebMainRenderer.download`.
+1. A click on a `DownloadView` sends an htmx POST. By default, `content` runs during the POST.
+   With `in_job`, the POST starts a job that runs `content`. In both cases, `MainView.download`
+   passes the result to `WebMainRenderer.download`. The app can also call `MainView.download`
+   directly.
 2. The session keeps the file under a ticket: 128 random bits (`webcore/downloads.py`).
-3. The answers to events, the fragments, the jobs poll, and the full page name the tickets not
-   fetched yet, as links in `#cui-downloads` (`downloads_marker`).
+3. Event responses, the jobs poll, and the full page list tickets not yet fetched.
+   `downloads_marker` adds a link per ticket in `#cui-downloads`.
 4. `page.js` follows each ticket's link once (`startDownloads`): `GET /download/{ticket}`.
-5. That GET hands over the bytes or the file kept. It runs none of the app's code, but the
-   writer of a `StreamContent` (see "Streaming" below).
+5. The GET serves the bytes or file on disk. For a `StreamContent`, it runs `write` instead.
+   The GET does not call `content`.
 
-**Why the click is a POST.** A GET that ran the app's code would have two failures:
+### Ticket lifetime and limits
 
-- **Another site can send it.** The session's cookie (`SameSite=Lax`) goes with a top-level GET
-  from any site, and widget ids come from `id()`, so they can be guessed. The other site cannot
-  read the file, but the app's code runs without the user's click. That code can write, for
-  example mark a study as exported. `SameOriginMiddleware` refuses such requests for unsafe
-  methods only (see the `web-security` skill).
-- **It overtakes the posts sent before it.** The page numbers its posts, and the server runs them
-  in that order (`order.py`). A GET has no number. If the user edits a cell, then clicks at once,
-  `content` can run before the edit, and the file misses it. Save had this bug: its form carries
-  its number for this reason.
-
-A POST has neither failure, with no code of its own: `SameOriginMiddleware` and `PostOrder` handle
-it.
-
-**Why a ticket.** A job (`in_job`) and `MainView.download` called from the app's code give a file
-that no request answers: a job's callback runs on the job's thread. So the file waits in the
-session until the page asks for it. The click uses the same path: one mechanism for the three
-cases.
-
-**The ticket's states.**
-
-| State | First fetch | 10 minutes pass (`DOWNLOAD_TTL`) | A file past the limits | The session ends |
+| State | Request | Expiration | Limit exceeded | Session ends |
 | --- | --- | --- | --- | --- |
-| Not fetched | Send it, and stop naming it | Drop it | Drop the oldest | Freed with the session |
-| Fetched | Send it again | Dropped 1 minute after the fetch (`FETCHED_TTL`) | Drop the oldest | Freed with the session |
-| A stream, not fetched | Take it: drop the ticket, and write it | Drop it | Drop the oldest | Freed with the session |
-| A stream, taken | 404: its writer runs once | Cannot happen: it has no ticket | Cannot happen | Its writer stops |
+| Bytes or a path, not fetched | The first GET or HEAD serves the file or its headers and marks the ticket as fetched. | 10 minutes after creation (`DOWNLOAD_TTL`). | Drop the oldest ticket. | Drop the ticket. |
+| Bytes or a path, fetched | A GET or HEAD can use the ticket again until it expires. | 1 minute after the first fetch (`FETCHED_TTL`). | Drop the oldest ticket. | Drop the ticket. |
+| Stream, not claimed | The first GET claims the ticket and removes it. A HEAD returns headers without claiming the ticket. | 10 minutes after creation (`DOWNLOAD_TTL`). | Drop the oldest ticket. | Drop the ticket. |
+| Stream, claimed | Another GET or HEAD returns 404. | No ticket remains. | No ticket remains. | Cancel the writer. |
 
-A `HEAD` of a stream answers its headers, without `Content-Length`, and doesn't take it.
+A stream's HEAD response has no `Content-Length`.
+The store checks expiration when it adds, looks up, or lists tickets.
 
-- **Named until fetched.** An answer can be lost: a duplicate post answered with 204, or a page
-  reloaded. So every answer names the tickets not fetched yet, and `page.js` remembers the ones
-  that it followed.
-- **Kept a minute after the fetch.** A `HEAD` (which Starlette answers from the GET's route), or a
-  browser's download manager, asks again.
-- **The limits.** A session keeps at most `MAX_DOWNLOADS` files, and `MAX_DOWNLOAD_BYTES` of bytes
-  in memory. A `Path` stays on the disk, and does not count.
-- **The answers.** Without the session, the GET answers 404, not a redirect: a redirect would save
-  the page as the file. The link's `download` attribute keeps the page when the file is gone, so
-  the browser shows a failed download.
+- **Listed until fetched.** A response can be lost, for example when the browser reloads
+  the page. The next response with a download marker lists the ticket again if the browser
+  has not fetched it. `page.js` remembers which links it already followed.
+- **Available after the first fetch.** A browser's download manager may send a second request
+  for a file or its headers. The first fetch starts the shorter timeout. Later fetches do not
+  extend it.
+- **Limits.** Each session keeps at most `MAX_DOWNLOADS` tickets, including those for a `Path`
+  or a `StreamContent`. `MAX_DOWNLOAD_BYTES` limits only the bytes kept in memory. Dropping a
+  ticket for a `Path` does not delete the file.
+- **Missing file or session.** The GET returns 404, not a redirect, so the browser does not save
+  a page as the file. The link's `download` attribute keeps the current page open.
 
-**Why not a generator.** Calling a generator runs none of its code: its code runs as the answer
-reads its pieces, in the GET. With a ticket, that GET comes after the click, on another thread,
-while the user's posts change the views. A generator could read the views before and after an
-edit in one file.
+### Streaming
 
-**The GET that was rejected.** A click without `in_job` could be a GET that streams, safely, with
-six rules:
+The app creates a `StreamContent` during the POST, in a job, or in its own code. If the writer
+needs data from a view, read it before passing the `StreamContent` to `MainView.download`.
+The download uses a ticket, like a file on disk. During the GET, `webcore/streaming.py` runs
+`write`, which uses the data the app captured.
 
-1. The same origin check as the posts (`is_same_origin`).
-2. Its number in the page's posts, which the server waits for.
-3. No `HEAD` and no prefetch (`Sec-Purpose`); a `<button>`, so that the browser has no link to
-   prefetch.
-4. The check of `takes_events`.
-5. Each piece read under the session's lock, as `table_csv` does.
-6. The connection broken on an error in the middle.
-
-It would still need the ticket for `in_job` and `MainView.download`: two mechanisms to save one
-round trip. Streaming would also work only without `in_job`, and the pieces could read the views
-before and after an edit.
-
-**Streaming.** A `StreamContent` splits the file in two. `content`, or the app's code, makes it
-in the post or the job, in order with the user's edits, and reads the views there. Its `write`
-function runs later, from what `content` gave it. The ticket and the steps above stay the same.
-Only the GET changes: it runs `write` (`webcore/streaming.py`).
-
-- **Why the GET may run it.** Another site can't send the GET: it can't guess the ticket, of its
-  session only. The order is the click's, where `content` read the views. `write` reads no view:
-  that rule is the app's, in `StreamContent`'s docstring and the user guide, and nothing
-  enforces it.
+- **The writer must not read views.** ComposeUI does not enforce this rule. It is part of the
+  `StreamContent` contract. A generator would not read the views when created. It would run when
+  the GET reads its pieces, so the values in one file could come from before and after an edit.
+- **Session and ticket.** A request must have both the session and its valid ticket to start the
+  writer.
 - **Once.** The first GET takes the ticket (`Downloads.take`): a writer can't run twice, and a
   second fetch answers 404. A `HEAD` doesn't take it.
-- **A thread of its own.** `write` runs on a daemon thread, not on AnyIO's pool, whose 40 threads
-  the sync routes share: a long export would hold one for its whole transfer. The session's lock
-  is never held meanwhile.
+- **A thread of its own.** `write` runs on a daemon thread. A long export would otherwise take
+  one of the 40 threads that synchronous routes share in AnyIO's pool. The stream does not hold
+  the session's lock while the writer runs.
 - **Backpressure.** `DownloadSink` gathers the writes into pieces of 256 KiB
   (`DOWNLOAD_CHUNK_SIZE`), and cuts larger ones. The writer waits on a `threading.Condition`
   while 1 MiB (`MAX_QUEUED_BYTES`) waits to be sent. The answer reads the pieces on the event
@@ -162,3 +131,29 @@ Only the GET changes: it runs `write` (`webcore/streaming.py`).
   the stream would then answer 404.
 - **Not compressed.** `GZipMiddleware` would compress each piece on the event loop. The app's
   downloads (`/download/`) skip it, the bytes and the files too.
+
+### Why use POST and GET
+
+The POST handles the click. `SameOriginMiddleware` checks its origin, and `PostOrder` waits
+for earlier numbered POSTs, up to `ORDER_TIMEOUT`. A GET triggered by a click would not have
+either check by default. A top-level GET from another site can carry the session cookie
+(`SameSite=Lax`). It must not run a callback that changes the app, such as marking a study
+as exported. An unnumbered GET could also run before a field edit that the page just sent.
+The numbered Save form also waits up to `ORDER_TIMEOUT` for earlier POSTs. If the wait times
+out, Save can continue before a missing POST arrives.
+
+A ticket also lets a job or a direct call to `MainView.download` deliver a file when there is
+no click response to carry it. The browser fetches all three kinds of download in the same way.
+
+Letting a click stream directly from a GET would need separate checks and would still need
+tickets for jobs and direct downloads. That alternative would require:
+
+1. The origin check used for POSTs (`is_same_origin`).
+2. A request number in the same sequence as the page's POSTs.
+3. No HEAD or prefetch (`Sec-Purpose`), and a `<button>` rather than a prefetchable link.
+4. The `takes_events` check.
+5. A lock on the session for each read, as in `table_csv`.
+6. A connection that closes if the writer fails after sending part of the file.
+
+This would save one round trip only for clicks without `in_job`. Locking each read separately
+would still allow the writer to read view values from before and after an edit.

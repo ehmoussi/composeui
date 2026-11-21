@@ -1,7 +1,7 @@
 # Design of the web backend
 
-These are the decisions of `composeui.webcore` that the code does not make obvious. Keep them in
-mind when you change it. The user guide's
+This page explains how `composeui.webcore` handles requests, updates the browser, and manages
+sessions. The user guide's
 [Web backend](../user-guide/running-the-app.md#web-backend) section covers what users see.
 
 For uploads, downloads, and streaming, see [File transfers on the web](web-file-transfers.md).
@@ -69,9 +69,9 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
 
 ## Requests and updates
 
-- **htmx requests and responses.** The page and the server talk through htmx requests and
-  responses, with Starlette (not FastAPI) and no JavaScript framework. Each renderer writes its
-  HTML by hand (no Jinja2), with `markupsafe.Markup`, which escapes every value put in it.
+- **htmx requests and responses.** The browser sends htmx requests to Starlette. Renderers build
+  HTML without a template engine. `Markup.format()` escapes plain strings and preserves
+  fragments already marked as `Markup`. Do not mark user input as safe HTML.
 - **The renderers' modules.** `webrenderer.py` holds the base `WebRenderer` and the helpers that the
   renderers share, such as `_view_html` and the icons. Each family of renderers has its module in
   `_renderers/`: `inputs.py` (text, numbers, dates), `controls.py` (check boxes, buttons, sliders),
@@ -95,11 +95,14 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   the rest (see [The page's scripts](#the-pages-scripts)).
 - **Hidden fragments keep their id.** A hidden fragment's root keeps its id (`hidden`
   attribute), so a later swap has a target.
-- **Updates.** Setting a view attribute marks its renderer dirty in a request-scoped set
-  (`collect_dirty`, a no-op outside requests). The route then renders every dirty fragment as
-  an out-of-band (OOB) swap (`render_dirty`). Controls use `hx-swap="none"` and the sender is never
-  swapped back, so typing is never interrupted. The one exception is a float field left with
-  unparsable text, swapped back to the view's value.
+- **Updates.** When a rendered attribute changes, the renderer can mark itself dirty.
+  `collect_dirty` records dirty renderers during a request or a handover from a worker thread.
+  `render_dirty` returns out-of-band (OOB) swaps for their fragments that are in the page,
+  even if they are hidden. It omits a fragment if another swap already includes it.
+  `hx-swap="none"` prevents the normal swap, but an OOB swap can still replace the sender.
+  A text field handles a user edit inside `stop_refresh()` to avoid replacing the field while
+  the user types. If the user leaves a numeric field with text that does not parse, the
+  renderer marks the field dirty so the response restores the view's value.
 - **Changes from threads.** `call_on_main_thread` runs its callback under the session's lock,
   and keeps what it changed in the session's `pending`. They are sent with the next event's
   response or fetch (a full page drops them). While the main view's jobs run, the page's
@@ -113,7 +116,8 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   never swaps the box clicked or the search field, which keep the focus. A post that changes
   nothing, such as one of a stale page, swaps all three back as the view is. The check-all box
   shows partly checked through `tables.js`, which reads `data-indeterminate`.
-- **A drop-down list swapped while open.** A change of the app's swaps a multi-combobox whole.
+- **A drop-down list swapped while open.** When the app updates a multi-combobox, the response
+  replaces the entire control.
   Each box has an id made from its key, so htmx gives it the focus back. But the dropdown is
   open only while the focus is in it, and a closed one's boxes take no focus. So `page.js` keeps
   it open through the swap with `dropdown-open`, on the element swapped out too: htmx gives the
@@ -128,6 +132,7 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   can't move below it, so a press there moves the low one down. A date range is two date
   fields, each posting its end. The end that followed the one set swaps alone, never the field
   typed in.
+
 ## The page's scripts
 
 - **One script per domain.** The scripts are files of `webcore/static/`, in the hashed
@@ -229,29 +234,40 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   and Save's form in its `session` field. `_session` in `routes.py` answers a request with
   another tag as if its session were gone. A plain link, such as a download, sends no tag and
   is not checked: it only reads.
-- **Idle sessions on disk** (`session_idle`). Each session of the `SessionStore` is in one place: in
-  memory, being saved, on disk, or being woken. The lifespan's sweep (`hibernate_idle`, in a thread)
-  saves one idle session at a time with `save_to`, into `<id>.partial`, then renames it to `<id>`: a
-  crash leaves only the partial folder, which a `--reload` server's next process removes. A request
-  for a session being saved or woken waits for it. A request during a save keeps the session in
-  memory, and the saved folder is dropped. One that finds the session on disk builds it again,
-  outside the store's lock, and `open_saved` opens it. A page's request finds, wakes or makes its
-  session in one decision under the lock (`get_or_create`): one on disk without room to wake is
-  refused, as a slot can free just after, and a new session would then take its cookie and lose it.
-  The async routes look the session up in the threadpool when it's not in memory
-  (`_session_off_loop`). The woken session has a new `page_tag`, so the page reloads on its address,
-  which brings back its page. Keeping the tag would need the same widget ids, which `id()` doesn't
-  give. The sweep asks `WebSession.can_hibernate` under the session's lock, and takes the store's
-  lock after it: `_drop_expired` takes them the other way around. `held()` keeps a session in memory
-  during the requests that take a while outside its lock, such as an upload's body and a CSV's
-  stream, and the session is idle from the end of the last one. A large table's source blocks the
-  save if the app gave it since the last `loaded`: the session notes the sources once a request that
-  emitted `loaded` is done, its reactive methods included, and after `open_saved` and Open. The save
-  skips the "initial" state of a `--reload` (`code_edits`), unless the store's folder is a
-  `--reload` server's: the same code opens it, and a field that starts with another value at each
-  build, such as a date, would be taken for an edit of the code. A plain link (a CSV, a chart's
-  image) sends no tag: after a wake, its widget id is unknown, and it answers 404 until the page
-  reloads.
+- **Idle sessions on disk** (`session_idle`). The `SessionStore` tracks four states: in memory,
+  being saved, on disk, and being restored.
+
+  1. **Save.** The lifespan's sweep runs `hibernate_idle` in a thread. It saves one idle session
+     at a time. `save_to` writes `<id>.partial`, then the store renames the directory to `<id>`.
+     If the process crashes before the rename, the next `--reload` process removes the partial
+     directory.
+  2. **Wait for a save or restore.** A request that finds either operation in progress waits.
+     If a request arrives during a save, the store keeps the session in memory and removes the
+     saved directory. Async routes look up sessions that are not ready in the thread pool
+     (`_session_off_loop`).
+  3. **Restore.** `get_or_create` decides under the store's lock whether to find, restore, or
+     create a session. If there is no room to restore a session, the store refuses the request.
+     It does not create a replacement that would take over the old session's cookie. The store
+     rebuilds the session outside its lock, and `open_saved` loads the saved state. The session
+     gets a new `page_tag` because `id()` does not preserve widget ids. When a widget POST sends
+     the old tag, its route responds with `HX-Refresh`, and htmx reloads the current page.
+     A plain link, such as a CSV export or a chart image, sends no tag. After a restore, the old
+     widget id can return 404. Reload the page to get the new link.
+
+  **Lock order.** The sweep calls `WebSession.can_hibernate` with the session's lock held.
+  It releases that lock before it takes the store's lock. `_drop_expired` takes the locks in
+  the opposite order.
+
+  **Active requests.** `held()` keeps a session in memory during work outside its lock,
+  such as reading an upload or streaming a CSV. The session's idle time starts when the last
+  such request ends.
+
+  **Save conditions.** A new large-table source prevents a save if the app set it after the
+  last `loaded`. The session records these sources after a request that emitted `loaded`,
+  including its reactive methods. It also records them after `open_saved` and Open.
+  The save includes the initial state for comparison with changed code (`code_edits`) only
+  when the store uses a `--reload` server's directory. Otherwise the same code opens the state.
+  A field whose default changes on every build, such as a date, could look like a code edit.
 
 ## Pages, tabs, and dialogs
 

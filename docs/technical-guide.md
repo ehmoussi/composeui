@@ -42,6 +42,10 @@ This guide explains how ComposeUI works and how to contribute to it. To build an
     [Uploads and Open](technical-guide/web-file-transfers.md#uploads-and-open)
   - <a id="downloads-on-the-web" name="downloads-on-the-web"></a>
     [Downloads on the web](technical-guide/web-file-transfers.md#downloads-on-the-web)
+    - [Download steps](technical-guide/web-file-transfers.md#download-steps)
+    - [Ticket lifetime and limits](technical-guide/web-file-transfers.md#ticket-lifetime-and-limits)
+    - [Streaming](technical-guide/web-file-transfers.md#streaming)
+    - [Why use POST and GET](technical-guide/web-file-transfers.md#why-use-post-and-get)
 - <a id="reloading-on-a-change" name="reloading-on-a-change"></a>
   [Reloading on a change](technical-guide/reloading.md)
   - [Reloading on Qt](technical-guide/reloading.md#reloading-on-qt)
