@@ -1,37 +1,62 @@
 # Running work in threads
 
-A long computation would freeze the app while it runs. `main_view.jobs.start(work, *args)`
-runs `work(job, *args)` in a thread of its own instead. These sections cover progress and
-canceling, external programs, reusable loading tasks, data shared by the sessions, and how
-jobs behave.
+A slow operation can freeze the app if it runs on the main thread. Use a `Job` or a `Task`
+to run the function in a worker thread instead.
 
-The function must not touch a view, because the widgets of a toolkit belong to the main
-thread. The function returns its result. The `finished` signal of its job emits the result
-on the main thread, where the callbacks update the views:
+## Job or task: which should you use?
+
+A `Job` represents one run. A `Task` is an object you keep: it starts new jobs for the same
+function and tracks their progress and results. To choose, ask what should happen if the user
+triggers the action again while a run is in progress.
+
+| What should happen? | Use | Example |
+| --- | --- | --- |
+| Start another independent run. | `jobs.start(...)` | [Export two different files](#independent-exports-with-jobs). |
+| Refuse the new run. It is not queued. | `task.start(...)` | [Ignore a second click on **Import**](#reusable-loading-tasks). |
+| Replace the previous request. Ignore its progress and outcome. | `task.start_latest(...)` | [Update search results as the user types](#run-the-latest-call-only). |
+
+## Independent exports with jobs
+
+Use `jobs.start(...)` when both exports matter. The second export can start before the
+first one finishes. Connect `finished` to each job so both completions appear in the
+log. The export function does not touch the view; the callback updates it on the main
+thread.
 
 ```python
+import csv
+
 from composeui.core.jobs import Job
-from composeui.core.view import MainView, define_view
+from composeui.core.view import ConsoleView, MainView, child, define_view
 
 
-def simulate(job: Job[float], radius: float) -> float:  # in its thread
-    for step in range(100):
-        if job.is_canceled:
-            return float("nan")
-        ...  # a step of the computation
-    return stress
+def export_rows(job: Job[str], path: str, rows: tuple[tuple[str, ...], ...]) -> str:
+    with open(path, "w", encoding="utf-8", newline="") as file:
+        writer = csv.writer(file)
+        for row in rows:
+            job.raise_if_canceled()
+            writer.writerow(row)
+    return path
 
 
 @define_view
-class PipeMainView(MainView):
-    ...
-    def _run(self) -> None:
-        job = self.jobs.start(simulate, self.form.radius.value)
-        job.finished.connect(self._show_stress)  # on the main thread
+class ExportView(MainView):
+    log: ConsoleView = child(ConsoleView)
 
-    def _show_stress(self, stress: float) -> None:
-        self.results.stress.text = f"{stress:g} MPa"
+    def export(self, path: str, rows: tuple[tuple[str, ...], ...]) -> None:
+        job = self.jobs.start(export_rows, path, rows)
+        job.finished.connect(self.show_export)
+
+    def show_export(self, path: str) -> None:
+        self.log.append(f"Exported {path}\n")
+
+
+main_view = ExportView()
+main_view.export("stock.csv", (("Pipe", "12"),))
+main_view.export("orders.csv", (("Valve", "3"),))
+main_view.jobs.wait()  # Only for a main view with no toolkit.
 ```
+
+Use a different destination for each export. The jobs can finish in either order.
 
 - **Errors.** When the function raises, the `failed` signal of its job emits the exception
   on the main thread, where a callback shows it (see [Failures](#how-jobs-behave)).
@@ -175,54 +200,55 @@ assert main_view.output.text == "Step 1\nDone\n"
 
 ## Reusable loading tasks
 
-Use `main_view.jobs.task(work)` when a view repeatedly runs the same function and shows its
-loading state. Another view builds its own with `self.build_task(work)` (see
-[A task of another view](#a-task-of-another-view)). Configure the task once, then call
-`task.start(*args, **kwargs)` for each run. One `changed` signal reports starts, progress,
-success, failure, and resets on the main thread. After it, `finished` emits the result of a run
-that succeeds, and `failed` the exception of a run that fails, as the signals of a job do.
-`progress_reported` emits each progress value, after its `changed`.
+Keep one task for the **Import** button so a second click cannot start another import while
+the first is in progress. Create the task and connect its signals once. On each request,
+call `import_file(path)`. The `changed` callback shows progress, and `finished` or `failed`
+shows the outcome.
 
 ```python
+import csv
+
 from composeui.core.jobs import Job
 from composeui.core.view import LabelView, MainView, child, define_view
 
 
-def count_rows(job: Job[int, int], count: int) -> int:
-    for completed in range(1, count + 1):
-        if job.is_canceled:
-            return completed - 1
-        job.report_progress(completed)
-    return count
+def read_rows(job: Job[list[list[str]], int], path: str) -> list[list[str]]:
+    rows = []
+    with open(path, encoding="utf-8", newline="") as file:
+        for row in csv.reader(file):
+            job.raise_if_canceled()
+            rows.append(row)
+            job.report_progress(len(rows))
+    return rows
 
 
 @define_view
-class LoadingView(MainView):
+class ImportView(MainView):
     status: LabelView = child(LabelView, text="Ready")
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.loader = self.jobs.task(count_rows)
+        self.loader = self.jobs.task(read_rows)
         self.loader.changed.connect(self.show_progress)
         self.loader.finished.connect(self.show_rows)
         self.loader.failed.connect(self.show_error)
+
+    def import_file(self, path: str) -> None:
+        self.loader.start(path)
 
     def show_progress(self) -> None:
         if self.loader.is_running:
             self.status.text = f"Processed {self.loader.progress or 0} rows"
 
-    def show_rows(self, rows: int) -> None:
-        self.status.text = f"Done: {rows} rows"
+    def show_rows(self, rows: list[list[str]]) -> None:
+        self.status.text = f"Done: {len(rows)} rows"
 
     def show_error(self, error: Exception) -> None:
         self.status.text = f"Failed: {error}"
-
-
-main_view = LoadingView()
-main_view.loader.start(3)
-main_view.jobs.wait()  # Only for a main view with no toolkit.
-assert main_view.status.text == "Done: 3 rows"
 ```
+
+Use `main_view.jobs.task(work)` in the main view, or
+[`self.build_task(work)`](#a-task-of-another-view) in another view.
 
 - **Its state.** These attributes are read-only.
   - `is_running` stays true until the outcome of the run comes to the main thread.
@@ -313,50 +339,54 @@ assert main_view.panel.rows.text == "3 rows"
 
 ### Run the latest call only
 
-`task.start_latest(*args, **kwargs)` starts a run for an input that changes quickly, such as
-the value of a slider that the user drags. A newer call replaces the run, so only the latest
-call shows its result:
+Connect the input to `task.start_latest(...)` so a new search replaces a pending or
+running search. If the user types `cats` while the search for `cat` is still running,
+the result for `cat` no longer reaches the view.
 
 ```python
 from composeui.core.jobs import Job
-from composeui.core.view import LabelView, MainView, SliderView, child, define_view
+from composeui.core.view import InputView, LabelView, MainView, child, define_view
 
 
-def count_pickups(_job: Job[int], hour: int) -> int:
-    return hour * 100  # Query the pickups of the hour here.
+def search_titles(job: Job[list[str]], query: str) -> list[str]:
+    matches = []
+    for title in ("Cat care", "Big cats", "Bird watching"):
+        job.raise_if_canceled()
+        if query.casefold() in title.casefold():
+            matches.append(title)
+    return matches
 
 
 @define_view
-class PickupsView(MainView):
-    hour: SliderView = child(SliderView, value=11, maximum=23)
-    count: LabelView = child(LabelView)
+class SearchView(MainView):
+    query: InputView = child(InputView)
+    results: LabelView = child(LabelView)
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.counter = self.jobs.task(count_pickups)
-        self.hour.value_changed.connect(self.counter.start_latest)
-        self.counter.finished.connect(self.show_count)
+        self.search = self.jobs.task(search_titles)
+        self.query.text_changed.connect(self.search.start_latest)
+        self.search.finished.connect(self.show_results)
 
-    def show_count(self, count: int) -> None:
-        self.count.text = f"{count} pickups"
+    def show_results(self, titles: list[str]) -> None:
+        self.results.text = ", ".join(titles) or "No matches"
 
 
-main_view = PickupsView()
-for hour in (12, 13, 14):  # As the user drags the slider.
-    main_view.hour.value = hour
-    main_view.hour.value_changed.emit(hour)
+main_view = SearchView()
+for query in ("cat", "cats"):  # As the user types.
+    main_view.query.text_changed.emit(query)
 main_view.jobs.wait()  # Only for a main view with no toolkit.
-assert main_view.count.text == "1400 pickups"
+assert main_view.results.text == "Big cats"
 ```
 
 - **It waits first.** A run waits `debounce` seconds before it calls the function: 0.2 by
   default, or the `debounce` that `jobs.task(work, debounce=...)` gives. A newer call in that
-  time replaces the run before the function starts. So a quick move of the slider calls the
-  function once.
-- **The latest wins.** A newer call cancels the current run, and drops its progress and
-  its outcome. `finished` and `failed` do not emit for a replaced run, and its result never
-  replaces the newer one. The function of a replaced run goes on until it returns, unless it
-  checks `job.is_canceled`.
+  time replaces the run before the function starts. Several quick keystrokes can lead to
+  just one call to the function.
+- **The latest wins.** A newer call asks the current run to stop and drops its progress
+  and outcome. `finished` and `failed` do not emit for a replaced run. The worker can
+  check `job.is_canceled` or call `job.raise_if_canceled()` to stop early. Replacing a
+  run does not undo effects such as writes to a file.
 - **Its state.** `start_latest` clears `progress` and `error`, and emits `changed` with
   `is_running` true. `result` keeps the last result until the outcome of the new run. It
   returns nothing. While its run is in progress, `start` returns `False`, as for a run of `start`.
