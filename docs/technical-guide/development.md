@@ -59,6 +59,11 @@ Every behavior change needs a test in `tests/`.
 - Backend tests exercise real rendered widgets: `qtbot` for Qt, `App.run_test()` for
   Textual, and the Starlette test client for the web. It runs on `httpx2`, or on `httpx`
   before Python 3.11, as `httpx2` needs 3.11.
+- A backend's tests are in `tests/qtcore/`, `tests/textualcore/` or `tests/webcore/`, a
+  module per family of `_renderers/`, such as `test_tables.py`. A web test of another
+  `webcore` module goes in a test module named after it, such as `test_session.py`. A
+  folder's `support.py` holds the helpers that several of its modules use, and its
+  `conftest.py` the fixtures.
 - Tests for an optional backend guard with `pytest.importorskip(...)`.
 - `make test` runs the tests in parallel, a worker per CPU (pytest-xdist). So a test must
   not depend on the state or the order of another. `pytest` without `-n` runs them one
@@ -80,7 +85,7 @@ Every behavior change needs a test in `tests/`.
   `make test` sets it. To run one file or test:
 
   ```bash
-  QT_QPA_PLATFORM=offscreen uv run pytest tests/test_qtrenderer.py -k combobox
+  QT_QPA_PLATFORM=offscreen uv run pytest tests/qtcore/test_choices.py -k combobox
   ```
 
 - What only a browser shows, such as the page's scripts and htmx swaps, goes in

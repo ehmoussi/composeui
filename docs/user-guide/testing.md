@@ -351,12 +351,14 @@ Test on a backend only what the backend does: the widget that it shows, a key th
 user presses, a page that the server sends. The tests of ComposeUI do this, and show how:
 
 - **Qt:** [pytest-qt](https://pytest-qt.readthedocs.io/)'s `qtbot`, in
-  [`tests/test_qtrenderer.py`](../../tests/test_qtrenderer.py). Set
-  `QT_QPA_PLATFORM=offscreen` to run them without a display.
+  [`tests/qtcore/`](../../tests/qtcore/). Set `QT_QPA_PLATFORM=offscreen` to run them
+  without a display.
 - **Textual:** `App.run_test()` and its pilot, in
-  [`tests/test_textual_renderer.py`](../../tests/test_textual_renderer.py).
-- **The web:** Starlette's `TestClient`, in
-  [`tests/test_webrenderer.py`](../../tests/test_webrenderer.py).
+  [`tests/textualcore/`](../../tests/textualcore/).
+- **The web:** Starlette's `TestClient`, in [`tests/webcore/`](../../tests/webcore/).
+
+Each of these folders has a module per family of views, such as `test_tables.py` for the
+tables.
 
 The tests of the example apps, such as
 [`tests/test_pipesweep.py`](../../tests/test_pipesweep.py), test the views as this page does.

@@ -52,7 +52,7 @@ on this platform, or use a C++20 compiler to build `greenlet`.
 Run a single test file or test:
 
 ```bash
-QT_QPA_PLATFORM=offscreen uv run pytest tests/test_qtrenderer.py -k combobox
+QT_QPA_PLATFORM=offscreen uv run pytest tests/qtcore/test_choices.py -k combobox
 ```
 
 `QT_QPA_PLATFORM=offscreen` is required for Qt tests in a headless environment (CI, WSL,
@@ -76,6 +76,9 @@ css/             # source of webcore/static/app.css (`make css`; tools land in c
 js/              # the scripts' type check (`make js-check`; TypeScript lands in js/vendor/)
 src/examples/    # example apps (pipeform.py, pipecatalogue.py, ...), also used by tests; not in the wheel
 tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pilot)
+  qtcore/        # the Qt backend's tests, a module per family, as in _renderers/
+  textualcore/   # the Textual backend's tests, a module per family, as in _renderers/
+  webcore/       # the web backend's tests, a module per family or per other webcore module
 docs/            # user guide, examples guide, technical guide; Sphinx site (conf.py, api/, _ext/)
 ```
 
@@ -94,6 +97,7 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - **Adding a widget:** define the view in the `core/_views/` module of its family (set
   `_renderer_key`) and export it in the `__all__` of `core/view.py`, then add a
   renderer + `RENDERERS` entry in each backend that should support it, plus tests per backend.
+  The tests go in the backend's test module of the family, such as `tests/qtcore/test_tables.py`.
   In each backend, the renderer goes in the backend's `_renderers/` module of its
   family (a new module for a new family), and its entry in the backend's `renderers.py`.
 - **Qt renderer modules:** `qtrenderer.py` holds only `QtWidgetRenderer`, the shared
@@ -209,6 +213,11 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - Every behavior change needs a test in `tests/`. Backend tests should exercise real rendered
   widgets (`qtbot` for Qt, `App.run_test()` for Textual, the Starlette test client for web).
   The test client runs on `httpx2`, or on `httpx` before Python 3.11, as `httpx2` needs 3.11.
+- A backend's tests are in `tests/qtcore/`, `tests/textualcore/` or `tests/webcore/`, a
+  module per family of `_renderers/`, such as `test_tables.py`. A web test of another
+  `webcore` module goes in a test module named after it, such as `test_session.py`. A
+  folder's `support.py` holds the helpers that several of its modules use, and its
+  `conftest.py` the fixtures.
 - Tests for optional backends guard with `pytest.importorskip(...)`.
 - `make test` runs the tests in parallel, a worker per CPU (pytest-xdist): a test must not
   depend on another's state or order. Without `-n`, `pytest` runs them one after another.

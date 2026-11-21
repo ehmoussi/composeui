@@ -322,7 +322,7 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
 
 ## Testing the web backend
 
-Tests drive the examples over HTTP with Starlette's `TestClient`
-(`tests/test_webrenderer.py`). The behavior that only a browser shows (the caret, shortcuts,
-the `aria-invalid` sync, the offline page, history, opening dialogs) is in
-`tests/test_browser.py` (`make browser-test`).
+Tests drive the examples over HTTP with Starlette's `TestClient`, in `tests/webcore/`: a module
+per family of `_renderers/` or per other module of `webcore`. The behavior that only a browser
+shows (the caret, shortcuts, the `aria-invalid` sync, the offline page, history, opening
+dialogs) is in `tests/test_browser.py` (`make browser-test`).

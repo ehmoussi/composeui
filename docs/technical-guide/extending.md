@@ -63,10 +63,11 @@ This page explains how to add a widget or a backend to ComposeUI.
    `webcore/renderers.py`, not in `webrenderer.py` (see
    [Requests and updates](web-backend.md#requests-and-updates)).
 
-3. Add tests for each backend that exercise the real rendered widgets. See
+3. Add tests for each backend that exercise the real rendered widgets. Put them in the module
+   of the widget's family in `tests/qtcore/`, `tests/textualcore/` and `tests/webcore/`. See
    [Tests](development.md#tests). For example, `test_label_renderer_pushes_view_state_to_the_widget`
-   in the [Qt renderer tests](../../tests/test_qtrenderer.py) checks that changing the view updates
-   the widget.
+   in [`tests/qtcore/test_content.py`](../../tests/qtcore/test_content.py) checks that changing
+   the view updates the widget.
 4. Document the widget in the [user guide](../user-guide.md), and delete its item in
    [`ROADMAP.md`](../../ROADMAP.md). When an example app uses the widget, update the
    [examples guide](../examples-guide.md) too.

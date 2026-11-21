@@ -151,7 +151,7 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 # the chart widget and its tests pass around pyqtgraph's untyped classes
-module = ["composeui.qtcore.widgets.qchart", "tests.test_qtrenderer"]
+module = ["composeui.qtcore.widgets.qchart", "tests.qtcore.*"]
 disallow_any_unimported = false
 
 [[tool.mypy.overrides]]
@@ -276,4 +276,4 @@ keep-runtime-typing = true
 "docs/**" = ["INP001"]
 # `qtbot` is requested but unused in tests that only need it for QApplication
 # lifecycle/cleanup (see pytest-qt), not for driving an interaction.
-"tests/test_qtrenderer.py" = ["ARG001"]
+"tests/qtcore/**" = ["ARG001"]
