@@ -108,10 +108,22 @@ evidence that the state was reached. Use bounded waits to fail if work stalls,
 not to arrange its order. Release gates and wait for workers and tasks in
 `finally`, even when an assertion fails.
 
+Start order is not arrival order. Two jobs or threads started one after the
+other can reach a shared lock, queue, or limit in either order. When the test's
+expectations depend on that order, start the next one only once the test has
+seen the previous one arrive: its place reported, its block entered.
+`test_jobs_past_the_limit_wait_and_take_the_slots_in_the_order_they_came`
+started two jobs back to back and waited for `entered == ["a", "b"]`: it
+passed 50 runs, but would time out whenever `b` came first.
+
 Coverage of a waiting, cancellation, or cleanup path needs a test that
 explicitly exercises it. A normal download may cover the reader's wait only
 when its writer happens to fall behind. Check platform skips too: a POSIX-only
 test cannot guarantee coverage of shared code on Windows.
+A branch reached only in a state that the test can't see, such as a job waiting
+in line without reporting it, is covered only when the scheduler happens to
+reach it. Make the state visible to the test, or remove the branch: `JobSlots`
+gives a job without `on_wait` a function that does nothing, not `None`.
 
 ## Browser tests (Playwright)
 
@@ -237,6 +249,8 @@ matches one, and audits hunt for existing tests that do.
 - fixed pauses (`pilot.pause()` counts, `qtbot.wait(ms)`, `time.sleep`) before
   reading what a worker thread or a job does: wait on the work instead (see
   [Waiting for work on another thread](#waiting-for-work-on-another-thread));
+- threads or jobs started back to back whose expected order is the start order
+  (see [Waiting for work on another thread](#waiting-for-work-on-another-thread));
 - a fake that several threads call at once and that hands out values or records
   them by the order of the calls (a shared iterator, counter or list): each call
   decides by its own input (see the `state-machines` skill, "Prove it");
