@@ -105,6 +105,7 @@
   "Can't make {name}: {error}.": "Impossible de créer {name} : {error}.",
   "All": "Tout",
   "None": "Aucun",
+  "{count} files": "{count} fichiers",
   "{count} selected": "{count} sélectionnés",
   "Start": "Début",
   "End": "Fin",

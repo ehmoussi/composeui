@@ -381,8 +381,8 @@ class MainView(View):
     #: the version of the app's state, saved with it: a subclass raises it when a change of
     #: its views would lose an older study's state, and upgrades the state in `migrate_state`
     state_version: ClassVar[int] = 1
-    #: the largest file, in bytes, that a user can upload to the web app, 5 MiB by default;
-    #: not a study (Open has its own limit). A subclass sets it:
+    #: the largest file, in bytes, that a user can upload to the web app, 5 MiB by default, or
+    #: the files of one choice together; not a study (Open has its own limit). A subclass sets it:
     #: ``max_upload_size = 200 * 1024 * 1024``
     max_upload_size: ClassVar[int] = 5 * 1024 * 1024
     #: the bytes that an upload to the web app leaves free on the disk, 1 GiB by default: the

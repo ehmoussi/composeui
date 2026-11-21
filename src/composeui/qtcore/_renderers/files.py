@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 from abc import abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
@@ -10,7 +11,7 @@ from qtpy.QtCore import QSignalBlocker
 from qtpy.QtWidgets import QFileDialog, QMessageBox, QWidget
 from typing_extensions import Protocol, override
 
-from composeui.core._views.files import with_extension
+from composeui.core._views.files import upload_summary, with_extension
 from composeui.core.renderer import ViewLike
 from composeui.core.view import UploadedFile
 from composeui.qtcore._renderers.inputs import InputViewLike
@@ -20,6 +21,8 @@ from composeui.qtcore.widgets.qfileupload import QFileUpload
 from composeui.qtcore.widgets.qplaintext import plain_tool_tip
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from composeui.core.signal import Signal, SignalNoArgs
 
 
@@ -37,6 +40,14 @@ def _ask_file(
     """Get the file the user picks in Qt's file dialog, "" if cancelled."""
     picked, _selected_filter = QFileDialog.getOpenFileName(
         parent, title, "" if start is None else str(start), _file_filters(extensions)
+    )
+    return picked
+
+
+def _ask_files(parent: QWidget, title: str, extensions: dict[str, tuple[str, ...]]) -> list[str]:
+    """Get the files the user picks in Qt's file dialog, all of one folder; none if cancelled."""
+    picked, _selected_filter = QFileDialog.getOpenFileNames(
+        parent, title, "", _file_filters(extensions)
     )
     return picked
 
@@ -233,11 +244,13 @@ class QtFilePathInputRenderer(_QtPathInputRenderer[FilePathInputViewLike]):
 
 class FileUploadViewLike(ViewLike, Protocol):
     extensions: dict[str, tuple[str, ...]]
+    multiple: bool
     browse_text: str
     empty_text: str
-    file: UploadedFile | None
+    files_text: str
+    files: tuple[UploadedFile, ...]
 
-    def take_file(self, file: UploadedFile) -> None: ...
+    def take_files(self, files: Iterable[UploadedFile]) -> None: ...
 
 
 class QtFileUploadRenderer(QtWidgetRenderer[FileUploadViewLike, QFileUpload]):
@@ -248,10 +261,12 @@ class QtFileUploadRenderer(QtWidgetRenderer[FileUploadViewLike, QFileUpload]):
         self._refresh_dispatcher.update(
             {
                 "browse_text": self._refresh_browse_text,
-                "empty_text": self._refresh_empty_text,
-                "file": self._refresh_file,
+                "empty_text": functools.partial(self._refresh_name, "empty_text"),
+                "files_text": functools.partial(self._refresh_name, "files_text"),
+                "files": functools.partial(self._refresh_name, "files"),
                 # read by the dialog each time it opens
                 "extensions": lambda _view, _rendered_object, _value: None,
+                "multiple": lambda _view, _rendered_object, _value: None,
                 # the web's only: here, the file needs no upload
                 "uploading_text": lambda _view, _rendered_object, _value: None,
             }
@@ -265,13 +280,16 @@ class QtFileUploadRenderer(QtWidgetRenderer[FileUploadViewLike, QFileUpload]):
             self.refresh()
 
     def browse(self) -> None:
-        """Hand the file the user picks in Qt's dialog to the view; nothing if cancelled."""
+        """Hand the files the user picks in Qt's dialog to the view; nothing if cancelled."""
         assert self._rendered_object is not None
-        picked = _ask_file(
-            self._rendered_object, self._view.browse_text, None, self._view.extensions
-        )
-        if picked != "":
-            self._view.take_file(UploadedFile.of_path(Path(picked)))
+        view = self._view
+        if view.multiple:
+            picked = _ask_files(self._rendered_object, view.browse_text, view.extensions)
+        else:
+            one = _ask_file(self._rendered_object, view.browse_text, None, view.extensions)
+            picked = [one] if one != "" else []
+        if picked:
+            view.take_files(UploadedFile.of_path(Path(path)) for path in picked)
 
     @staticmethod
     def _refresh_browse_text(
@@ -280,18 +298,11 @@ class QtFileUploadRenderer(QtWidgetRenderer[FileUploadViewLike, QFileUpload]):
         rendered_object.button.setText(value)
 
     @staticmethod
-    def _refresh_file(
-        view: FileUploadViewLike, rendered_object: QFileUpload, value: UploadedFile | None
+    def _refresh_name(
+        name: str, view: FileUploadViewLike, rendered_object: QFileUpload, value: object
     ) -> None:
         # called before the view holds the value
-        rendered_object.name.setText(view.empty_text if value is None else value.name)
-
-    @staticmethod
-    def _refresh_empty_text(
-        view: FileUploadViewLike, rendered_object: QFileUpload, value: str
-    ) -> None:
-        if view.file is None:
-            rendered_object.name.setText(value)
+        rendered_object.name.setText(upload_summary(view, name, value))
 
 
 class SavePathInputViewLike(PathInputViewLike, Protocol):

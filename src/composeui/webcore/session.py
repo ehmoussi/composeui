@@ -19,7 +19,8 @@ import shutil
 import tempfile
 import threading
 import time
-from pathlib import Path
+import unicodedata
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
 from composeui.core._views.dialogs import dialogs_in
@@ -41,16 +42,17 @@ from composeui.webcore.downloads import downloads_marker
 from composeui.webcore.order import PostOrder
 from composeui.webcore.page import jobs_poller, page_marker
 from composeui.webcore.rendertarget import RenderTarget, rendering_into
-from composeui.webcore.uploads import UploadRefusal
+from composeui.webcore.uploads import MAX_UPLOAD_FILES, UploadRefusal
 from composeui.webcore.webrenderer import UnsupportedEventError, handle_event, render_dirty
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Iterator, Mapping, Sequence
 
     from composeui.core.model import Model
     from composeui.core.view import DownloadedFile, MainView, Router
     from composeui.webcore.downloads import Downloads
     from composeui.webcore.streaming import Stream
+    from composeui.webcore.uploads import ReceivedFile
 
 
 #: largest state file accepted from an upload, in bytes
@@ -61,6 +63,7 @@ MAX_UNPACKED_SIZE = 20 * MAX_STATE_SIZE
 _MAX_FILE_NAME_LENGTH = 200
 #: why the status bar refuses a file that the disk has no room for
 _NO_ROOM = "the server has no room for it right now"
+_NO_ROOM_FOR_ALL = "the server has no room for them right now"
 #: the file of a saved session that names the directory of its uploads
 _UPLOADS_NAME = "uploads"
 #: the suffix of a session's directory being saved, renamed without it once complete
@@ -76,8 +79,31 @@ def safe_filename(name: str) -> str:
 
 #: the names Windows gives its devices, in any case and with any type: "NUL.csv" is no file
 _DEVICE_NAMES = frozenset(
-    {"con", "prn", "aux", "nul", *(f"{port}{n}" for port in ("com", "lpt") for n in range(1, 10))}
+    {
+        "con",
+        "prn",
+        "aux",
+        "nul",
+        "conin$",
+        "conout$",
+        # its ports, with a digit, also a superscript one: "COM¹"
+        *(f"{port}{n}" for port in ("com", "lpt") for n in [*"123456789", *"¹²³"]),
+    }
 )
+
+
+def _base_name(filename: str) -> str:
+    """Get a sent file's name without its folders: the browser sends none, a crafted post may.
+
+    The same on every system: not `Path`'s, which on Windows reads ``a:b.shp`` as the file
+    ``b.shp`` of a drive.
+    """
+    return re.split(r"[/\\]", filename)[-1]
+
+
+def _sent_suffix(filename: str) -> str:
+    """Get the type of a sent file's name, in lowercase, read the same on every system."""
+    return PurePosixPath(_base_name(filename)).suffix.lower()
 
 
 def _upload_name(filename: str) -> str:
@@ -85,8 +111,8 @@ def _upload_name(filename: str) -> str:
 
     Neither a hidden file's name, which the server's file lists leave out, nor a device's.
     """
-    suffix = Path(filename).suffix.lower()
-    name = safe_filename(Path(filename).name)
+    suffix = _sent_suffix(filename)
+    name = safe_filename(_base_name(filename))
     # a name of other letters alone, e.g. "データ.csv", would lose its type
     if not name.lower().endswith(suffix):
         name = safe_filename(f"upload{suffix}")
@@ -95,6 +121,36 @@ def _upload_name(filename: str) -> str:
     if name.startswith(".") or name.split(".")[0].lower() in _DEVICE_NAMES:
         name = "upload-" + name[-(_MAX_FILE_NAME_LENGTH - len("upload-")) :]
     return name
+
+
+#: what a portable file's name never holds: Windows refuses these, a path splits at `/`
+_NOT_IN_NAMES = frozenset('<>:"/\\|?*')
+
+
+def _own_name(filename: str) -> str:
+    """Get the name that keeps one of several files the user gave together: their own, if safe.
+
+    A file of such a choice can name another one, so its name stays as the user's when every
+    system can hold it, and else becomes `_upload_name`'s. Never a hidden file's name, a
+    device's, or one of a control character.
+    """
+    name = _base_name(filename)
+    stem = name.split(".")[0].rstrip(" ").lower()
+    if (
+        name == ""
+        or len(name.encode()) > _MAX_FILE_NAME_LENGTH
+        or name.startswith(".")
+        or name.endswith((" ", "."))
+        or stem in _DEVICE_NAMES
+        or any(char in _NOT_IN_NAMES or unicodedata.category(char) == "Cc" for char in name)
+    ):
+        return _upload_name(filename)
+    return name
+
+
+def _same_name_key(name: str) -> str:
+    """Get what two names share when one folder can't hold both: case or accents written apart."""
+    return unicodedata.normalize("NFC", name).casefold()
 
 
 def _keep_in_folder(
@@ -129,6 +185,11 @@ def _keep_in_folder(
         path.unlink(missing_ok=True)
         raise
     return path
+
+
+def _no_room(count: int) -> str:
+    """Say that the disk has no room for the `count` files of one upload."""
+    return _NO_ROOM if count == 1 else _NO_ROOM_FOR_ALL
 
 
 def _no_path(_path: Path) -> bool:
@@ -387,6 +448,75 @@ class WebSession(RenderTarget):
                 raise UnsupportedEventError(renderer, event)
             return self._respond(functools.partial(renderer.dispatch, event, form))
 
+    def pick_files(
+        self, widget_id: str, files: Sequence[ReceivedFile], form: Mapping[str, str] | None = None
+    ) -> tuple[str, str | None] | None:
+        """Hand the files of one upload to their widget, as `pick_file` does for one file.
+
+        Several files go to a `FileUploadView` with `multiple` only, which takes one file this
+        way too: they go to one folder that the field holds, each under its own name
+        (`_own_name`), and are refused together. Returns what `handle_event` does.
+        """
+        with self.lock:
+            renderer = None if self.has_ended else self.renderers.get(widget_id)
+            takes_several = isinstance(renderer, WebFileUploadRenderer) and renderer.takes_several
+            if not takes_several:
+                if len(files) == 1:
+                    file = files[0]
+                    return self.pick_file(
+                        widget_id, file.filename, file.path, form, file.media_type
+                    )
+                if renderer is None:
+                    return None
+                # a crafted post: the page sends one file to any other widget
+                raise UnsupportedEventError(renderer, "file")
+            assert isinstance(renderer, WebFileUploadRenderer)  # takes several
+            if not renderer.is_enabled:
+                raise UnsupportedEventError(renderer, "file")
+            return self._keep_files(renderer, widget_id, files)
+
+    def _keep_files(
+        self, renderer: WebFileUploadRenderer, widget_id: str, files: Sequence[ReceivedFile]
+    ) -> tuple[str, str | None]:
+        """Keep the files of one choice in a folder of their own, under their own names."""
+        types = renderer.file_types
+        first = files[0].filename
+        for file in files:
+            if types and _sent_suffix(file.filename) not in types:
+                return self._refuse_file(
+                    file.filename, f"expected a {' or '.join(types)} file", len(files)
+                )
+        names = [_own_name(file.filename) for file in files]
+        keys = [_same_name_key(name) for name in names]
+        if len(set(keys)) < len(keys):
+            twice = next(file.filename for file, key in zip(files, keys) if keys.count(key) > 1)
+            return self._refuse_file(
+                twice, "another of the files chosen has the same name", len(files)
+            )
+        directory = None
+        try:
+            directory = self._upload_directory(widget_id)
+            for name, file in zip(names, files):
+                shutil.move(str(file.path), str(directory / name))
+        except OSError:
+            # none of them: the field keeps the files it holds
+            if directory is not None:
+                shutil.rmtree(directory, ignore_errors=True)
+            return self._refuse_file(first, _no_room(len(files)), len(files))
+        # only now: the field's previous files go once it holds these
+        self._hold_upload(widget_id, directory)
+        uploaded = tuple(
+            UploadedFile(
+                _base_name(file.filename),
+                (directory / name).stat().st_size,
+                file.media_type,
+                directory / name,
+                is_temporary=True,
+            )
+            for name, file in zip(names, files)
+        )
+        return self._respond(functools.partial(renderer.pick_files, uploaded))
+
     def pick_file(
         self,
         widget_id: str,
@@ -407,7 +537,7 @@ class WebSession(RenderTarget):
         its path. One of a type they don't offer is refused in the status bar. Returns what
         `handle_event` does.
         """
-        suffix = Path(filename).suffix.lower()
+        suffix = _sent_suffix(filename)
         name = _upload_name(filename)
         with self.lock:
             # after its session: its body took a while, and nothing would remove what is kept
@@ -431,7 +561,7 @@ class WebSession(RenderTarget):
                 raise UnsupportedEventError(renderer, "file")
             if types and suffix not in types:
                 return self._refuse_file(filename, f"expected a {' or '.join(types)} file")
-            apply = self._applying_upload(renderer, cell, Path(filename).name, media_type)
+            apply = self._applying_upload(renderer, cell, _base_name(filename), media_type)
             folder = self._upload_folder(renderer, cell)
             try:
                 path = self._moved_upload(renderer, widget_id, name, received, folder)
@@ -537,9 +667,12 @@ class WebSession(RenderTarget):
         renderer.pick_file(UploadedFile(name, size, media_type, path, is_temporary=True))
 
     def refuse_upload(
-        self, widget_id: str, filename: str, refusal: UploadRefusal
+        self, widget_id: str, filename: str, refusal: UploadRefusal, count: int = 1
     ) -> tuple[str, str | None] | None:
-        """Say why a file that arrived isn't kept; None if the widget takes no file."""
+        """Say why the files that arrived, `filename` the first of `count`, aren't kept.
+
+        None if the widget takes no file.
+        """
         with self.lock:
             renderer = self.renderers.get(widget_id)
             if not isinstance(
@@ -553,12 +686,21 @@ class WebSession(RenderTarget):
             ):
                 return None
             if refusal is UploadRefusal.NO_ROOM:
-                return self._refuse_file(filename, _NO_ROOM)
+                return self._refuse_file(filename, _no_room(count), count)
+            if refusal is UploadRefusal.TOO_MANY:
+                return self._refuse_file(
+                    filename, f"at most {MAX_UPLOAD_FILES} files go at once", count
+                )
             size = self.main_view.max_upload_size / 1024**2
+            if count > 1:
+                return self._refuse_file(
+                    filename, f"the files are larger than {size:g} MiB together", count
+                )
             return self._refuse_file(filename, f"the file is larger than {size:g} MiB")
 
-    def _refuse_file(self, filename: str, error: str) -> tuple[str, str | None]:
-        message = f"Can't open {filename!r}: {error}."
+    def _refuse_file(self, filename: str, error: str, count: int = 1) -> tuple[str, str | None]:
+        others = {1: "", 2: " and 1 other file"}.get(count, f" and {count - 1} other files")
+        message = f"Can't open {filename!r}{others}: {error}."
         return self._respond(functools.partial(self.main_view.status_bar.show_message, message))
 
     def _upload_directory(self, widget_id: str) -> Path:

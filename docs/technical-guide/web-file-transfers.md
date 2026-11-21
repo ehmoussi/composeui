@@ -13,6 +13,16 @@ the Open and Save actions transfer a study file. For request order and session l
   through Starlette: a study is small. A replaced upload stays until `jobs.is_running` is false:
   nothing says which file a job reads, and a job may not have opened it yet. Holding a file
   through the app's code would bring the same failure back each time an app forgets.
+- **Several files at once.** The receiver writes each file part to its own scratch file. It
+  keeps what a chunk brings by part, because one chunk can end a file and start the next one.
+  `max_upload_size` counts the bytes of all the parts. `WebSession.pick_files` gives several
+  files only to a `FileUploadView` with `multiple`; any other widget refuses them (400), as
+  its page never sends them. A `multiple` view gets one file this way too, so its names do not
+  depend on how many files came. The files keep their own names when every system can hold them
+  (`_own_name`), because a file can name another one. Two names that one folder cannot hold
+  apart (case, or composed and decomposed accents) refuse the choice. The files go to a new
+  folder, which the field holds only once all of them are there. A move that fails removes
+  that folder, and the field keeps its previous files.
 - **An upload in the app's folder.** With `upload_folder`, `_keep_in_folder` takes the name
   first with an empty file opened exclusively, so two sessions never share it. A name that a
   table's cell holds counts as taken, even with its file gone: the same text would reach the

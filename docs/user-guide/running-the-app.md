@@ -247,8 +247,9 @@ For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhel
   file is too large. Open uploads the file, then asks before it loses the unsaved changes (see
   [Unsaved changes](building-views.md#unsaved-changes)).
 - **Uploads have a limit that the app sets.** A user can upload a file of at most 5 MiB by
-  default. The limit applies to a `PickFileAction`, a file path input, and a table's file path
-  cell. A main view
+  default. The limit applies to a `PickFileAction`, a file path input, a table's file path
+  cell, and a file upload. For an upload of several files, it limits their size together. A
+  main view
   sets another limit in `max_upload_size`, in bytes, such as `max_upload_size = 200 * 1024 *
   1024`. The status bar says when a file is too large, and the page does not send that file.
   While an upload arrives, the server writes it to a file in the system's temporary folder, and

@@ -15,6 +15,7 @@ pytest.importorskip("textual")
 pytest.importorskip("textual_fspicker")
 
 import asyncio
+import contextlib
 import datetime
 import io
 import math
@@ -56,8 +57,9 @@ from textual.widgets._select import SelectCurrent
 from textual.widgets.collapsible import CollapsibleTitle
 from textual.widgets.markdown import MarkdownBlock
 from textual_fspicker import FileSave, SelectDirectory
+from textual_fspicker.base_dialog import Dialog
 from textual_fspicker.parts import DirectoryNavigation
-from textual_fspicker.parts.directory_navigation import DirectoryEntryStyling
+from textual_fspicker.parts.directory_navigation import DirectoryEntry, DirectoryEntryStyling
 
 from composeui.core import chartimage
 from composeui.core._views.tables import SOURCE_TABLE_WINDOW
@@ -206,7 +208,7 @@ from tests.vertical import VerticalMainView
 from tests.workers import OpacityMainView, WorkersMainView
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import AsyncGenerator, Callable
 
     from textual.app import App
     from textual.message import Message
@@ -508,6 +510,150 @@ async def test_a_file_upload_gives_the_user_s_file_from_the_picker_without_a_cop
         assert str(widget.name_label.render()) == "flows.csv"
         dataset.clear()
         assert str(widget.name_label.render()) == "Nothing yet"
+
+
+def _row_text(navigation: DirectoryNavigation, name: str) -> str:
+    """Get the row of the folder list naming `name`, as the terminal shows it."""
+    rows = [navigation.render_line(y).text for y in range(navigation.size.height)]
+    return next(row for row in rows if f" {name} " in row)
+
+
+def _index_in(navigation: DirectoryNavigation, name: str) -> int:
+    names = [
+        cast("DirectoryEntry", navigation.get_option_at_index(index)).location.name
+        for index in range(navigation.option_count)
+    ]
+    return names.index(name)
+
+
+class _Picker:
+    """The picker of a `FileUploadView` with `multiple`, open in a folder of shapefiles."""
+
+    def __init__(
+        self,
+        pilot: Pilot[Any],
+        widget: ComposeFileUpload,
+        given: list[tuple[UploadedFile, ...]],
+    ) -> None:
+        self.pilot = pilot
+        self.widget = widget
+        self.navigation = pilot.app.screen.query_one(DirectoryNavigation)
+        self.names = pilot.app.screen.query_one(Input)
+        #: what `files_uploaded` gave
+        self.given = given
+
+    async def mark(self, name: str) -> None:
+        self.navigation.highlighted = _index_in(self.navigation, name)
+        await self.pilot.press("space")
+
+    async def listed(self) -> None:
+        await self.pilot.app.workers.wait_for_complete()  # the list reads its folder in a thread
+        await self.pilot.pause()
+
+    def is_marked(self, name: str) -> bool:
+        return _row_text(self.navigation, name).lstrip().startswith("✓")
+
+
+@contextlib.asynccontextmanager
+async def _shapes_picker(folder: Path) -> AsyncGenerator[_Picker, None]:
+    for name in ("roads.shp", "roads.dbf", "rivers.shp", ".old.shp"):
+        (folder / name).write_bytes(b"1")
+    (folder / "sub").mkdir()
+    view = DataFileMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    given: list[tuple[UploadedFile, ...]] = []
+    view.form.shapes.files_uploaded.connect(given.append)
+    async with app.run_test(size=(100, 40)) as pilot:
+        widget = _field_widget(view.form.shapes.renderer)
+        assert isinstance(widget, ComposeFileUpload)
+        widget.button.press()
+        await pilot.pause()
+        await AwaitMount(app.screen, [app.screen])
+        picker = _Picker(pilot, widget, given)
+        await picker.listed()
+        yield picker
+
+
+@pytest.mark.asyncio
+async def test_the_picker_of_several_files_marks_them_in_one_folder_until_a_name_is_typed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)  # where the picker opens
+    async with _shapes_picker(tmp_path) as picker:
+        await picker.mark("roads.shp")
+        assert picker.is_marked("roads.shp")
+        # Ctrl+click marks too; a mark on a folder does nothing
+        navigation = picker.navigation
+        row = _index_in(navigation, "rivers.shp") - int(navigation.scroll_y) + 1
+        await picker.pilot.click(DirectoryNavigation, offset=(10, row), control=True)
+        await picker.mark("sub")
+        assert picker.names.value == '"roads.shp" "rivers.shp"'
+        await picker.mark("rivers.shp")  # unmarked
+        assert not picker.is_marked("rivers.shp")
+
+        # a name typed is the choice: the marks go
+        picker.names.focus()
+        await picker.pilot.press("x")
+        assert not picker.is_marked("roads.shp")
+        navigation.focus()
+
+        # one folder per choice: another one drops the marks
+        await picker.mark("roads.shp")
+        navigation.highlighted = _index_in(navigation, "sub")
+        await picker.pilot.press("enter")
+        await picker.listed()
+        assert picker.names.value == ""
+        await picker.pilot.press("backspace")
+        await picker.listed()
+        assert not picker.is_marked("roads.shp")
+
+        # a file picked alone with Enter drops the marks; Open then gives it alone
+        await picker.mark("roads.dbf")
+        navigation.highlighted = _index_in(navigation, "roads.shp")
+        await picker.pilot.press("enter")
+        await picker.pilot.pause()
+        assert (picker.names.value, picker.is_marked("roads.dbf")) == ("roads.shp", False)
+        await picker.pilot.click("#select")
+        await picker.pilot.pause()
+        assert picker.given == [(UploadedFile.of_path(tmp_path / "roads.shp"),)]
+        assert str(picker.widget.name_label.render()) == "roads.shp"
+
+
+@pytest.mark.asyncio
+async def test_a_file_upload_with_multiple_gives_the_files_marked_in_the_picker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)  # where the picker opens
+    async with _shapes_picker(tmp_path) as picker:
+        # a hidden file hidden again drops its mark
+        await picker.pilot.press("full_stop")
+        await picker.mark(".old.shp")
+        await picker.mark("roads.dbf")
+        await picker.pilot.press("full_stop")
+        assert picker.names.value == '"roads.dbf"'
+
+        # a marked file gone by Open: the picker says so, and stays
+        await picker.mark("rivers.shp")
+        (tmp_path / "rivers.shp").unlink()
+        await picker.pilot.click("#select")
+        dialog = picker.pilot.app.screen.query_one(Dialog)
+        assert (dialog.border_subtitle, picker.given) == ("The file must exist", [])
+        # Space on the focused Open button marks nothing
+        await picker.pilot.press("space")
+        assert picker.names.value == '"roads.dbf" "rivers.shp"'
+        picker.navigation.focus()
+        await picker.mark("rivers.shp")  # unmarked, though gone
+        await picker.mark("roads.shp")
+        await picker.pilot.click("#select")
+        await picker.pilot.pause()
+
+        expected = tuple(UploadedFile.of_path(tmp_path / n) for n in ("roads.dbf", "roads.shp"))
+        assert picker.given == [expected]
+        assert str(picker.widget.name_label.render()) == "2 files"
+        assert picker.pilot.app.focused is picker.widget.button
 
 
 @pytest.mark.asyncio

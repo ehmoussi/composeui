@@ -392,7 +392,8 @@ class ExplorerView(MainView):
 
 `clear()` empties the view. The file is not part of a study, so New and Open keep it, and a
 saved study holds no path to it. `extensions`, `browse_text`, `empty_text`, and `uploading_text` set
-the file types and the texts.
+the file types and the texts. To take several files at once, see
+[Several files at once](#several-files-at-once).
 
 What each backend does:
 
@@ -407,10 +408,72 @@ What each backend does:
   [How the web differs from a window](running-the-app.md#how-the-web-differs-from-a-window)). The
   status bar says why a file is refused.
 
+### Several files at once
+
+Set `multiple=True` to let the user give several files in one choice. Use it for files that go
+together, such as the `.shp`, `.shx`, and `.dbf` files of a shapefile, or for many files to read
+in one go.
+
+```python
+from composeui.core.view import (
+    FileUploadView,
+    LabelView,
+    MainView,
+    UploadedFile,
+    child,
+    define_view,
+)
+
+
+@define_view
+class ShapesView(MainView):
+    shapes: FileUploadView = child(
+        FileUploadView, extensions={"Shapefile": (".shp", ".shx", ".dbf")}, multiple=True
+    )
+    summary: LabelView = child(LabelView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.shapes.files_uploaded.connect(self._show_files)
+
+    def _show_files(self, files: tuple[UploadedFile, ...]) -> None:
+        self.summary.text = ", ".join(file.name for file in files)
+```
+
+- **`files_uploaded` gives the files of one choice,** as a tuple, in the order given. `files`
+  holds them, and `file` is the first one. With `multiple`, `uploaded` never emits: one callback
+  gets the whole choice. Without `multiple`, `files_uploaded` emits too, with one file.
+- **The files keep their folder and their names where they can,** so a file can name another
+  file beside it. Qt and Textual give the user's own files. Textual's picker gives the files of
+  one folder. Qt's dialog shows one folder at a time, but some systems' dialogs also show a
+  search or the recent files, which can mix folders. The web keeps the files of each choice in a
+  folder of their own, under their own names. On the web, a name that some system cannot hold,
+  such as `a:b.shp`, or a name that hides the file, such as `.roads.shp`, becomes the name that
+  one upload gets.
+- **On the web, a choice is kept whole, or refused whole.** A file of a type that `extensions`
+  does not give refuses the choice. So do two names that one folder cannot hold apart, such as
+  `Roads.shp` and `roads.shp`. The status bar says why, and the view keeps its previous files.
+- **On the web, the limits apply to the whole choice.** `max_upload_size` limits the size of the
+  files together, and a choice holds at most 100 files.
+- **`files_text`** shows beside the button while the view holds several files: `{count} files`
+  by default.
+
+What each backend does:
+
+- **Qt** opens `QFileDialog.getOpenFileNames`.
+- **Textual** opens the picker of `textual-fspicker`, with marks. Space or Ctrl+click marks the
+  file under the cursor, and a ✓ shows before it. Open gives the marked files. Without marks,
+  Open gives the file named in the field, as for one file. Another folder, a name typed in the
+  field, or Enter on a file drops the marks. Some terminals do not send Ctrl with a click: Space
+  always works.
+- **The web** opens the browser's file picker, which takes several files. The page does not send
+  a choice that is too large or holds too many files.
+
 ### When the copy is deleted
 
 The session keeps its copy while the view holds the file. After the view's next upload, or after
-`clear()`, the session deletes the copy once the main view's [jobs](threads.md) are over. So a job
+`clear()`, the session deletes the copy once the main view's [jobs](threads.md) are over. The
+copies of a choice of several files stay and go together. So a job
 can read a large file, even if the user uploads another one before the job opens it. If that job's
 result no longer matters, cancel it, or start the next one with `Task.start_latest`, so that the
 copy goes sooner.

@@ -25,6 +25,8 @@ from composeui.webcore.uploads import UploadRefusal, receive_upload
 from composeui.webcore.webrenderer import UnsupportedEventError
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from starlette.requests import Request
 
     from composeui.webcore.session import SessionStore, WebSession
@@ -186,6 +188,21 @@ def _widget_response(
     return HTMLResponse(body, headers=headers)
 
 
+#: the digits of the most files a page's `count` can say
+_MAX_COUNT_DIGITS = 6
+#: the page's fields that name a file it kept, and why
+_PAGE_REFUSALS = {"too_large": UploadRefusal.TOO_LARGE, "too_many": UploadRefusal.TOO_MANY}
+
+
+def _count(fields: Mapping[str, str]) -> int:
+    """Get how many files the page kept, which its field `count` gives: one, if none."""
+    count = fields.get("count", "")
+    # a crafted one may hold any text: `int` refuses "²", and thousands of digits
+    if count.isascii() and count.isdigit() and 0 < len(count) <= _MAX_COUNT_DIGITS:
+        return max(int(count), 1)
+    return 1
+
+
 async def widget_file(request: Request) -> Response:
     """Hand an uploaded file to its action, path field or cell; respond as `widget_event` does."""
     session = await _session_off_loop(request)
@@ -202,29 +219,40 @@ async def _receive_file(request: Request, session: WebSession) -> Response:
         upload,
         fields,
     ):
-        # the name of a file over the limit, which the page kept: a refused body shows nothing
-        kept_name = fields.get("too_large")
+        # the name of a file the page kept, over a limit: a refused body shows nothing
+        kept_refusal, kept_name = next(
+            (
+                (refusal, fields[field])
+                for field, refusal in _PAGE_REFUSALS.items()
+                if field in fields
+            ),
+            (None, None),
+        )
         if upload is None and kept_name is None:
             return PlainTextResponse("No file uploaded", status_code=400)
         try:
             async with session.post_order.turn(request.headers):
                 if upload is None:
-                    assert kept_name is not None  # a form without one is answered above
+                    assert kept_refusal is not None  # a form without one is answered above
+                    assert kept_name is not None
                     result = await run_in_threadpool(
-                        session.refuse_upload, widget_id, kept_name, UploadRefusal.TOO_LARGE
+                        session.refuse_upload,
+                        widget_id,
+                        kept_name,
+                        kept_refusal,
+                        _count(fields),
                     )
                 elif upload.refusal is not None:
                     result = await run_in_threadpool(
-                        session.refuse_upload, widget_id, upload.filename, upload.refusal
+                        session.refuse_upload,
+                        widget_id,
+                        upload.files[0].filename,
+                        upload.refusal,
+                        len(upload.files),
                     )
                 else:
                     result = await run_in_threadpool(
-                        session.pick_file,
-                        widget_id,
-                        upload.filename,
-                        upload.path,
-                        fields,
-                        upload.media_type,
+                        session.pick_files, widget_id, upload.files, fields
                     )
         except UnsupportedEventError as e:
             return PlainTextResponse(str(e), status_code=400)

@@ -1422,6 +1422,38 @@ def test_a_file_upload_s_button_opens_the_picker_and_shows_the_file_s_name(
         context.close()
 
 
+def test_files_chosen_together_are_uploaded_together_unless_too_large_together(
+    browser: Browser, tmp_path: Path
+) -> None:
+    app = WebApplication(build_main_view=DataFileMainView).create_starlette_app()
+    shapes = [tmp_path / "roads.shp", tmp_path / "roads.dbf"]
+    for path in shapes:
+        path.write_bytes(b"1")
+    # each under the limit, 5 MiB, but not together: past the body's limit too, so only the
+    # page can say why
+    large = [tmp_path / "large.shp", tmp_path / "large.dbf"]
+    for path in large:
+        path.write_bytes(b"#" * (3 * 1024 * 1024))
+    with _serve(app) as url:
+        context = browser.new_context(base_url=url)
+        page = context.new_page()
+        page.goto("/")
+        group = page.get_by_role("group", name="Shapes")
+        picker = group.locator('input[type="file"]')
+
+        with _posted(page):
+            picker.set_input_files(shapes)
+        expect(group).to_contain_text("2 files")
+
+        with _posted(page):
+            picker.set_input_files(large)
+        expect(page.locator("footer")).to_contain_text(
+            "Can't open 'large.shp' and 1 other file: the files are larger than 5 MiB together."
+        )
+        expect(group).to_contain_text("2 files")
+        context.close()
+
+
 def test_a_move_of_a_slider_brings_a_new_figure_at_the_figure_s_own_size(browser: Browser) -> None:
     """The example's journey: the page's poller brings the task's image to the page."""
     viewer = pytest.importorskip("examples.figureviewer")  # it needs matplotlib

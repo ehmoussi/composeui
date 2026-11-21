@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import functools
 from typing import TYPE_CHECKING, Any, ClassVar, TypeVar
 
 from textual.content import Content
 from typing_extensions import Protocol, override
 
+from composeui.core._views.files import upload_summary
 from composeui.core.renderer import ViewLike
 from composeui.core.view import UploadedFile
 from composeui.textualcore._renderers.inputs import InputViewLike
@@ -15,7 +17,7 @@ from composeui.textualcore.widgets.composefilepathinput import ComposeFilePathIn
 from composeui.textualcore.widgets.composefileupload import ComposeFileUpload
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
     from pathlib import Path
 
     from composeui.core.signal import Signal, SignalNoArgs
@@ -177,11 +179,13 @@ class TextualFilePathInputRenderer(_TextualPathInputRenderer[FilePathInputViewLi
 
 class FileUploadViewLike(ViewLike, Protocol):
     extensions: dict[str, tuple[str, ...]]
+    multiple: bool
     browse_text: str
     empty_text: str
-    file: UploadedFile | None
+    files_text: str
+    files: tuple[UploadedFile, ...]
 
-    def take_file(self, file: UploadedFile) -> None: ...
+    def take_files(self, files: Iterable[UploadedFile]) -> None: ...
 
 
 class TextualFileUploadRenderer(TextualWidgetRenderer[FileUploadViewLike, ComposeFileUpload]):
@@ -192,9 +196,11 @@ class TextualFileUploadRenderer(TextualWidgetRenderer[FileUploadViewLike, Compos
         self._refresh_dispatcher.update(
             {
                 "browse_text": self._refresh_browse_text,
-                "empty_text": self._refresh_empty_text,
-                "file": self._refresh_file,
+                "empty_text": functools.partial(self._refresh_name, "empty_text"),
+                "files_text": functools.partial(self._refresh_name, "files_text"),
+                "files": functools.partial(self._refresh_name, "files"),
                 "extensions": self._refresh_extensions,
+                "multiple": self._refresh_multiple,
                 # the web's only: here, the file needs no upload
                 "uploading_text": lambda _view, _widget, _value: None,
             }
@@ -204,10 +210,10 @@ class TextualFileUploadRenderer(TextualWidgetRenderer[FileUploadViewLike, Compos
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = ComposeFileUpload()
-            self._rendered_object.file_picked.connect(self._take_path)
+            self._rendered_object.files_picked.connect(self._take_paths)
 
-    def _take_path(self, path: Path) -> None:
-        self._view.take_file(UploadedFile.of_path(path))
+    def _take_paths(self, paths: tuple[Path, ...]) -> None:
+        self._view.take_files(UploadedFile.of_path(path) for path in paths)
 
     @staticmethod
     def _refresh_browse_text(
@@ -216,18 +222,11 @@ class TextualFileUploadRenderer(TextualWidgetRenderer[FileUploadViewLike, Compos
         rendered_object.button.label = value
 
     @staticmethod
-    def _refresh_file(
-        view: FileUploadViewLike, rendered_object: ComposeFileUpload, value: UploadedFile | None
+    def _refresh_name(
+        name: str, view: FileUploadViewLike, rendered_object: ComposeFileUpload, value: object
     ) -> None:
         # called before the view holds the value
-        rendered_object.name_label.update(view.empty_text if value is None else value.name)
-
-    @staticmethod
-    def _refresh_empty_text(
-        view: FileUploadViewLike, rendered_object: ComposeFileUpload, value: str
-    ) -> None:
-        if view.file is None:
-            rendered_object.name_label.update(value)
+        rendered_object.name_label.update(upload_summary(view, name, value))
 
     @staticmethod
     def _refresh_extensions(
@@ -236,6 +235,12 @@ class TextualFileUploadRenderer(TextualWidgetRenderer[FileUploadViewLike, Compos
         value: dict[str, tuple[str, ...]],
     ) -> None:
         rendered_object.extensions = dict(value)
+
+    @staticmethod
+    def _refresh_multiple(
+        _view: FileUploadViewLike, rendered_object: ComposeFileUpload, value: bool
+    ) -> None:
+        rendered_object.multiple = value
 
 
 class SavePathInputViewLike(PathInputViewLike, Protocol):

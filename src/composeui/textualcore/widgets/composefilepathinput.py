@@ -15,6 +15,7 @@ from typing_extensions import override
 
 from composeui.core._views.files import path_of_text, text_of_path, with_extension
 from composeui.core.signal import Signal, SignalNoArgs
+from composeui.textualcore.widgets.composefilesopen import ComposeFilesOpen
 from composeui.textualcore.widgets.composeinput import ComposeInput
 
 if TYPE_CHECKING:
@@ -80,6 +81,11 @@ def file_picker(
     """
     location = _parent_folder(text.strip(), start)
     return FileOpen(location, title or "Open", filters=_filters(extensions))
+
+
+def files_picker(extensions: dict[str, tuple[str, ...]], title: str) -> ComposeFilesOpen:
+    """Get a picker of one or several files of `extensions`, in the current directory."""
+    return ComposeFilesOpen(Path(), title or "Open", filters=_filters(extensions))
 
 
 def save_picker(
