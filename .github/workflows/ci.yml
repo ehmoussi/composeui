@@ -185,6 +185,10 @@ jobs:
       # documentation only: its Python files (conf.py, _ext/, screenshots.py) are linted here
       - run: uv run ruff format --check docs
       - run: uv run ruff check docs
+      - name: Check documentation examples and navigation
+        run: uv run --locked --group docs --all-extras pytest tests/test_docs.py
+        env:
+          QT_QPA_PLATFORM: offscreen
       - name: Find the latest release tag
         id: latest
         run: |

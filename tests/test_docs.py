@@ -27,11 +27,12 @@ DOCS = ROOT / "docs"
 #: where the README links to the site and to the other files of the repository
 SITE_URL = "https://ehmoussi.github.io/composeui/"
 REPOSITORY_URL = "https://github.com/ehmoussi/composeui/blob/main/"
-#: the pages that an app developer copies code from
+GUIDES = {"user-guide": "Pages of this guide", "technical-guide": "Contents"}
+#: the pages with Python examples
 PAGES = [
     ROOT / "README.md",
     *sorted(DOCS.glob("*.md")),
-    *sorted((DOCS / "user-guide").glob("*.md")),
+    *(page for guide in GUIDES for page in sorted((DOCS / guide).glob("*.md"))),
     DOCS / "_site" / "skills" / "composeui" / "SKILL.md",
 ]
 #: the skill that users install for their agents
@@ -151,19 +152,18 @@ def test_the_user_guide_names_each_public_view() -> None:
     assert [name for name in views if re.search(rf"\b{name}\b", guide) is None] == []
 
 
-def test_the_user_guide_lists_the_sections_of_its_pages() -> None:
-    listed = set(
-        re.findall(
-            r"\]\(user-guide/([\w-]+\.md)#([\w-]+)\)",
-            (DOCS / "user-guide.md").read_text(encoding="utf-8"),
-        )
-    )
+@pytest.mark.parametrize(("guide", "heading"), GUIDES.items())
+def test_each_guide_lists_its_pages_and_sections(guide: str, heading: str) -> None:
+    index = (DOCS / f"{guide}.md").read_text(encoding="utf-8")
+    contents = index.partition(f"\n## {heading}\n")[2].split("\n## ", 1)[0]
+    listed = set(re.findall(rf"\]\({re.escape(guide)}/([\w-]+\.md)(?:#([\w-]+))?\)", contents))
+    pages = list((DOCS / guide).glob("*.md"))
     sections = {
-        (page.name, _anchor(heading))
-        for page in (DOCS / "user-guide").glob("*.md")
-        for heading in re.findall(r"^#{2,3} (.+)$", page.read_text(encoding="utf-8"), re.MULTILINE)
+        (page.name, _anchor(section))
+        for page in pages
+        for section in re.findall(r"^#{2,3} (.+)$", page.read_text(encoding="utf-8"), re.MULTILINE)
     }
-    assert listed == sections
+    assert listed == sections | {(page.name, "") for page in pages}
 
 
 def test_each_link_of_the_readme_to_the_project_has_a_target() -> None:
