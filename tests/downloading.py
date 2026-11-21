@@ -11,6 +11,7 @@ from typing_extensions import override
 from composeui.core.view import (
     OMIT,
     ButtonView,
+    DownloadedFile,
     DownloadView,
     MainView,
     StreamContent,
@@ -33,7 +34,7 @@ class ReportMainView(MainView):
     #: changes the page without giving a file
     note: ButtonView = attrs.field(factory=lambda: ButtonView(text="Note"))
     # private: no widget shows it
-    _report: Union[bytes, Path, StreamContent] = attrs.field(
+    _report: Union[bytes, Path, StreamContent, DownloadedFile] = attrs.field(
         default=b"a,b\n1,2\n", init=False, metadata={OMIT: True}
     )
 
@@ -44,13 +45,13 @@ class ReportMainView(MainView):
         self.note.clicked.connect(lambda: self.status_bar.show_message("Noted."))
 
     @property
-    def report(self) -> Union[bytes, Path, StreamContent]:
-        """Get what the buttons give: bytes, the path of a file the app wrote, or its writer."""
+    def report(self) -> Union[bytes, Path, StreamContent, DownloadedFile]:
+        """Get what the buttons give: bytes, a path, a writer, or a file with its own name."""
         return self._report
 
     @report.setter
-    def report(self, report: Union[bytes, Path, StreamContent]) -> None:
+    def report(self, report: Union[bytes, Path, StreamContent, DownloadedFile]) -> None:
         self._report = report
 
-    def _make_report(self) -> Union[bytes, Path, StreamContent]:
+    def _make_report(self) -> Union[bytes, Path, StreamContent, DownloadedFile]:
         return self._report

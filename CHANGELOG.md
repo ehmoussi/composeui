@@ -11,6 +11,9 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `DownloadView.content` can return a `DownloadedFile`, whose name and media type replace the
+  view's `filename` and `media_type`: an app names the file at the click, for example after the
+  selected run.
 - `TableView.cell_edit_applied` emits the row, the column and the cell's text once the table
   holds the user's edit. `cell_edited` emits before, while the table still holds the old text.
   The new signal doesn't emit for an edit refused or answered with other rows.

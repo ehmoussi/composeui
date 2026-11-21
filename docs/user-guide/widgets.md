@@ -536,8 +536,8 @@ class ResultsView(VerticalView):
 
 - **`content`** makes the file. It returns the bytes, or the `Path` of a file that the app wrote.
   ComposeUI reads that file when the user saves it, and never deletes it. For a large file, it can
-  return a `StreamContent` (see [Large files](#large-files)). While `content` is `None`, a click
-  gives nothing.
+  return a `StreamContent` (see [Large files](#large-files)). To name the file at the click, it
+  returns a `DownloadedFile` (see below). While `content` is `None`, a click gives nothing.
 - **`filename`** is the name offered for the file. Only its last part counts: a folder before it
   is dropped.
 - **`media_type`** says what the file holds, such as `"text/csv"`. When it is `None`, the type
@@ -545,6 +545,33 @@ class ResultsView(VerticalView):
 - **`in_job`** runs `content` in a [job](threads.md), for a file that takes a while to make. The
   button stays disabled until the file is made. If `content` raises an exception, the status bar
   says why. New and Open drop the job, and give no file.
+
+To name the file at the click, for example after the run that the page shows, `content` returns
+a `DownloadedFile` instead. Its name and its media type replace `filename` and `media_type`:
+
+```python
+from composeui.core.view import (
+    DownloadedFile,
+    DownloadView,
+    LabelView,
+    VerticalView,
+    child,
+    define_view,
+)
+
+
+@define_view
+class RunView(VerticalView):
+    run: LabelView = child(LabelView, text="run-1")
+    log: DownloadView = child(DownloadView, text="Download the log")
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.log.content = self.run_log
+
+    def run_log(self) -> DownloadedFile:
+        return DownloadedFile(f"{self.run.text}.log", b"Run ended.\n", "text/plain")
+```
 
 It is a [button](#buttons) too: its `variant` is `SECONDARY` by default, and `clicked` emits
 before the file is made. The state saves none of its fields: the app's code sets them.

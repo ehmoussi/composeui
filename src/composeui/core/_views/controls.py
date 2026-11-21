@@ -20,7 +20,7 @@ import attrs
 from typing_extensions import override
 
 from composeui.core._views.base import OMIT, UI_TEXT, View, define_view, notify_renderer
-from composeui.core._views.files import StreamContent
+from composeui.core._views.files import DownloadedFile, StreamContent
 from composeui.core._views.inputs import _RANGE_ENDS
 from composeui.core.jobs import Task
 from composeui.core.reactivity import (
@@ -436,27 +436,34 @@ class ButtonView(View):
     clicked: SignalNoArgs = attrs.Factory(SignalNoArgs)
 
 
+#: what a `DownloadView` makes: the file, or the file with its name and type
+_Download = Union[bytes, Path, StreamContent, DownloadedFile]
+
+
 @define_view
 class DownloadView(ButtonView):
     """A button that gives the user a file that the app makes on the click, e.g. a report.
 
     The click calls `content`, which returns the file's bytes, the path of a file that the
-    app wrote, or a `StreamContent`, which writes a large file as the user receives it. Then
-    the main view gives the file (`MainView.download`): the web downloads it, and Qt and
-    Textual ask where to save it. With `in_job`, `content` runs in a job, and the button is
-    disabled until the file is made; the status bar says why it failed.
+    app wrote, or a `StreamContent`, which writes a large file as the user receives it. To
+    name the file at the click, e.g. after a selected run, it returns a `DownloadedFile`
+    instead, whose name and type replace `filename` and `media_type`. Then the main view
+    gives the file (`MainView.download`): the web downloads it, and Qt and Textual ask where
+    to save it. With `in_job`, `content` runs in a job, and the button is disabled until the
+    file is made; the status bar says why it failed.
     """
 
     _renderer_key = "download"
 
     variant: ButtonVariant = attrs.field(default=ButtonVariant.SECONDARY)
-    #: the name offered for the file
+    #: the name offered for the file, unless `content` returns a `DownloadedFile`
     filename: str = attrs.field(default="download", metadata={OMIT: True})
     #: what the file holds, e.g. "text/csv"; guessed from `filename` when None
     media_type: Optional[str] = attrs.field(default=None, metadata={OMIT: True})
-    #: makes the file: its bytes, the path of a file the app wrote, or a `StreamContent`
-    #: that writes it as the user receives it; None gives nothing
-    content: Optional[Callable[[], Union[bytes, Path, StreamContent]]] = attrs.field(
+    #: makes the file: its bytes, the path of a file the app wrote, a `StreamContent` that
+    #: writes it as the user receives it, or a `DownloadedFile` that also names it; None
+    #: gives nothing
+    content: Optional[Callable[[], _Download]] = attrs.field(
         default=None, eq=False, repr=False, metadata={OMIT: True}
     )
     #: whether `content` runs in a job, for a file that takes a while to make
@@ -476,7 +483,7 @@ class DownloadView(ButtonView):
         if content is None:
             return
         if not self.in_job:
-            main_view.download(self.filename, content(), self.media_type)
+            self._made(content(), main_view)
             return
         if self._task is None:
             self._task = self.build_task(_make)
@@ -485,18 +492,18 @@ class DownloadView(ButtonView):
             self._task.failed.connect(self._failed)
         self._task.start(content)
 
-    def _made(self, content: Union[bytes, Path, StreamContent], main_view: MainView) -> None:
-        main_view.download(self.filename, content, self.media_type)
+    def _made(self, content: _Download, main_view: MainView) -> None:
+        if isinstance(content, DownloadedFile):
+            main_view.download(content.filename, content.content, content.media_type)
+        else:
+            main_view.download(self.filename, content, self.media_type)
 
     def _failed(self, error: Exception, main_view: MainView) -> None:
         failed = self.tr("Can't make {name}: {error}.")
         main_view.status_bar.show_message(failed.format(name=self.filename, error=error))
 
 
-def _make(
-    _job: Job[Union[bytes, Path, StreamContent], Any],
-    content: Callable[[], Union[bytes, Path, StreamContent]],
-) -> Union[bytes, Path, StreamContent]:
+def _make(_job: Job[_Download, Any], content: Callable[[], _Download]) -> _Download:
     """Make a `DownloadView`'s file, in its job."""
     return content()
 
