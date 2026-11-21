@@ -178,13 +178,19 @@
       );
       parameters.expanded = !sidebar.hasAttribute("data-retracted");
     }
-    /* a file over the limit stays here: the server would refuse its body, which shows the
-       user nothing. Its name alone goes, and the status bar says why (see `widget_file`). */
+    /* files over a limit stay here: the server would refuse their body, which shows the
+       user nothing. The first one's name alone goes, with their count, and the status bar
+       says why (see `widget_file`). A choice goes whole, or not at all. */
     if (element.type === "file" && /\/file$/.test(element.getAttribute("hx-post") || "")) {
-      var file = /** @type {FileList} */ (element.files)[0];
-      if (file && file.size > Number(document.body.dataset.maxUpload)) {
+      var files = Array.from(/** @type {FileList} */ (element.files));
+      var size = files.reduce(function (total, file) { return total + file.size; }, 0);
+      var refusal = files.length > Number(document.body.dataset.maxUploadFiles) ? "too_many"
+        : size > Number(document.body.dataset.maxUpload) ? "too_large" : null;
+      var first = files[0];
+      if (first && refusal !== null) {
         delete parameters.file;
-        parameters.too_large = file.name;
+        parameters[refusal] = first.name;
+        parameters.count = String(files.length);
       }
     }
   });

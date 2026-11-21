@@ -25,6 +25,13 @@ class DataFileForm(FormView):
     dataset: LabelRowFileUploadView = child(
         LabelRowFileUploadView, label="Dataset", extensions={"CSV": (".csv",)}
     )
+    #: a shapefile's files, which name each other: given together
+    shapes: LabelRowFileUploadView = child(
+        LabelRowFileUploadView,
+        label="Shapes",
+        extensions={"Shapefile": (".shp", ".shx", ".dbf")},
+        multiple=True,
+    )
 
 
 @define_view

@@ -12,6 +12,7 @@ from typing import (
     TYPE_CHECKING,
     BinaryIO,
     Optional,
+    Protocol,
     Union,
     cast,
 )
@@ -19,7 +20,7 @@ from typing import (
 import attrs
 from typing_extensions import override
 
-from composeui.core._views.base import OMIT, UI_TEXT, View, define_view
+from composeui.core._views.base import OMIT, UI_TEXT, View, define_view, emit_if_made
 from composeui.core._views.inputs import InputMixin
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.translation import (
@@ -282,37 +283,105 @@ class UploadedFile:
 
 @define_view
 class FileUploadMixin:
-    """The fields of a file upload: the file the user gave, and `uploaded`.
+    """The fields of a file upload: the files the user gave, and `uploaded`.
 
-    The web's copy of the file stays until the view's next upload or `clear`, and then until
-    the main view's jobs are over, so a job can still read it. The end of the session removes
-    it in any case. The file is not part of a study.
+    With `multiple`, the user gives several files at once, and `files_uploaded` gives them
+    together. Qt and Textual give the user's own files. The web keeps the files of a choice in
+    one folder, under their own names when every system can hold them: a file can name another
+    one beside it.
+    The web's copy of the files stays until the view's next upload or `clear`, and then
+    until the main view's jobs are over, so a job can still read them. The end of the
+    session removes them in any case. The files are not part of a study.
     """
 
     #: the file types the picker offers, by name: ``{"CSV": (".csv",)}``; on the web, a
-    #: file of another type is refused
+    #: file of another type is refused, and with it the files given together
     extensions: dict[str, tuple[str, ...]] = attrs.field(
         factory=dict[str, tuple[str, ...]], metadata={OMIT: True}
     )
+    #: whether the user can give several files at once
+    multiple: bool = attrs.field(default=False, metadata={OMIT: True})
     #: the button's text
     browse_text: str = attrs.field(default=T("Choose a file"), metadata={UI_TEXT: True})
     #: shown beside the button while the view holds no file
     empty_text: str = attrs.field(default=T("No file chosen"), metadata={UI_TEXT: True})
+    #: shown beside the button while the view holds several files, ``{count}`` how many
+    files_text: str = attrs.field(default=T("{count} files"), metadata={UI_TEXT: True})
     #: shown beside the button while the web uploads the file, when the button takes no click
     uploading_text: str = attrs.field(default=T("Uploading..."), metadata={UI_TEXT: True})
-    #: the file the user gave last; None before the first, and after `clear`
-    file: Optional[UploadedFile] = attrs.field(default=None, init=False, metadata={OMIT: True})
-    #: the user gave a file, now in `file`
+    #: the files the user gave last, in the order given; empty before the first, and after
+    #: `clear`
+    files: tuple[UploadedFile, ...] = attrs.field(
+        factory=tuple[UploadedFile, ...], init=False, metadata={OMIT: True}
+    )
+    #: the user gave a file, now in `file`; not emitted with `multiple`
     uploaded: Signal[UploadedFile] = attrs.Factory(Signal[UploadedFile])
+    #: the user gave one or more files, now in `files`
+    files_uploaded: Signal[tuple[UploadedFile, ...]] = attrs.Factory(
+        Signal[tuple[UploadedFile, ...]]
+    )
+
+    @property
+    def file(self) -> Optional[UploadedFile]:
+        """Get the first of `files`, None while there is none: the file, without `multiple`."""
+        return self.files[0] if self.files else None
 
     def take_file(self, file: UploadedFile) -> None:
-        """Hold `file` as the user's own choice, and emit `uploaded`."""
-        self.file = file
-        self.uploaded.emit(file)
+        """Hold `file` as the user's own choice, as `take_files` does."""
+        self.take_files((file,))
+
+    def take_files(self, files: Iterable[UploadedFile]) -> None:
+        """Hold `files` as the user's own choice, and emit `uploaded` and `files_uploaded`.
+
+        `uploaded` only without `multiple`, which takes one file only.
+        """
+        given = tuple(files)
+        if not given:
+            msg = "A choice of files holds at least one file."
+            raise ValueError(msg)
+        if len(given) > 1 and not self.multiple:
+            msg = "Several files need `multiple`."
+            raise ValueError(msg)
+        self.files = given
+        if not self.multiple:
+            self.uploaded.emit(given[0])
+        # most views connect one of the two signals only: don't make the other
+        emit_if_made(cast("View", self), "files_uploaded", given)
 
     def clear(self) -> None:
-        """Hold no file; on the web, the session deletes its copy once the jobs are over."""
-        self.file = None
+        """Hold no file; on the web, the session deletes its copies once the jobs are over."""
+        self.files = ()
+
+
+class _UploadShown(Protocol):
+    """What an upload shows beside its button, read from a view or a backend's view-like."""
+
+    @property
+    def files(self) -> tuple[UploadedFile, ...]: ...
+    @property
+    def empty_text(self) -> str: ...
+    @property
+    def files_text(self) -> str: ...
+
+
+def upload_summary(view: _UploadShown, name: str = "", value: object = None) -> str:
+    """Get what an upload shows beside its button: `empty_text`, the file's name, or a count.
+
+    With the view's field `name` read as `value`: a renderer refreshes before the view holds it.
+    """
+    texts: dict[str, object] = {
+        "files": view.files,
+        "empty_text": view.empty_text,
+        "files_text": view.files_text,
+    }
+    if name in texts:
+        texts[name] = value
+    files = cast("tuple[UploadedFile, ...]", texts["files"])
+    if not files:
+        return cast("str", texts["empty_text"])
+    if len(files) == 1:
+        return files[0].name
+    return cast("str", texts["files_text"]).format(count=len(files))
 
 
 @define_view

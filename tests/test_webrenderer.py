@@ -96,6 +96,7 @@ from composeui.core.view import (
     EditRefusedError,
     FilePathInputMixin,
     FilePathInputView,
+    FileUploadMixin,
     FileUploadView,
     FolderPathInputMixin,
     ImageView,
@@ -179,6 +180,8 @@ from composeui.webcore.uploads import (
     MAX_FIELD_SIZE,
     MAX_FIELDS,
     MAX_PART_HEADERS_SIZE,
+    MAX_UPLOAD_FILES,
+    ReceivedFile,
     UploadRefusal,
     receive_upload,
 )
@@ -260,7 +263,7 @@ else:
 
 if TYPE_CHECKING:
     import argparse
-    from collections.abc import Callable, Iterable, Iterator
+    from collections.abc import Callable, Generator, Iterable, Iterator
     from typing import BinaryIO
 
     from starlette.applications import Starlette
@@ -973,8 +976,8 @@ def _states(main_view: MainView) -> Iterator[str]:
     """Bring `main_view` to each state that shows other text, naming it once there.
 
     As first shown; then with what only shows on demand: dialogs, a list of the server's
-    files, a cell's field, a table's search, its filter editor, and the error or chip of
-    each column filtered.
+    files, a cell's field, an upload's files, a table's search, its filter editor, and the
+    error or chip of each column filtered.
     """
     yield "as first shown"
     tables: list[tuple[TableView, WebTableRenderer]] = []
@@ -984,11 +987,14 @@ def _states(main_view: MainView) -> Iterator[str]:
         path_types = (FilePathInputMixin, FolderPathInputMixin, SavePathInputMixin)
         if isinstance(view, path_types) and view.server_roots:
             _part(view, "field").dispatch("browse", {})
+        if isinstance(view, FileUploadMixin):  # a file's name, or how many with `multiple`
+            hostile = UploadedFile(_HOSTILE, 1, "", Path("hostile"))
+            view.take_files([hostile] * (2 if view.multiple else 1))
         renderer = view.renderer
         if isinstance(view, TableView) and isinstance(renderer, WebTableRenderer):
             tables.append((view, renderer))
             _open_cell(view, renderer)
-    yield "dialogs open, a cell edited, the server's files listed"
+    yield "dialogs open, a cell edited, the server's files listed, files given"
     for view, renderer in tables:
         view.search = _HOSTILE  # last: it hides every row
         for column in view.filterable_columns:
@@ -1252,7 +1258,7 @@ def test_an_upload_stops_going_to_the_disk_once_over_the_limit(
         yield _FILE_PART
         for _ in range(4):
             yield b"x" * 400_000  # past the file's buffer, 128 KiB on Python 3.14: on the disk
-            written.extend(path.stat().st_size for path in tmp_path.rglob("upload"))
+            written.extend(path.stat().st_size for path in tmp_path.rglob("upload-*"))
         yield b"\r\n--b--\r\n"
 
     async def receive() -> bool:
@@ -1263,6 +1269,25 @@ def test_an_upload_stops_going_to_the_disk_once_over_the_limit(
     assert asyncio.run(receive())
     assert 0 < max(written) <= 1_000_000
     assert list(tmp_path.iterdir()) == []  # the scratch folder is gone
+
+
+def test_the_files_of_a_form_each_keep_their_own_bytes_and_share_one_limit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    second = _FILE_PART.replace(b"a.csv", b"b.csv")
+    # one chunk ends a file and starts the next
+    body = [_FILE_PART + b"12", b"3\r\n" + second + b"45", b"6\r\n--b--\r\n"]
+
+    async def receive(limit: int) -> tuple[UploadRefusal | None, list[tuple[str, bytes]]]:
+        async with receive_upload(_receive(body), limit) as (upload, _fields):
+            assert upload is not None
+            return upload.refusal, [(f.filename, f.path.read_bytes()) for f in upload.files]
+
+    assert asyncio.run(receive(6)) == (None, [("a.csv", b"123"), ("b.csv", b"456")])
+    # each under the limit, but not together
+    assert asyncio.run(receive(5))[0] is UploadRefusal.TOO_LARGE
+    assert list(tmp_path.iterdir()) == []
 
 
 def _disk_with(*free: int) -> mock.Mock:
@@ -1286,7 +1311,7 @@ def test_an_upload_stops_going_to_the_disk_once_it_runs_short(
         yield _FILE_PART
         for _ in range(6):
             yield b"x" * 600_000
-            sizes.extend(path.stat().st_size for path in tmp_path.rglob("upload"))
+            sizes.extend(path.stat().st_size for path in tmp_path.rglob("upload-*"))
         yield b"\r\n--b--\r\n"
 
     async def receive() -> UploadRefusal | None:
@@ -1320,7 +1345,7 @@ def _scratch_file_opens_with(
 
     def opening(path: Path, *args: Any, **kwargs: Any) -> Any:
         file = real_open(path, *args, **kwargs)
-        return wrap(file) if path.name == "upload" else file
+        return wrap(file) if path.name.startswith("upload-") else file
 
     monkeypatch.setattr(Path, "open", opening)
 
@@ -1409,7 +1434,9 @@ def test_a_file_that_would_fill_the_disk_is_refused_and_keeps_the_field_s_file(
     "body",
     [
         _FILE_PART + b"cut short, without its end",
-        _FILE_PART + b"1\r\n--b\r\n" + _FILE_PART[4:] + b"2\r\n--b--\r\n",  # a second file
+        # an action takes one file: its page never sends two
+        _FILE_PART + b"1\r\n--b\r\n" + _FILE_PART[4:] + b"2\r\n--b--\r\n",
+        b"".join(_FILE_PART + b"1\r\n" for _ in range(MAX_UPLOAD_FILES + 1)) + b"--b--\r\n",
         b'--b\r\nContent-Disposition: form-data; name="other"; filename="a"\r\n\r\n1\r\n--b--\r\n',
         b"--b\r\nContent-Disposition: form-data\r\n\r\n1\r\n" + _WHOLE_FILE,  # no name
         b'--b\r\nContent-Disposition: form-data; name="row"\r\n\r\n'
@@ -1434,6 +1461,7 @@ def test_a_file_that_would_fill_the_disk_is_refused_and_keeps_the_field_s_file(
     ids=[
         "cut",
         "two files",
+        "too many files",
         "other name",
         "no name",
         "large field",
@@ -2134,6 +2162,276 @@ def test_a_file_upload_holds_its_file_until_the_next_one_or_the_session_s_end() 
     third = uploads[-1]
     session.close()
     assert not third.path.exists()
+
+
+@contextlib.contextmanager
+def _data_files_app() -> Generator[tuple[TestClient, DataFileMainView], None, None]:
+    """Serve the file fields' main view, and give the one session's view."""
+    views: list[DataFileMainView] = []
+
+    class DataApp(WebApplication[DataFileMainView]):
+        @override
+        def setup_session(self, main_view: DataFileMainView) -> None:
+            main_view.status_bar.timeout = 0
+            views.append(main_view)
+
+    with _Browser(DataApp(build_main_view=DataFileMainView).create_starlette_app()) as client:
+        client.get("/")
+        (main_view,) = views
+        yield client, main_view
+
+
+def test_files_given_together_are_kept_in_one_folder_under_their_own_names() -> None:
+    with _data_files_app() as (client, main_view):
+        shapes = main_view.form.shapes
+        field = _part(shapes, "field")
+        given: list[tuple[UploadedFile, ...]] = []
+        shapes.files_uploaded.connect(given.append)
+        (picker,) = [
+            a for tag, a in _element(field.to_html(), field.widget_id).descendants if tag == "input"
+        ]
+        assert ("multiple" in picker, picker["accept"]) == (True, ".shp,.shx,.dbf")
+        url = f"/widget/{field.widget_id}/file"
+
+        response = client.post(
+            url,
+            files=[
+                ("file", ("my roads.shp", b"1", "application/x-shp")),
+                ("file", ("my roads.dbf", b"22")),
+                # a crafted post: the browser sends no folder
+                ("file", ("../../my roads.shx", b"333")),
+            ],
+        )
+
+        (first,) = given
+        assert [(file.name, file.size, file.path.name) for file in first] == [
+            ("my roads.shp", 1, "my roads.shp"),
+            ("my roads.dbf", 2, "my roads.dbf"),
+            ("my roads.shx", 3, "my roads.shx"),
+        ]
+        assert [file.path.read_bytes() for file in first] == [b"1", b"22", b"333"]
+        assert len({file.path.parent for file in first}) == 1
+        assert (first[0].media_type, all(file.is_temporary for file in first)) == (
+            "application/x-shp",
+            True,
+        )
+        assert _swapped(response.text, f"{field.widget_id}-name").text == "3 files"
+
+        # the next choice replaces them, as a single file does
+        client.post(url, files=[("file", ("rivers.shp", b"4"))])
+        assert [file.name for file in shapes.files] == ["rivers.shp"]
+        assert not first[0].path.parent.exists()
+
+        # a field without `multiple` takes one file: its page never sends two; nor a field
+        # disabled, nor what isn't a widget
+        two = [("file", ("a.shp", b"1")), ("file", ("b.shp", b"2"))]
+        dataset_url = f"/widget/{_part(main_view.form.dataset, 'field').widget_id}/file"
+        assert client.post(dataset_url, files=two).status_code == 400
+        assert main_view.form.dataset.file is None
+        shapes.is_enabled = False
+        assert client.post(url, files=two).status_code == 400
+        assert [file.name for file in shapes.files] == ["rivers.shp"]
+        assert client.post("/widget/cui-0/file", files=two).status_code == 404
+
+
+@pytest.mark.parametrize(
+    ("name", "kept"),
+    [
+        ("rôutes de l'été .shp", "rôutes de l'été .shp"),
+        ("C:\\gis\\roads.shp", "roads.shp"),
+        # what some system can't hold, or hides: the name every upload gets
+        ("a:b.shp", "a-b.shp"),
+        (".roads.shp", "roads.shp"),
+        ("NUL.shp", "upload-NUL.shp"),
+        ("COM¹.shp", "COM-.shp"),
+        ("CONIN$.shp", "CONIN-.shp"),
+        ("tab\t.shp", "tab-.shp"),
+        ("r" * 250 + ".shp", "r" * 196 + ".shp"),
+    ],
+)
+def test_a_file_given_with_others_keeps_its_name_where_every_system_can_hold_it(
+    name: str, kept: str
+) -> None:
+    with _data_files_app() as (client, main_view):
+        shapes = main_view.form.shapes
+        # as sent, which the test client would encode
+        part = 'Content-Disposition: form-data; name="file"; filename="{}"'.format(
+            name.replace("\\", "\\\\")
+        )
+        client.post(
+            f"/widget/{_part(shapes, 'field').widget_id}/file",
+            content=f"--b\r\n{part}\r\n\r\n1\r\n--b--\r\n".encode(),
+            headers={"Content-Type": "multipart/form-data; boundary=b"},
+        )
+        assert shapes.file is not None
+        assert (shapes.file.path.name, shapes.file.name) == (kept, name.rsplit("\\", 1)[-1])
+
+
+#: pieces of names that some system can't hold, or holds as something else
+_SHAPE_NAME_PIECES = [
+    *("roads", "é", "e\u0301", " ", ".", "..", "-", "$"),
+    *("/", "\\", ":", '"', "*", "|", "\t", "\0", "\x7f"),
+    *("NUL", "com1", "COM¹", "lpt³", "CONIN$", "x" * 120),
+]
+#: every system's devices, as Windows names them: a file of such a name, with any type, isn't
+#: a file
+_WINDOWS_DEVICES = {
+    *("con", "prn", "aux", "nul", "conin$", "conout$"),
+    *(f"{port}{digit}" for port in ("com", "lpt") for digit in "123456789¹²³"),
+}
+
+
+def test_a_file_given_with_others_keeps_a_name_that_every_system_holds_as_that_file() -> None:
+    main_view = DataFileMainView()
+    main_view.form.shapes.extensions = {}  # any name: a type of its own may end it
+    session = WebSession(main_view)
+    widget_id = _part(main_view.form.shapes, "field").widget_id
+
+    @given(
+        st.lists(st.sampled_from(_SHAPE_NAME_PIECES), min_size=1, max_size=6).map("".join),
+        st.sampled_from([".shp", ".SHP", "", ".", " "]),
+    )
+    @example("x" * 250, ".shp")
+    @example("//roads/", ".shp")  # read as a network path by `Path` on Windows
+    @settings(max_examples=300)  # cheap: one small file each
+    def give(stem: str, end: str) -> None:
+        name = stem + end
+        with tempfile.TemporaryDirectory() as directory:
+            received = Path(directory, "upload-0")
+            received.write_bytes(b"1")
+            session.pick_files(widget_id, [ReceivedFile(name, "", received)])
+        file = main_view.form.shapes.file
+        assert file is not None, name
+        kept = file.path.name
+        assert file.path.read_bytes() == b"1", name
+        assert len(kept.encode()) <= 200, name
+        assert not kept.startswith("."), name
+        assert not kept.endswith((" ", ".")), name
+        refused = set('<>:"/\\|?*\x7f') | {chr(code) for code in range(32)}
+        assert not refused & set(kept), name
+        assert kept.split(".")[0].rstrip(" ").lower() not in _WINDOWS_DEVICES, name
+        assert kept.lower().endswith(end.lower().strip(" .")), name  # its type
+        # a name each system holds stays the user's own
+        plain = stem.isascii() and stem.isalnum() and len(name) <= 200
+        if plain and stem.lower() not in _WINDOWS_DEVICES and end in {".shp", ".SHP"}:
+            assert kept == name
+
+    try:
+        give()
+    finally:
+        session.close()
+
+
+def _fail_the_choice_s_folder(monkeypatch: pytest.MonkeyPatch) -> None:
+    real_mkdtemp = tempfile.mkdtemp
+
+    def mkdtemp(**kwargs: str) -> str:
+        if "dir" in kwargs:  # the folder of an upload, not the request's scratch folder
+            raise OSError(errno.ENOSPC, "full")
+        return real_mkdtemp(**kwargs)
+
+    monkeypatch.setattr(tempfile, "mkdtemp", mkdtemp)
+
+
+def _fail_the_second_move(monkeypatch: pytest.MonkeyPatch) -> None:
+    real_move = shutil.move
+    moves: list[str] = []
+
+    def move(source: str, target: str) -> object:
+        moves.append(target)
+        if len(moves) == 2:
+            raise OSError(errno.ENOSPC, "full")
+        return real_move(source, target)
+
+    monkeypatch.setattr(shutil, "move", move)
+
+
+@pytest.mark.parametrize(
+    ("files", "page_fields", "message"),
+    [
+        (
+            [("Roads.shp", b"1"), ("roads.shp", b"2")],
+            {},
+            "Can't open 'Roads.shp' and 1 other file:"
+            " another of the files chosen has the same name.",
+        ),
+        (
+            [("a:b.shp", b"1"), ("a-b.shp", b"2")],
+            {},
+            "Can't open 'a:b.shp' and 1 other file: another of the files chosen has the same name.",
+        ),
+        (
+            [("roads.shp", b"1"), ("notes.txt", b"2")],
+            {},
+            "Can't open 'notes.txt' and 1 other file: expected a .shp or .shx or .dbf file.",
+        ),
+        (
+            [("roads.shp", b"#" * 600_000), ("roads.dbf", b"#" * 600_000)],
+            {},
+            "Can't open 'roads.shp' and 1 other file: the files are larger than 1 MiB together.",
+        ),
+        (
+            [("roads.shp", b"1"), ("roads.dbf", b"2")],
+            {"fail": "folder"},
+            "Can't open 'roads.shp' and 1 other file: the server has no room for them right now.",
+        ),
+        (
+            [("roads.shp", b"1"), ("roads.dbf", b"2"), ("roads.shx", b"3")],
+            {"fail": "move"},
+            "Can't open 'roads.shp' and 2 other files: the server has no room for them right now.",
+        ),
+        (
+            [],
+            {"too_large": "roads.shp", "count": "3"},
+            "Can't open 'roads.shp' and 2 other files: the files are larger than 1 MiB together.",
+        ),
+        (
+            [],
+            {"too_many": "roads.shp", "count": "101"},
+            "Can't open 'roads.shp' and 100 other files: at most 100 files go at once.",
+        ),
+    ],
+    ids=[
+        "same name",
+        "same name once safe",
+        "other type",
+        "too large together",
+        "no room for a folder",
+        "no room",
+        "page: too large",
+        "page: too many",
+    ],
+)
+def test_files_given_together_are_refused_together_and_the_last_ones_stay(
+    monkeypatch: pytest.MonkeyPatch,
+    files: list[tuple[str, bytes]],
+    page_fields: dict[str, str],
+    message: str,
+) -> None:
+    monkeypatch.setattr(DataFileMainView, "max_upload_size", 1024 * 1024)
+    with _data_files_app() as (client, main_view):
+        shapes = main_view.form.shapes
+        field = _part(shapes, "field")
+        url = f"/widget/{field.widget_id}/file"
+        client.post(url, files=[("file", ("kept.shp", b"0"))])
+        kept = shapes.files
+        uploads = kept[0].path.parent.parent  # the field's, each upload in a folder
+        failing = page_fields.pop("fail", None)
+        if failing == "folder":
+            _fail_the_choice_s_folder(monkeypatch)
+        elif failing == "move":
+            _fail_the_second_move(monkeypatch)
+
+        response = client.post(
+            url,
+            files=[("file", file) for file in files]
+            + [(field_name, (None, value)) for field_name, value in page_fields.items()],
+        )
+
+        status = _swapped(response.text, _widget_id(main_view.status_bar.renderer))
+        assert status.text == message
+        assert (shapes.files, kept[0].path.read_bytes()) == (kept, b"0")
+        assert list(uploads.iterdir()) == [kept[0].path.parent]
 
 
 def _wait_for_the_jobs(session: WebSession, main_view: MainView) -> None:

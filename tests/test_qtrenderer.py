@@ -1268,6 +1268,48 @@ def test_a_date_input_reports_the_text_typed_or_picked_not_the_text_code_sets(
     assert texts[2:] == ["05/11/2026"]  # picked, not typed
 
 
+def test_a_file_upload_with_multiple_gives_the_files_picked_together_in_qt_s_dialog(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    view = DataFileMainView()
+    view.render(RendererType.QT)
+    shapes = view.form.shapes
+    widget = _field_widget(shapes)
+    assert isinstance(widget, QFileUpload)
+    qtbot.addWidget(widget)
+    given: list[tuple[UploadedFile, ...]] = []
+    shapes.files_uploaded.connect(given.append)
+    paths = [tmp_path / "roads.shp", tmp_path / "roads.dbf"]
+    for path in paths:
+        path.write_bytes(b"1")
+    filters: list[str] = []
+    answer: list[str] = []
+
+    def ask(*args: object) -> tuple[list[str], str]:
+        filters.append(str(args[3]))
+        return answer, ""
+
+    def ask_one(*_args: object) -> tuple[str, str]:
+        msg = "the dialog that picks one file"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(QFileDialog, "getOpenFileNames", staticmethod(ask))
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", staticmethod(ask_one))
+    qtbot.mouseClick(widget.button, Qt.MouseButton.LeftButton)  # cancelled
+    assert (filters, given) == (["Shapefile (*.shp *.shx *.dbf)"], [])
+
+    answer = [str(path) for path in paths]
+    qtbot.mouseClick(widget.button, Qt.MouseButton.LeftButton)
+    assert given == [tuple(UploadedFile.of_path(path) for path in paths)]
+    assert widget.name.text() == "2 files"
+    answer = [str(paths[1])]
+    qtbot.mouseClick(widget.button, Qt.MouseButton.LeftButton)
+    assert (shapes.files, widget.name.text()) == ((UploadedFile.of_path(paths[1]),), "roads.dbf")
+    shapes.files_text = "{count} shapefile parts"
+    shapes.take_files(UploadedFile.of_path(path) for path in paths)
+    assert widget.name.text() == "2 shapefile parts"
+
+
 def test_a_file_upload_gives_the_user_s_file_from_qt_s_dialog_without_a_copy(
     qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

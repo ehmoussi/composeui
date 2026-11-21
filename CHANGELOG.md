@@ -11,6 +11,13 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `FileUploadView(multiple=True)` takes several files in one choice, on every backend.
+  `files_uploaded` gives them together, and `files` holds them. Qt and Textual give the user's
+  own files. The web keeps the files of a choice in one folder, under their own names when every
+  system can hold them, so a file can name another one. On the web, the choice is kept whole or
+  refused whole, and `max_upload_size` limits the files together. Textual's picker marks the
+  files with Space or Ctrl+click.
+
 - `join_text(separator, parts)`, in `composeui.core.view` and `composeui.core.translation`,
   joins text that follows the language: `MainView.set_language` translates the separator and
   the parts again, then joins them again. `str.join` gives text that stays in its language.
@@ -49,6 +56,8 @@ backends' modules included, can change in any release without an entry here.
 
 ### Changed
 
+- `FileUploadView.file` is now a read-only property: the first of `files`. Set the files with
+  `take_file`, `take_files`, or `clear`.
 - On the web, a `LabelView` keeps the line breaks of its text, as Qt and Textual do.
   Before, the browser showed each line break as a space.
 - The main view's questions before it replaces a file or discards unsaved changes are

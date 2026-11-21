@@ -26,6 +26,7 @@ from composeui.core.view import (
     ConsoleView,
     DownloadedFile,
     FilePathInputView,
+    FileUploadView,
     FormView,
     GroupFormView,
     LabelView,
@@ -554,6 +555,34 @@ def test_an_uploaded_file_of_a_path_names_the_user_s_file_without_a_copy(tmp_pat
     path = tmp_path / "notes.unknowntype"
     path.write_bytes(b"12345")
     assert UploadedFile.of_path(path) == UploadedFile("notes.unknowntype", 5, "", path)
+
+
+def test_a_file_upload_takes_several_files_at_once_only_with_multiple() -> None:
+    shapes = UploadedFile("roads.shp", 1, "", Path("roads.shp"))
+    table = UploadedFile("roads.dbf", 2, "", Path("roads.dbf"))
+    single = FileUploadView()
+    with pytest.raises(ValueError, match="multiple"):
+        single.take_files((shapes, table))
+    assert single.files == ()
+    single_given: list[tuple[UploadedFile, ...]] = []
+    single.files_uploaded.connect(single_given.append)
+    single.take_file(shapes)
+    assert (single.file, single_given) == (shapes, [(shapes,)])
+
+    several = FileUploadView(multiple=True)
+    uploaded: list[UploadedFile] = []
+    given: list[tuple[UploadedFile, ...]] = []
+    several.uploaded.connect(uploaded.append)
+    several.files_uploaded.connect(given.append)
+    several.take_files(iter([shapes, table]))
+    several.take_file(table)
+    # one callback for a choice, never one per file before the others are there
+    assert (given, uploaded) == ([(shapes, table), (table,)], [])
+    assert (several.files, several.file) == ((table,), table)
+    with pytest.raises(ValueError, match="at least one"):
+        several.take_files(())
+    several.clear()
+    assert (several.files, several.file) == ((), None)
 
 
 def test_a_stream_is_saved_in_a_job_and_a_failure_or_a_cancel_leaves_the_file_as_it_was(

@@ -6,6 +6,8 @@ from string import Template
 
 from markupsafe import Markup, escape
 
+from composeui.webcore.uploads import MAX_UPLOAD_FILES
+
 _STATIC = Path(__file__).parent / "static"
 
 
@@ -41,7 +43,7 @@ $icon_link
 </head>
 
 <body class="bg-base-200 min-h-screen" data-max-upload="$max_upload_size"
-  data-session="$session_tag">
+  data-max-upload-files="$max_upload_files" data-session="$session_tag">
 <div id="app">
 $content
 </div>
@@ -156,8 +158,9 @@ def get_page(  # noqa: PLR0913 (each is a part of the page)
     """Get the app's page showing `content`, with the browser tab's `icon` at its address.
 
     `pollers` are the elements asking the server for news: `jobs_poller`'s, and
-    `reload_poller`'s. The page's script sends no file larger than `max_upload_size`, and
-    `session_tag` with its requests (`SESSION_TAG_HEADER`, or Save's `SESSION_TAG_FIELD`).
+    `reload_poller`'s. The page's script sends no files larger than `max_upload_size`
+    together, nor more than `MAX_UPLOAD_FILES` at once, and `session_tag` with its requests
+    (`SESSION_TAG_HEADER`, or Save's `SESSION_TAG_FIELD`).
     `downloads` names the files the page fetches (`downloads.downloads_marker`).
     """
     return _PAGE.substitute(
@@ -170,6 +173,7 @@ def get_page(  # noqa: PLR0913 (each is a part of the page)
             "pollers": pollers,
             "downloads": downloads,
             "max_upload_size": max_upload_size,
+            "max_upload_files": MAX_UPLOAD_FILES,
             "session_tag": escape(session_tag),
             "session_field": SESSION_TAG_FIELD,
             "save_form": SAVE_FORM_ID,

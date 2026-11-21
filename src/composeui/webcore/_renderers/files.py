@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Final, Literal, NamedTuple, Typ
 from markupsafe import Markup
 from typing_extensions import Protocol, override
 
-from composeui.core._views.files import is_within_roots, with_extension
+from composeui.core._views.files import is_within_roots, upload_summary, with_extension
 from composeui.core.renderer import ViewLike
 from composeui.core.view import CellKind
 from composeui.webcore._renderers.inputs import InputViewLike, _WebTextFieldRenderer
@@ -24,7 +24,7 @@ from composeui.webcore.serverfiles import (
 from composeui.webcore.webrenderer import UnsupportedEventError, WebRenderer, _file_types, _icon
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterable, Mapping
 
     from composeui.core.signal import Signal, SignalNoArgs
     from composeui.core.view import UploadedFile
@@ -790,12 +790,14 @@ class WebFolderPathInputRenderer(_WebPathInputRenderer[FolderPathInputViewLike])
 
 class FileUploadViewLike(ViewLike, Protocol):
     extensions: dict[str, tuple[str, ...]]
+    multiple: bool
     browse_text: str
     empty_text: str
+    files_text: str
     uploading_text: str
-    file: UploadedFile | None
+    files: tuple[UploadedFile, ...]
 
-    def take_file(self, file: UploadedFile) -> None: ...
+    def take_files(self, files: Iterable[UploadedFile]) -> None: ...
 
 
 class WebFileUploadRenderer(WebRenderer[FileUploadViewLike]):
@@ -814,10 +816,12 @@ class WebFileUploadRenderer(WebRenderer[FileUploadViewLike]):
         self._refresh_dispatcher.update(
             {
                 "extensions": self._mark_dirty,
+                "multiple": self._mark_dirty,
                 "browse_text": self._mark_dirty,
                 "uploading_text": self._mark_dirty,
                 "empty_text": self._mark_name_dirty,
-                "file": self._mark_name_dirty,
+                "files_text": self._mark_name_dirty,
+                "files": self._mark_name_dirty,
             }
         )
         #: whether only the name changed since last sent
@@ -837,12 +841,16 @@ class WebFileUploadRenderer(WebRenderer[FileUploadViewLike]):
         self._swaps_name = True
         super()._mark_dirty(view, rendered_object, value)
 
+    @property
+    def takes_several(self) -> bool:
+        """Tell whether the view takes several files at once, which its picker then sends."""
+        return self._view.multiple
+
     def _name_html(self, *, oob: bool = False) -> Markup:
-        file = self._view.file
         return Markup('<span id="{}-name" aria-live="polite"{}>{}</span>').format(
             self.widget_id,
             Markup(' hx-swap-oob="true"') if oob else Markup(),
-            self._view.empty_text if file is None else file.name,
+            upload_summary(self._view),
         )
 
     @override
@@ -858,7 +866,7 @@ class WebFileUploadRenderer(WebRenderer[FileUploadViewLike]):
             ' class="flex items-center gap-2">'
             '<button type="button" class="btn" data-file-browse{disabled}>{browse}</button>'
             # emptied once sent: picking the same file again is a change too
-            '<input type="file" name="file"{accept} class="hidden" tabindex="-1"'
+            '<input type="file" name="file"{multiple}{accept} class="hidden" tabindex="-1"'
             ' aria-hidden="true" hx-post="/widget/{widget_id}/file"'
             ' hx-encoding="multipart/form-data" hx-trigger="change" hx-swap="none"'
             ' data-clear-after-post data-uploading-text="{uploading}" autocomplete="off"{disabled}>'
@@ -868,6 +876,7 @@ class WebFileUploadRenderer(WebRenderer[FileUploadViewLike]):
             row_attributes=self._row_attributes(),
             disabled=disabled,
             browse=self._view.browse_text,
+            multiple=Markup(" multiple") if self._view.multiple else "",
             accept=Markup(' accept="{}"').format(types) if types else "",
             widget_id=self.widget_id,
             uploading=self._view.uploading_text,
@@ -875,10 +884,14 @@ class WebFileUploadRenderer(WebRenderer[FileUploadViewLike]):
         )
 
     def holds_file_in(self, directory: Path) -> bool:
-        """Tell whether the view's file is the upload in `directory`."""
-        file = self._view.file
-        return file is not None and file.path.parent == directory
+        """Tell whether the view's files are the upload in `directory`: one folder holds them."""
+        files = self._view.files
+        return bool(files) and files[0].path.parent == directory
 
     def pick_file(self, file: UploadedFile) -> None:
         """Hand the view the file the picker uploaded, whose copy the session keeps."""
-        self._view.take_file(file)
+        self._view.take_files((file,))
+
+    def pick_files(self, files: tuple[UploadedFile, ...]) -> None:
+        """Hand the view the files the picker uploaded together, in one folder the session keeps."""
+        self._view.take_files(files)

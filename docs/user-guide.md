@@ -72,6 +72,7 @@ not in the package: run them from a clone of the repository (see
     - [Files on the server](user-guide/widgets.md#files-on-the-server)
     - [Relative paths](user-guide/widgets.md#relative-paths)
   - [File upload](user-guide/widgets.md#file-upload)
+    - [Several files at once](user-guide/widgets.md#several-files-at-once)
     - [When the copy is deleted](user-guide/widgets.md#when-the-copy-is-deleted)
   - [Folder path input](user-guide/widgets.md#folder-path-input)
   - [Save path input](user-guide/widgets.md#save-path-input)
