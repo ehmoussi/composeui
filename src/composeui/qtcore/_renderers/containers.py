@@ -44,6 +44,7 @@ from composeui.qtcore.qtrenderer import QtWidgetRenderer
 from composeui.qtcore.widgets.qcolumnlayout import QColumnLayout
 from composeui.qtcore.widgets.qconsole import QConsoleBox
 from composeui.qtcore.widgets.qexpander import QExpander
+from composeui.qtcore.widgets.qflowlayout import QFlowLayout
 from composeui.qtcore.widgets.qpagearea import QPageArea
 from composeui.qtcore.widgets.qsourcetable import QDataFilterTable
 from composeui.qtcore.widgets.qsplitter import QComposeSplitter
@@ -130,22 +131,30 @@ class QtPageRenderer(QtWidgetRenderer[PageView, QPageArea]):
 
 
 class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
-    """Views side by side, each as wide as its share of the row."""
+    """Views side by side, each as wide as its share of the row.
+
+    When none has a share (e.g. buttons), each keeps its own width, and the views that
+    don't fit the row's width go on the next line.
+    """
 
     @override
     def render(self) -> None:
         if self._rendered_object is None:
             self._rendered_object = QWidget()
-            layout = QHBoxLayout(self._rendered_object)
-            # the column holding the row already insets it
-            layout.setContentsMargins(0, 0, 0, 0)
-            # a spacer with no share: it takes the free width only when no view has a
-            # share, ahead of views (e.g. buttons) that would otherwise grow into it
-            if self._view.align is Align.END:
-                layout.addStretch(0)
-            for view, stretch in self._view.stretched_views:
-                widget = _widget_of(view)
-                if widget is not None:
+            widgets = [
+                (widget, stretch)
+                for view, stretch in self._view.stretched_views
+                if (widget := _widget_of(view)) is not None
+            ]
+            if any(stretch > 0 for _, stretch in widgets):
+                layout = QHBoxLayout(self._rendered_object)
+                # the column holding the row already insets it
+                layout.setContentsMargins(0, 0, 0, 0)
+                # a spacer with no share: it takes the free width only while the views
+                # with a share are hidden, ahead of views (e.g. buttons) that would grow
+                if self._view.align is Align.END:
+                    layout.addStretch(0)
+                for widget, stretch in widgets:
                     # at the top: Qt centres a view shorter than the row (e.g. a table
                     # as tall as its rows, beside a taller one) as the window grows; one
                     # scrolling within itself, as tall as the row
@@ -155,8 +164,17 @@ class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
                         else Qt.AlignmentFlag.AlignTop
                     )
                     layout.addWidget(widget, stretch, alignment)
-            if self._view.align is Align.START:
-                layout.addStretch(0)
+                if self._view.align is Align.START:
+                    layout.addStretch(0)
+            else:
+                # as wide as all its views on one line: the window opens wide enough for them
+                flow = QFlowLayout(
+                    self._rendered_object,
+                    align_end=self._view.align is Align.END,
+                    one_line_hint=True,
+                )
+                for widget, _ in widgets:
+                    flow.addWidget(widget)
             self.refresh()
 
 

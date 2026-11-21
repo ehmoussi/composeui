@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from textual.containers import Container, Grid, Horizontal, Vertical
 from textual.content import Content
+from textual.widget import Widget
 from textual.widgets import TabPane
 from typing_extensions import override
 
@@ -28,12 +29,13 @@ from composeui.core.view import (
 from composeui.textualcore._renderers.forms import _widget_of
 from composeui.textualcore.textualrenderer import TextualWidgetRenderer, _refresh_tree
 from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
+from composeui.textualcore.widgets.composeflow import ComposeFlow
 from composeui.textualcore.widgets.composelist import ComposeList
 from composeui.textualcore.widgets.composesplitter import ComposeSplitter
 from composeui.textualcore.widgets.composetabbedcontent import ComposeTabbedContent
 
 if TYPE_CHECKING:
-    from textual.widget import AwaitMount, Widget
+    from textual.widget import AwaitMount
 
 
 class TextualPageRenderer(TextualWidgetRenderer[PageView, Vertical]):
@@ -51,23 +53,33 @@ class TextualPageRenderer(TextualWidgetRenderer[PageView, Vertical]):
             self._rendered_object.styles.height = "auto"
 
 
-class TextualHorizontalRenderer(TextualWidgetRenderer[HorizontalView, Horizontal]):
-    """Views side by side, each as wide as its share of the row."""
+class TextualHorizontalRenderer(TextualWidgetRenderer[HorizontalView, Widget]):
+    """Views side by side, each as wide as its share of the row.
+
+    When none has a share (e.g. buttons), each keeps its own width, and the views that
+    don't fit the row's width go on the next line.
+    """
 
     @override
     def render(self) -> None:
         if self._rendered_object is None:
             widgets: list[Widget] = []
-            for view, stretch in self._view.stretched_views:
+            stretched_views = self._view.stretched_views
+            for view, stretch in stretched_views:
                 widget = _widget_of(view)
                 if widget is not None:
                     # no share: as wide as its content
                     widget.styles.width = f"{stretch}fr" if stretch > 0 else "auto"
                     widgets.append(widget)
-            self._rendered_object = Horizontal(*widgets)
-            self._rendered_object.styles.height = "auto"
-            if self._view.align is Align.END:
-                self._rendered_object.styles.align_horizontal = "right"
+            align_end = self._view.align is Align.END
+            if any(stretch > 0 for _, stretch in stretched_views):
+                self._rendered_object = Horizontal(*widgets)
+                self._rendered_object.styles.height = "auto"
+                # for the views without a share while those with one are hidden
+                if align_end:
+                    self._rendered_object.styles.align_horizontal = "right"
+            else:
+                self._rendered_object = ComposeFlow(*widgets, align_end=align_end)
 
 
 class TextualVerticalRenderer(TextualWidgetRenderer[VerticalView, Vertical]):

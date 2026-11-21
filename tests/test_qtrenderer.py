@@ -164,7 +164,7 @@ from tests.filters import FiltersMainView
 from tests.folderform import StudyMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
-from tests.horizontal import ButtonsMainView, HorizontalMainView
+from tests.horizontal import ButtonsMainView, HorizontalMainView, ManyButtonsMainView
 from tests.hours import HoursMainView
 from tests.latepages import LatePagesMainView
 from tests.listview import PIPES, Pipe, PipeExpander, PipesMainView
@@ -2273,7 +2273,12 @@ def test_buttons_with_no_share_pack_at_their_row_s_start_or_end(qtbot: QtBot) ->
     window.show()
     qtbot.waitExposed(window)
 
-    for row, packed_at_end in ((view.start, False), (view.end, True)):
+    for row, packed_at_end in (
+        (view.start, False),
+        (view.end, True),
+        # the table with a share hidden: the free width still goes before the buttons
+        (view.beside_hidden, True),
+    ):
         first, second = (_widget(button).geometry() for button in (row.first, row.second))
         width = _widget(row).width()
         # as wide as their text, side by side
@@ -2283,6 +2288,52 @@ def test_buttons_with_no_share_pack_at_their_row_s_start_or_end(qtbot: QtBot) ->
             assert second.right() == width - 1
         else:
             assert first.left() == 0
+
+
+def test_buttons_with_no_share_wrap_onto_lines_as_wide_as_their_row(qtbot: QtBot) -> None:
+    view = ManyButtonsMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(400, 600)
+    window.show()
+    qtbot.waitExposed(window)
+    # the rows don't widen the window
+    assert window.width() == 400
+
+    top = 0
+    for row, packed_at_end in (
+        (view.start, False),
+        (view.end, True),
+        (view.beside.buttons, False),
+    ):
+        first, last = (_widget(button) for button in (row.buttons[0], row.buttons[-1]))
+        width = _widget(row).width()
+        assert width < window.width()
+        boxes = [_widget(button).geometry() for button in row.buttons]
+        # each as wide as its text, within the row: none cut off or squeezed
+        assert all(
+            box.width() == _widget(button).sizeHint().width()
+            for box, button in zip(boxes, row.buttons)
+        )
+        assert all(box.left() >= 0 and box.right() <= width - 1 for box in boxes)
+        # side by side, the last ones on another line, and the row as tall as its lines
+        assert boxes[1].top() == boxes[0].top()
+        assert last.geometry().top() > first.geometry().bottom()
+        assert _widget(row).mapTo(window, QPoint(0, 0)).y() >= top
+        top = last.mapTo(window, last.rect().bottomLeft()).y()
+        if packed_at_end:
+            assert last.geometry().right() == width - 1
+        else:
+            assert first.geometry().left() == 0
+    # a note longer than the row wraps within it, its button beside or below it
+    note, retry = _widget(view.noted.note), _widget(view.noted.retry)
+    width = _widget(view.noted).width()
+    assert note.geometry().right() <= width - 1
+    assert note.height() >= 2 * note.fontMetrics().height()
+    assert retry.geometry().right() <= width - 1
+    top = max(widget.mapTo(window, widget.rect().bottomLeft()).y() for widget in (note, retry))
+    assert _widget(view.below).mapTo(window, QPoint(0, 0)).y() > top
 
 
 class _WindowsShown(QObject):

@@ -49,6 +49,15 @@ backends' modules included, can change in any release without an entry here.
   word on the web, widened the page, which scrolled sideways and hid the end of the text. On
   Qt, a window with a long label can now open narrower, down to `MainView.minimum_width`
   (720 px by default), with the label wrapped. Set `minimum_width` to open it wider.
+- A `HorizontalView` whose views take no share of its width, such as a row of buttons, puts
+  the views that don't fit on the next line, on every backend. Each view keeps its own width,
+  and `align` packs each line at the row's start or end. A view is at most as wide as the
+  row, so a long label in it wraps. Such a row also wraps with a share of 0 beside a view
+  that takes the rest, such as a title. Before, such a row widened the page
+  on the web: on a phone, the page scrolled sideways, and a row packed at its end hid its first
+  buttons. Textual cut off the buttons past the terminal's width, and Qt squeezed them, which
+  cut their text. In a Textual form dialog, such a row was also packed at its end, whatever
+  its `align`.
 - A text field's `text_changed` and `text_edited` report the user's changes only, on every
   backend. On Textual, text or a value that code set in a text, number, date or path field
   emitted both, as if the user had typed it. On Qt, a date set by code emitted

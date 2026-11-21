@@ -2,11 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable
 
-from qtpy.QtCore import QMargins, QPoint, QRect, QSignalBlocker, QSize, Qt, QTimer, Signal
+from qtpy.QtCore import QSignalBlocker, Qt, QTimer, Signal
 from qtpy.QtWidgets import (
     QComboBox,
     QHBoxLayout,
-    QLayout,
     QLineEdit,
     QPushButton,
     QSizePolicy,
@@ -14,18 +13,17 @@ from qtpy.QtWidgets import (
     QToolButton,
     QVBoxLayout,
     QWidget,
-    QWidgetItem,
 )
 from typing_extensions import override
 
 from composeui.core._views.tables import split_pattern
 from composeui.core.view import SEARCH_DELAY_MS, as_pattern
+from composeui.qtcore.widgets.qflowlayout import QFlowLayout
 from composeui.qtcore.widgets.qplaintext import plain_label, plain_tool_tip
 from composeui.qtcore.widgets.qtexttable import QTextTableView
 
 if TYPE_CHECKING:
     from qtpy.QtGui import QKeyEvent
-    from qtpy.QtWidgets import QLayoutItem
 
 #: a chip's remove button: a multiplication sign, as a close button often is
 REMOVE = "\u00d7"
@@ -33,86 +31,6 @@ REMOVE = "\u00d7"
 EDIT = "\u270e"
 #: the value field's style while what it holds can't filter, as a form's invalid field
 _INVALID_STYLE = "QLineEdit { border: 1px solid red; }"
-
-
-class QFlowLayout(QLayout):
-    """Lays its widgets out in a row, wrapping onto the next when the row is full.
-
-    Qt has none built in: the Qt documentation's Flow Layout example.
-    """
-
-    def __init__(self, parent: QWidget | None = None, spacing: int = 4) -> None:
-        super().__init__(parent)
-        self._items: list[QLayoutItem] = []
-        self._spacing = spacing
-        self.setContentsMargins(QMargins(0, 0, 0, 0))
-
-    @override
-    def addItem(self, item: QLayoutItem) -> None:
-        self._items.append(item)
-
-    @override
-    def count(self) -> int:
-        return len(self._items)
-
-    def insert_widget(self, index: int, widget: QWidget) -> None:
-        self.addChildWidget(widget)
-        # now: Qt would show it on its next pass, after laying it out as if hidden
-        widget.show()
-        self._items.insert(index, QWidgetItem(widget))
-        self.invalidate()
-
-    @override
-    def itemAt(self, index: int) -> QLayoutItem | None:
-        return self._items[index] if 0 <= index < len(self._items) else None
-
-    @override
-    def takeAt(self, index: int) -> QLayoutItem | None:
-        return self._items.pop(index) if 0 <= index < len(self._items) else None
-
-    @override
-    def expandingDirections(self) -> Qt.Orientation:
-        return Qt.Orientation(0)
-
-    @override
-    def hasHeightForWidth(self) -> bool:
-        return True
-
-    @override
-    def heightForWidth(self, width: int) -> int:
-        return self._lay_out(QRect(0, 0, width, 0), move=False)
-
-    @override
-    def setGeometry(self, rect: QRect) -> None:
-        super().setGeometry(rect)
-        self._lay_out(rect, move=True)
-
-    @override
-    def sizeHint(self) -> QSize:
-        return self.minimumSize()
-
-    @override
-    def minimumSize(self) -> QSize:
-        size = QSize()
-        for item in self._items:
-            size = size.expandedTo(item.minimumSize())
-        margins = self.contentsMargins()
-        return size + QSize(margins.left() + margins.right(), margins.top() + margins.bottom())
-
-    def _lay_out(self, rect: QRect, *, move: bool) -> int:
-        """Place the items in `rect`'s width (if `move`); return the height they take."""
-        x, y, line_height = rect.x(), rect.y(), 0
-        for item in self._items:
-            if item.isEmpty():  # a hidden widget takes no room
-                continue
-            hint = item.sizeHint()
-            if x + hint.width() > rect.right() + 1 and line_height > 0:
-                x, y, line_height = rect.x(), y + line_height + self._spacing, 0
-            if move:
-                item.setGeometry(QRect(QPoint(x, y), hint))
-            x += hint.width() + self._spacing
-            line_height = max(line_height, hint.height())
-        return y + line_height - rect.y()
 
 
 class _ValueEdit(QLineEdit):
@@ -230,7 +148,7 @@ class QTableFilterBar(QWidget):
         self._chips: list[QFilterChip] = []
         # the fields and the chips wrap in the width left; the count stays at the right end
         flow = QWidget()
-        self._layout = QFlowLayout(flow)
+        self._layout = QFlowLayout(flow, 4)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(flow, 1)

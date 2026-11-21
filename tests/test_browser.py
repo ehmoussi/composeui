@@ -67,7 +67,7 @@ from tests.drawings import DrawingMainView
 from tests.expander import RecordMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
 from tests.grid import GridMainView
-from tests.horizontal import ButtonsMainView, HorizontalMainView
+from tests.horizontal import ButtonsMainView, HorizontalMainView, ManyButtonsMainView
 from tests.listview import PIPES, PipesMainView
 from tests.maps import AutoMapMainView, MapMainView
 from tests.markdown import HelpMainView
@@ -748,6 +748,23 @@ def variables_page(browser: Browser, variables_base_url: str) -> Iterator[Page]:
 def buttons_page(browser: Browser, buttons_base_url: str) -> Iterator[Page]:
     """Open the app with rows of buttons like `page`, in a session of its own."""
     context = browser.new_context(base_url=buttons_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture(scope="module")
+def many_buttons_base_url() -> Iterator[str]:
+    """Serve an app with rows of more buttons than its page holds, for the whole module."""
+    app = WebApplication(build_main_view=ManyButtonsMainView).create_starlette_app()
+    with _serve(app) as url:
+        yield url
+
+
+@pytest.fixture
+def many_buttons_page(browser: Browser, many_buttons_base_url: str) -> Iterator[Page]:
+    """Open the app with rows of many buttons like `page`, in a session of its own."""
+    context = browser.new_context(base_url=many_buttons_base_url)
     page = context.new_page()
     yield page
     context.close()
@@ -1630,6 +1647,46 @@ def test_buttons_with_no_share_pack_at_their_row_s_start_or_end(buttons_page: Pa
     # each row spans the column: one starts where the other ends
     assert cancel["x"] > remove["x"] + remove["width"]
     assert save["x"] + save["width"] == pytest.approx(1000 - add["x"], abs=1)
+
+
+def test_buttons_with_no_share_wrap_onto_lines_as_wide_as_their_row(
+    many_buttons_page: Page,
+) -> None:
+    page = many_buttons_page
+    # wider than 42rem: a row with a share stays a row, its buttons' cell beside the label
+    page.set_viewport_size({"width": 800, "height": 900})
+    page.goto("/")
+    main = page.locator("main")
+    texts = ("Run", "Stop", "Reload", "Preview", "Profiles", "Export", "Open folder", "Help")
+    # the start row's buttons, the end row's, then those beside a label
+    buttons = main.get_by_role("button").filter(has_text=re.compile("|".join(texts)))
+    expect(buttons).to_have_count(3 * len(texts))
+    boxes = [_box(buttons.nth(index)) for index in range(3 * len(texts))]
+    below = _box(main.get_by_text("Below the buttons"))
+
+    # no button out of the page: the page doesn't scroll sideways
+    assert page.evaluate("document.documentElement.scrollWidth") == 800
+    bottom = 0.0
+    rows = [boxes[start : start + len(texts)] for start in range(0, len(boxes), len(texts))]
+    for row, packed_at_end in zip(rows, (False, True, False)):
+        first, last = row[0], row[-1]
+        assert all(box["x"] >= 0 for box in row)
+        # side by side, the last ones on another line, below the row above
+        assert row[1]["y"] == first["y"]
+        assert last["y"] > first["y"] + first["height"]
+        assert first["y"] >= bottom
+        bottom = last["y"] + last["height"]
+        if packed_at_end:
+            # the line ends as far from the page's edge as a start row's line starts
+            assert last["x"] + last["width"] == pytest.approx(800 - boxes[0]["x"], abs=1)
+    # a note longer than the row wraps within it, its button beside or below it
+    note = _box(main.get_by_text("A status note longer than its row.", exact=False))
+    retry = _box(main.get_by_role("button", name="Retry"))
+    assert note["x"] + note["width"] <= 800 - boxes[0]["x"] + 1
+    # on several lines: taller than the one-line label below
+    assert note["height"] > below["height"]
+    assert retry["x"] + retry["width"] <= 800 - boxes[0]["x"] + 1
+    assert below["y"] >= max(box["y"] + box["height"] for box in (note, retry))
 
 
 def test_a_vertical_view_stacks_its_views_at_its_top(vertical_page: Page) -> None:

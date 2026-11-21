@@ -117,7 +117,9 @@ or text built from other fields.
   width, from its `STRETCH` metadata:
   `attrs.field(factory=TableView, metadata={STRETCH: 3})`. A button keeps the width of its
   text (`default_stretch = 0`). When no view takes a share, `align` packs them at the
-  start or the end of the row. On the web, a row narrower than 42rem stacks its views.
+  start or the end of the row, and the views that don't fit the row go on the next line,
+  for example a row of buttons on a phone. When a view takes a share, a row narrower than
+  42rem stacks its views on the web.
 - **A `VerticalView` puts its view fields one above the other,** for a column in a
   `HorizontalView`, for example a table above its buttons.
 - **A `GridView` puts each view field in a cell.** `grid_cell` gives the cell, the view,
