@@ -134,6 +134,8 @@ not in the package: run them from a clone of the repository (see
   - [Tiles and network access](user-guide/maps.md#tiles-and-network-access)
   - [What each backend draws](user-guide/maps.md#what-each-backend-draws)
 - [Running work in threads](user-guide/threads.md)
+  - [Job or task: which should you use?](user-guide/threads.md#job-or-task-which-should-you-use)
+  - [Independent exports with jobs](user-guide/threads.md#independent-exports-with-jobs)
   - [Progress and canceling](user-guide/threads.md#progress-and-canceling)
   - [Run an external program](user-guide/threads.md#run-an-external-program)
   - [Reusable loading tasks](user-guide/threads.md#reusable-loading-tasks)
