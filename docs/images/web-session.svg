@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 372" width="1000" height="372" role="img" aria-labelledby="title desc">
+  <title id="title">The states of an idle web session</title>
+  <desc id="desc">The idle sweep selects a session in memory to save. If the save succeeds
+    and no request arrives, the session moves to disk. If a request arrives during the save,
+    it waits, and the store keeps the session in memory. A request for a session on disk
+    starts a restore if there is room. Other requests wait for the restore. When the restore
+    succeeds, the session is back in memory.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="head"/>
+    </marker>
+    <style>
+      .card { fill: #ffffff; stroke: #d0d7de; }
+      text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; fill: #1f2937; font-size: 12px; }
+      .muted { fill: #57606a; }
+      .region { font-size: 13px; font-weight: 600; letter-spacing: 0.04em; fill: #57606a; }
+      .title { font-size: 14px; font-weight: 600; }
+      .server { fill: #f6f8fa; stroke: #8c959f; }
+      .session { fill: #fff7ed; stroke: #f59e0b; }
+      .line { stroke: #57606a; stroke-width: 1.6; fill: none; }
+      .head { fill: #57606a; }
+      @media (prefers-color-scheme: dark) {
+        .card { fill: #161b22; stroke: #30363d; }
+        text { fill: #e6edf3; }
+        .muted, .region { fill: #9198a1; }
+        .server { fill: #21262d; stroke: #6e7681; }
+        .session { fill: #3b2a10; stroke: #f59e0b; }
+        .line { stroke: #9198a1; }
+        .head { fill: #9198a1; }
+      }
+    </style>
+  </defs>
+
+  <rect class="card" x="0.75" y="0.75" width="998.5" height="370.5" rx="12"/>
+  <text class="region" x="500" y="43" text-anchor="middle">IDLE WEB SESSION</text>
+
+  <!-- the four states -->
+  <rect class="session" x="72" y="76" width="220" height="80" rx="8"/>
+  <text class="title" x="182" y="111" text-anchor="middle">In memory</text>
+  <text class="muted" x="182" y="131" text-anchor="middle">The store holds the live session</text>
+
+  <rect class="server" x="708" y="76" width="220" height="80" rx="8"/>
+  <text class="title" x="818" y="111" text-anchor="middle">Saving</text>
+  <text class="muted" x="818" y="131" text-anchor="middle">Write the session to disk</text>
+
+  <rect class="session" x="708" y="236" width="220" height="80" rx="8"/>
+  <text class="title" x="818" y="271" text-anchor="middle">On disk</text>
+  <text class="muted" x="818" y="291" text-anchor="middle">The store releases the live session</text>
+
+  <rect class="server" x="72" y="236" width="220" height="80" rx="8"/>
+  <text class="title" x="182" y="271" text-anchor="middle">Restoring</text>
+  <text class="muted" x="182" y="291" text-anchor="middle">Rebuild the session and load its state</text>
+
+  <!-- the save and restore cycle -->
+  <text x="500" y="89" text-anchor="middle">Idle sweep selects the session</text>
+  <line class="line" x1="292" y1="100" x2="706" y2="100" marker-end="url(#arrow)"/>
+
+  <text x="806" y="200" text-anchor="end">Save succeeds and no request arrived</text>
+  <line class="line" x1="818" y1="156" x2="818" y2="234" marker-end="url(#arrow)"/>
+
+  <text x="500" y="265" text-anchor="middle">Request arrives and there is room to restore</text>
+  <line class="line" x1="708" y1="276" x2="294" y2="276" marker-end="url(#arrow)"/>
+
+  <text x="194" y="200">Restore succeeds</text>
+  <line class="line" x1="182" y1="236" x2="182" y2="158" marker-end="url(#arrow)"/>
+
+  <!-- a request during the save keeps the session in memory -->
+  <text x="500" y="129" text-anchor="middle">Request arrives during the save</text>
+  <line class="line" x1="708" y1="140" x2="294" y2="140" marker-end="url(#arrow)"/>
+
+  <text class="muted" x="500" y="348" text-anchor="middle">Requests that find a save or restore in progress wait for it to finish.</text>
+</svg>
