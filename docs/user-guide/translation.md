@@ -92,11 +92,28 @@ The check fails:
   it would fail, or leave out a value. The check reads the placeholders as `str.format`
   does: `{}` by its position, and `{name.real}` as `name`.
 
-It also lists the entries that no code uses any more.
+It also lists the entries that no code uses any more. With `--strict`, it fails on them too,
+for example in the app's CI, so that old entries don't pile up:
 
-The text that it checks is the literals passed to `tr` or `T` in the source of the views,
-plus the text that the views translate as they are built. The second part finds the text
-that `tr` gets from a variable, for example the values of an enum.
+```bash
+uv run python -m composeui.core.translationcheck examples.pipeform:PipeMainView --strict
+```
+
+The text that it checks has two parts:
+
+- The literals passed to `tr` or `T` in the source of the views, and in the app's modules
+  that this source imports, directly or not. A module without a view counts too, for example
+  one that raises an error with a message made with `T`.
+- The text that the views translate as they are built. This part finds the text that `tr`
+  gets from a variable, for example the values of an enum.
+
+The app's modules are the modules of the main view's package. When the main view is in a
+module outside a package, such as `app.py`, they are the modules beside it, such as
+`dialogs.py`. Installed modules are not the app's, even when the app imports them.
+
+The check reads only the modules that the app imports. It doesn't read another module, even
+in the same package, such as the module of another app. It reads the source of a module that
+the app imports only in a function, but doesn't run it.
 
 To start or complete a catalog, `--write fr` first adds the text that `fr.json` misses to the
 catalog, translated as `""` for a translator to fill. It creates the file if needed:

@@ -243,11 +243,12 @@ function Invoke-Typecheck {
     Invoke-TypeChecker -Arguments @('ty', 'check')
 }
 
-# every catalog against the text its app translates; each app reported before failing
+# every catalog against the text its app translates, unused entries too; each app reported
+# before failing
 function Invoke-Translations {
     $failed = $false
     foreach ($mainView in $TranslatedMainViews) {
-        & uv run python -m composeui.core.translationcheck $mainView
+        & uv run python -m composeui.core.translationcheck $mainView --strict
         if ($LASTEXITCODE -ne 0) { $failed = $true }
     }
     if ($failed) { throw 'translations: some catalogs are out of date' }

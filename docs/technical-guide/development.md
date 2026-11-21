@@ -125,8 +125,8 @@ Every behavior change needs a test in `tests/`.
 ## Translations
 
 `make translations` checks the catalogs of each app in `TRANSLATED_MAIN_VIEWS` of the
-`Makefile`, and `make.ps1` has the same list in `$TranslatedMainViews`. When you translate a
-new app, add its main view to both. See
+`Makefile`, with `--strict`: an unused entry fails too. `make.ps1` has the same list in
+`$TranslatedMainViews`. When you translate a new app, add its main view to both. See
 [Checking the catalogs](../user-guide/translation.md#checking-the-catalogs).
 
 ## Styles of the web backend

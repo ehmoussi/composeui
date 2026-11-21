@@ -11,6 +11,9 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `python -m composeui.core.translationcheck --strict` also fails on the entries that no code
+  uses, and `CatalogReport.is_complete` tells whether a catalog has none.
+
 - `FileUploadView(multiple=True)` takes several files in one choice, on every backend.
   `files_uploaded` gives them together, and `files` holds them. Qt and Textual give the user's
   own files. The web keeps the files of a choice in one folder, under their own names when every
@@ -74,6 +77,12 @@ backends' modules included, can change in any release without an entry here.
   passes them in a `WebSettings`: a subclass that still sets one fails with a `TypeError`.
 
 ### Fixed
+
+- The translation check reads the app's modules that its views import, not only the modules
+  of its views: those of the main view's package, or those beside a main view outside a
+  package, such as `app.py`. Before, text made with `T` in another module, such as an
+  error's message, was reported as unused when translated, and was not reported or added by
+  `--write` when missing. An app's check can now report this text as missing.
 
 - Opening a study saved during a run enables the views of `Task.disables` and disables the
   controls of `Task.cancel_with`, as Open drops the run. Before, they kept their state in the

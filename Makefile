@@ -46,11 +46,12 @@ TRANSLATED_MAIN_VIEWS := examples.pipeform:PipeMainView \
 	examples.pipesweep:PipeSweepMainView \
 	examples.taskview:TaskMainView
 
-# every catalog against the text its app translates; each app reported before failing
+# every catalog against the text its app translates, unused entries too; each app reported
+# before failing
 .PHONY: translations
 translations:
 	@status=0; for main_view in $(TRANSLATED_MAIN_VIEWS); do \
-		uv run python -m composeui.core.translationcheck $$main_view || status=1; \
+		uv run python -m composeui.core.translationcheck $$main_view --strict || status=1; \
 	done; exit $$status
 
 .PHONY: check
