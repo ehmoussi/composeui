@@ -34,6 +34,11 @@ Look for these signs in the code that the change touches:
   that a `cell_edited` callback replaces.
 - **Code that stops a toolkit's change events,** such as Textual's `prevent` or Qt's
   `blockSignals`: the events that remain can arrive in another order.
+- **A view field that code sets from other state, and that the study also saves,** such as
+  the `is_enabled` that `Task.disables` sets. Each path that loads the fields in place is an
+  event: New (`reset_state`), Open (`load_state_data`), an autosave restored, a web session
+  woken from hibernation, and `--reload`. Each one writes the saved value after the code set
+  its own.
 
 ## Write the table
 
@@ -171,3 +176,6 @@ it: one fix per pull request. Such a change can:
 
 In a review or a pull request, say which state machine the change touches and which cells it
 adds or changes. Say which orders of events you checked, and which you did not.
+
+Before you change what an existing path does, such as a load, find all its callers and check
+the change for each one. A behavior that looks wrong for one caller can be what another needs.

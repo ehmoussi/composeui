@@ -1104,6 +1104,7 @@ files, and delete `js/vendor/`.
 
 - `ruff` lints with `select = ["ALL"]` and a line length of 100. `pyproject.toml` has the
   ignore list. Fix lint properly rather than adding `noqa`, unless it is clearly justified.
+  A justified `noqa` says why in parentheses, e.g. `# noqa: SLF001 (shared task lifecycle)`.
 - `mypy` must pass in strict mode, with the extra checks in `pyproject.toml`. Fully
   type-annotate new code: the package ships `py.typed`. Mark each method that
   overrides a base class's method with `@override` from `typing_extensions`, below
