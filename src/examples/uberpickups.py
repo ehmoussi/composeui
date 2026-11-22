@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 from datetime import datetime
 from types import MappingProxyType
 from typing import TYPE_CHECKING
@@ -100,18 +101,22 @@ class UberPickupsTable(CSVSqliteTable, row_type=UberPickup, name="uber_data"):
                 {"at_hour": at_hour},
             ).fetchone()[0]
             stride = max(1, (count + 9999) // 10000)
-            rows = db.execute(
+            # the points in one JSON text: each row read hands Python's lock to another
+            # thread, and sessions reading at once wait on each other at each row
+            (points,) = db.execute(
                 """--sql
-                SELECT lat, lon
-                FROM uber_data
-                WHERE (rowid - 1) % :stride = 0
-                    AND CAST(strftime('%H', date_time) AS INTEGER) = :at_hour
-                    AND lat BETWEEN -85.05112878 AND 85.05112878
-                    AND lon BETWEEN -180 AND 180 ORDER BY rowid LIMIT 10000
+                SELECT json_group_array(json_array(lat, lon)) FROM (
+                    SELECT lat, lon
+                    FROM uber_data
+                    WHERE (rowid - 1) % :stride = 0
+                        AND CAST(strftime('%H', date_time) AS INTEGER) = :at_hour
+                        AND lat BETWEEN -85.05112878 AND 85.05112878
+                        AND lon BETWEEN -180 AND 180 ORDER BY rowid LIMIT 10000
+                )
                 """,
                 {"stride": stride, "at_hour": at_hour},
-            )
-            return [MapPoint(latitude=lat, longitude=lon) for lat, lon in rows]
+            ).fetchone()
+            return [MapPoint(latitude=lat, longitude=lon) for lat, lon in json.loads(points)]
 
 
 def _index_hours(db: sqlite3.Connection) -> None:

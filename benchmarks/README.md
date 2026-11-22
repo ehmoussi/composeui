@@ -376,17 +376,43 @@ example does not use this code.
 - **Moves do not change.** A move reads rows, and each row that a query reads still hands the GIL
   over between threads.
 
+### Ids in one text
+
+This change makes `SqliteSource` read the ids of its rows as JSON text, and the SQLite example read
+its map's points as one JSON text, on top of `2a8e74e`. Up to 100,000 ids come in one text, and
+more in texts of 10,000 ids, which a temporary table numbers. Its results are in
+[`results/sessions-one-text-ids.json`](results/sessions-one-text-ids.json), with the same machine,
+Python and options. Only the SQLite example was measured again. The "before" columns are those
+of [many rows per statement](#many-rows-per-statement).
+
+| Sessions | Load, before | Load, after | Move, before | Move, after | Move p95, before | Move p95, after |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 9.0 s | 9.3 s | 0.39 s | 0.43 s | 0.44 s | 0.45 s |
+| 2 | 14.8 s | 15.4 s | 0.58 s | 0.46 s | 0.96 s | 0.59 s |
+| 4 | 35.5 s | 33.3 s | 3.6 s | 0.51 s | 9.3 s | 0.80 s |
+
+- **Moves no longer wait on each other.** With 4 sessions, a move takes 0.51 s, against 3.6 s,
+  and the throughput grows from 0.9 to 7.1 moves per second. A query of the hour reads one row,
+  so it hands the GIL over once.
+- **Loads do not change.** Each session still imports its own copy of the CSV.
+- **A large sort stays fast with several sessions.** In a separate check, 4 threads each sorted
+  the whole table of 1,028,136 rows through `SqliteSource`: the slowest took 3.3 s, against
+  132 s before. One thread alone took 2.8 s, against 1.9 s before: SQLite copies the ids into
+  the temporary table, then Python reads them a text at a time.
+
 ### Sessions findings
 
 - **The SQLite example does not scale past 2 sessions at once.** From 2 to 4 sessions, a load
   takes about 11 times as long, and a move about 8 times as long. Moves also become slower after
   the loads are over. With [many rows per statement](#many-rows-per-statement), a load takes 2.4
-  times as long, and a move 6 times.
+  times as long, and a move 6 times. With [ids in one text](#ids-in-one-text), a move takes
+  1.1 times as long, but a load still 2.2 times.
   ["Why SQLite sessions slow down"](#why-sqlite-sessions-slow-down) gives the cause.
 - **The budget holds for one SQLite session.** A move takes 0.38 s, within the 500 ms budget of
   [the roadmap](../ROADMAP.md#budgets). With 2 sessions, the median is 0.45 s, but the 95th
-  percentile is 0.94 s. Polars stays within the budget up to 4 sessions at the median, and its
-  95th percentile at 4 sessions is 0.55 s.
+  percentile is 0.94 s. With [ids in one text](#ids-in-one-text), 4 SQLite sessions take 0.51 s
+  at the median, just above the budget. Polars stays within the budget up to 4 sessions at the
+  median, and its 95th percentile at 4 sessions is 0.55 s.
 - **Shared data takes Polars' memory down to the size of the frame.** 4 sessions peak at 335 MiB,
   against 1,012 MiB before `shared_data`: each session after the first adds 5 MiB, not 54 MiB.
   Loads and moves take the same time. Throughput stops growing at about 9 moves per second, from

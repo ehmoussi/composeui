@@ -275,11 +275,13 @@ reproducible.
 
 ## Known problems
 
-- **SQLite sessions slow down when they overlap.** In the SQLite Uber example on the web, a load
-  takes 9.0 s with one session and 35.5 s with 4 at once. With 4, a move takes 3.6 s. The CSV's
-  checks run in Python, one session at a time. A query hands the GIL over between threads for
-  each row that it reads ([the checks](benchmarks/README.md#why-sqlite-sessions-slow-down)). The
-  shared SQLite database addresses it.
+- **SQLite sessions slow down when they load at once.** In the SQLite Uber example on the web, a
+  load takes 9.3 s with one session and 33.3 s with 4 at once. Each session imports its own copy
+  of the CSV, and the CSV's checks run in Python, one session at a time
+  ([the checks](benchmarks/README.md#why-sqlite-sessions-slow-down)). Moves no longer slow down
+  as much: with 4 sessions, a move takes 0.51 s
+  ([ids in one text](benchmarks/README.md#ids-in-one-text)). The shared SQLite database
+  addresses the loads.
 - **A process that exits during a write may crash.** At exit, the model's finalizer closes the
   connection and deletes its files while a job's thread can still be writing. A process that is
   killed leaves its files behind. "A clean exit during a write" fixes both.

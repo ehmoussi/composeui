@@ -11,6 +11,7 @@ import sqlite3
 import threading
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Optional
+from unittest import mock
 
 import attrs
 import pytest
@@ -182,21 +183,58 @@ def test_a_search_finds_its_text_as_typed_in_the_text_columns(
     assert list(numbers.ordered_ids(None, "5", {})) == numbered.ordered_ids(None, "5", {}) == []
 
 
+_ORDERS_AGGREGATES = sqlite3.sqlite_version_info >= (3, 44, 0)
+#: how a source reads its ids: row by row (SQLite before 3.44), all in one JSON text, or
+#: numbered in a temporary table, as a large result is; JSON from SQLite 3.44
+_READS = ["rows", "one text", "numbered"] if _ORDERS_AGGREGATES else ["rows"]
+
+
+@contextlib.contextmanager
+def _reading(reads: str) -> Generator[None, None, None]:
+    """Read the ids as `reads` says, `ID_BATCH` 3 at a time: the 8 places in 3 batches."""
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(mock.patch.object(sqlitemodel, "ID_BATCH", 3))
+        if reads == "rows":
+            stack.enter_context(mock.patch.object(sqlitemodel, "_ORDERS_AGGREGATES", new=False))
+        elif reads == "numbered":
+            stack.enter_context(mock.patch.object(sqlitemodel, "ONE_TEXT_IDS", 0))
+        yield
+
+
+@pytest.mark.parametrize("reads", _READS)
 def test_the_ids_are_read_in_batches_into_an_array_until_one_is_not_an_integer(
-    model: PlacesModel, sql: SqliteSource, monkeypatch: pytest.MonkeyPatch
+    model: PlacesModel, sql: SqliteSource, listed: ListSource[Place], reads: str
 ) -> None:
-    monkeypatch.setattr(sqlitemodel, "ID_BATCH", 3)  # the 8 places in 3 batches
-    # integers: 8 bytes each, however many batches
-    assert sql.ordered_ids(None, "", {}) == array.array("q", [1, 2, 3, 4, 5, 6, 8, 9])
-    # keys of mixed types, as SQLite stores a column without one: integers first, then
-    # text, which starts within the second batch, after one integer of it
+    with _reading(reads):
+        # integers: 8 bytes each, however many batches
+        assert sql.ordered_ids(None, "", {}) == array.array("q", [1, 2, 3, 4, 5, 6, 8, 9])
+        # sorted across batches
+        found, expected = _both(sql, listed, Sort("depth", descending=True))
+        assert found == expected
+        # keys of mixed types, as SQLite stores a column without one: integers first, then
+        # text, which starts within the second batch, after one integer of it
+        keyed = SqliteSource(
+            model.places,
+            "SELECT CASE WHEN id > 4 THEN 'k' || id ELSE id END AS key, * FROM place",
+            id_column="key",
+            columns=sql.columns,
+        )
+        assert keyed.ordered_ids(None, "", {}) == [1, 2, 3, 4, "k5", "k6", "k8", "k9"]
+
+
+def test_ids_that_json_would_change_keep_their_exact_values(
+    model: PlacesModel, sql: SqliteSource
+) -> None:
+    # JSON drops a real's last digits, and SQLite takes a blob for JSON of its own
     keyed = SqliteSource(
         model.places,
-        "SELECT CASE WHEN id > 4 THEN 'k' || id ELSE id END AS key, * FROM place",
+        "SELECT CASE id WHEN 1 THEN 0.1 + 0.2 WHEN 2 THEN x'00ff' ELSE id END AS key, * FROM place",
         id_column="key",
         columns=sql.columns,
     )
-    assert keyed.ordered_ids(None, "", {}) == [1, 2, 3, 4, "k5", "k6", "k8", "k9"]
+    ids = keyed.ordered_ids(None, "", {})
+    assert ids == [0.1 + 0.2, 3, 4, 5, 6, 8, 9, b"\x00\xff"]
+    assert keyed.cells(ids, ["name"]).keys() == set(ids)
 
 
 # Generated places, from few values so that cells are often equal, or equal but for
@@ -295,12 +333,17 @@ def test_any_filters_and_search_keep_the_rows_a_list_source_keeps(query: _Query)
 
 # ASCII names alone: SQLite's NOCASE ignores the case of ASCII letters alone
 @settings(max_examples=500)
-@given(_queries(_ASCII_TEXT), st.sampled_from(list(HEADERS)), st.booleans())
+@given(
+    _queries(_ASCII_TEXT),
+    st.sampled_from(list(HEADERS)),
+    st.booleans(),
+    st.sampled_from(_READS),
+)
 def test_any_sort_of_filtered_rows_orders_them_as_a_list_source(
-    query: _Query, column: str, descending: bool
+    query: _Query, column: str, descending: bool, reads: str
 ) -> None:
     sort = Sort(column, descending=descending)
-    with _sources(query.places) as (sql, listed):
+    with _reading(reads), _sources(query.places) as (sql, listed):
         found, expected = _both(sql, listed, sort, query.search, query.filters)
         assert found == expected
 
@@ -446,24 +489,40 @@ def test_reads_reuse_a_connection_and_see_each_write_committed(
     assert sql.cells([7], ["name"]) == {7: ["Deep"]}
 
 
+#: how a large result's ids start: copied in their order into a temporary table
+_NUMBERING = "INSERT INTO temp.composeui_ids (id) "
+
+
 def _plans(model: PlacesModel, order: Callable[[], object]) -> list[str]:
-    """Get SQLite's plan of each query `order` runs, on the model's read connection."""
+    """Get SQLite's plan of the check of empty cells and each ordered read `order` runs.
+
+    A large result's ids are numbered in a temporary table, a small one's read in one JSON
+    text: ``ONE_TEXT_IDS`` set to 0 makes any result with rows a large one.
+    """
     queries: list[str] = []
     with model.places.reading() as db:  # the pool gives it back to the next read
         db.set_trace_callback(queries.append)
     order()
     with model.places.reading() as db:
         db.set_trace_callback(None)
-        selects = [query for query in queries if query.startswith("SELECT")]
+        reads = [
+            query.removeprefix(_NUMBERING)
+            for query in queries
+            if query.startswith(("SELECT EXISTS", _NUMBERING, "SELECT json_group_array"))
+            and "composeui_ids" not in query.removeprefix(_NUMBERING)
+        ]
         return [
             " ".join(row[-1] for row in db.execute(f"EXPLAIN QUERY PLAN {query}").fetchall())
-            for query in selects
+            for query in reads
         ]
 
 
 def test_a_sort_reads_its_column_s_index_unless_something_filters_the_rows(
-    model: PlacesModel, sql: SqliteSource
+    model: PlacesModel, sql: SqliteSource, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # a large result's order: SQLite would sort a small one again in its JSON text
+    monkeypatch.setattr(sqlitemodel, "ONE_TEXT_IDS", 0)
+
     def sort_plans() -> list[str]:
         return _plans(model, lambda: sql.ordered_ids(Sort("depth", descending=True), "", {}))
 
@@ -489,8 +548,9 @@ def test_a_sort_reads_its_column_s_index_unless_something_filters_the_rows(
 
 
 def test_a_check_of_empty_cells_over_its_budget_sorts_the_rows_as_without_it(
-    model: PlacesModel,
+    model: PlacesModel, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(sqlitemodel, "ONE_TEXT_IDS", 0)  # each read in a plan of its own
     # a GROUP BY that the check computes again: no empty count, but finding it out costs
     query = "SELECT MIN(id) AS id, name, COUNT(*) AS places FROM place GROUP BY name"
     columns = [SourceColumn("name", "Name"), SourceColumn("places", "Places", int)]
