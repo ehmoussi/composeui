@@ -17,7 +17,9 @@ backends' modules included, can change in any release without an entry here.
   in a file across the runs, and its migrations run once as the first model is built. A
   database's `fill` fills it once, and `ready(job)` waits for it in each session's job.
   `forget()` gives the next sessions a new one. With `read_only=True`, the sessions only read
-  it, and a write raises `ReadOnlyDatabaseError`.
+  it, and a write raises `ReadOnlyDatabaseError`. The Uber pickups example reads its CSV file
+  once this way, for every session: its studies keep only the hour, and those saved before
+  don't open.
 
 - `WebSettings(session_folder=...)` keeps the web sessions across a restart of the server. The
   server saves every session there as it stops, and keeps there the key that signs the cookies,

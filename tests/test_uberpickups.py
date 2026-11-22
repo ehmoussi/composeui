@@ -1,9 +1,10 @@
-"""CSV loading, failures, and study restoration in the pickups example."""
+"""CSV loading into a shared database, failures, and the queries of the pickups example."""
 
 from __future__ import annotations
 
 import gzip
 import threading
+from contextlib import closing
 from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Any, TypeVar, cast
 
@@ -11,17 +12,11 @@ import pytest
 from typing_extensions import override
 
 from composeui.core.application import ModelApplication
-from composeui.core.jobs import Job
+from composeui.core.jobs import Job, JobCanceledError
 from composeui.core.registry import RendererType
 from composeui.core.reload import load_reloaded_state, save_reloaded_state
 from composeui.core.renderer import RendererContainer
-from composeui.core.sqlitemodel import (
-    CSVSqliteTable,
-    DatabaseModel,
-    SqliteDatabase,
-    per_session,
-    table,
-)
+from composeui.core.sqlitemodel import DatabaseModel, SqliteDatabase, per_session, table
 from composeui.core.view import MapPoint
 from examples import uberpickups
 
@@ -42,6 +37,14 @@ _CSV = (
     "9/1/2014 11:01:00,40.7,-73.9,B02512\n"
     "9/1/2014 13:05:00,40.8,-73.8,B02512\n"
 )
+
+
+@pytest.fixture(autouse=True)
+def _new_pickups() -> Iterator[None]:
+    """Have each test's sessions read their own CSV: the process shares its rows."""
+    yield
+    with closing(uberpickups.UberPickupsModel()) as model:
+        model.pickups.forget()
 
 
 class _VisibilityParser(HTMLParser):
@@ -189,14 +192,14 @@ def test_visibility_follows_loading_and_real_checkbox_clicks(
         app.model.close()
 
 
-def test_reload_reconnects_saved_rows_without_downloading_them_again(
+def test_a_reload_shows_the_process_s_rows_without_downloading_them_again(
     app: App, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     app.main_view.jobs.wait()
     save_reloaded_state(app.main_view, app.model, tmp_path)
     restored = _app()
     try:
-        # The saved database must suffice even when the original download is unavailable.
+        # the rows the process read suffice, though the file is gone
         monkeypatch.setattr(uberpickups, "DATA_URL", (tmp_path / "missing.csv.gz").as_uri())
         load_reloaded_state(restored.main_view, restored.model, tmp_path)
         restored.main_view.jobs.wait()
@@ -210,7 +213,7 @@ def test_reload_reconnects_saved_rows_without_downloading_them_again(
         restored.model.close()
 
 
-def test_web_csv_commit_does_not_restart_the_running_loader(
+def test_on_the_web_the_rows_read_after_the_page_shows_the_chart_and_the_map(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     web = pytest.importorskip("composeui.webcore.webapplication")
@@ -233,10 +236,10 @@ def test_web_csv_commit_does_not_restart_the_running_loader(
     load_pickups = uberpickups.UberPickupsModel.load_pickups
 
     def load_once_rendered(
-        model: uberpickups.UberPickupsModel, job: Job[list[int], int], url: str
+        model: uberpickups.UberPickupsModel, job: Job[list[int], int]
     ) -> list[int]:
         assert rendered.wait(10)
-        return load_pickups(model, job, url)
+        return load_pickups(model, job)
 
     monkeypatch.setattr(uberpickups.UberPickupsModel, "load_pickups", load_once_rendered)
     app = web.WebModelApplication(
@@ -299,40 +302,54 @@ def test_invalid_csv_is_shown_as_a_loading_failure(
         assert page.status.text.startswith("Failed to read the CSV:")
         assert not page.pickups_chart.is_visible
         assert not page.pickups_map.is_visible
-        assert app.model.study.uber_data.fetch_column("SELECT COUNT(*) FROM uber_data") == [0]
+        with pytest.raises(RuntimeError, match="isn't filled yet"):  # no half of the rows kept
+            app.model.pickups.uber_data.pickups_by_hour()
     finally:
         app.model.close()
 
 
-def test_a_canceled_csv_job_rolls_back_before_showing_any_rows(
-    tmp_path: Path,
+def test_a_canceled_load_keeps_no_row_and_the_next_one_reads_them_again(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    path = tmp_path / "pickups.csv.gz"
-    path.write_bytes(gzip.compress(_CSV.encode()))
-    model = uberpickups.UberPickupsModel()
-    # Cancel before the first yielded batch, as New/Open can do during a download.
-    job: Job[list[int], int] = Job(lambda _job, callback: callback())
-    job.cancel()
-    try:
-        assert model.load_pickups(job, path.as_uri()) == []
-        assert model.study.uber_data.fetch_column("SELECT COUNT(*) FROM uber_data") == [0]
-    finally:
-        model.close()
+    # two batches of rows: the waiting job holds the progress lock until it has canceled
+    # the fill, which reports its first batch only then, and stops before the second
+    large = tmp_path / "large.csv.gz"
+    row = _CSV.splitlines(keepends=True)[1]
+    large.write_bytes(gzip.compress((_CSV + row * 100_000).encode()))
+    monkeypatch.setattr(uberpickups, "DATA_URL", large.as_uri())
+    with closing(uberpickups.UberPickupsModel()) as model:
+        # canceled before it waits, as New and Open cancel a session's loader
+        canceled: Job[list[int], int] = Job(lambda _job, callback: callback())
+        canceled.cancel()
+        with pytest.raises(JobCanceledError):
+            model.load_pickups(canceled)
+
+        path = tmp_path / "pickups.csv.gz"
+        path.write_bytes(gzip.compress(_CSV.encode()))
+        monkeypatch.setattr(uberpickups, "DATA_URL", path.as_uri())
+        job: Job[list[int], int] = Job(lambda _job, callback: callback())
+        assert model.load_pickups(job) == [*([0] * 11), 1, 0, 1, *([0] * 10)]
+
+
+class _Rows(SqliteDatabase):
+    uber_data = table(uberpickups.UberPickupsTable)
+
+
+class _RowsModel(DatabaseModel):
+    """The example's table in a database of the test's own, which it writes."""
+
+    study = per_session(_Rows)
 
 
 def test_hourly_counts_ignore_rows_without_a_valid_hour() -> None:
-    model = uberpickups.UberPickupsModel()
-    try:
+    with closing(_RowsModel()) as model:
         with model.study.uber_data.connection() as db:
             db.execute("INSERT INTO uber_data VALUES ('not a timestamp', 0, 0, 'B')")
         assert model.study.uber_data.pickups_by_hour() == [0] * 24
-    finally:
-        model.close()
 
 
 def test_map_sampling_bounds_large_datasets_and_skips_polar_coordinates() -> None:
-    model = uberpickups.UberPickupsModel()
-    try:
+    with closing(_RowsModel()) as model:
         with model.study.uber_data.connection() as db:
             db.executemany(
                 "INSERT INTO uber_data VALUES (?, ?, ?, ?)",
@@ -349,29 +366,12 @@ def test_map_sampling_bounds_large_datasets_and_skips_polar_coordinates() -> Non
         assert len(set(points)) == len(points)
         assert all(40.7 <= point.latitude <= 40.71 for point in points)
         assert sum(model.study.uber_data.pickups_by_hour()) == 10001
-    finally:
-        model.close()
 
 
-class _TableBeforeTheIndex(CSVSqliteTable, row_type=uberpickups.UberPickup, name="uber_data"):
-    pass
-
-
-class _DatabaseBeforeTheIndex(SqliteDatabase):
-    uber_data = table(_TableBeforeTheIndex)
-
-
-class _ModelBeforeTheIndex(DatabaseModel):
-    study = per_session(_DatabaseBeforeTheIndex)
-
-
-def test_a_study_saved_before_the_index_opens_and_reads_only_the_rows_of_the_hour(
-    tmp_path: Path,
-) -> None:
+def test_the_queries_of_an_hour_read_only_its_rows() -> None:
     other_hour = 5000
-    old = _ModelBeforeTheIndex()
-    try:
-        with old.study.uber_data.connection() as db:
+    with closing(_RowsModel()) as model:
+        with model.study.uber_data.connection() as db:
             db.executemany(
                 "INSERT INTO uber_data VALUES (?, ?, ?, ?)",
                 [
@@ -379,12 +379,6 @@ def test_a_study_saved_before_the_index_opens_and_reads_only_the_rows_of_the_hou
                     ("2014-09-01 11:01:00", 40.8, -73.8, "B"),
                 ],
             )
-        old.save_data(tmp_path / "study.db")
-    finally:
-        old.close()
-    model = uberpickups.UberPickupsModel()
-    try:
-        model.open_data(tmp_path / "study.db")
         # SQLite's steps, not time: a query that reads each row takes several per row
         steps_per_call = 100
         calls = 0
@@ -403,5 +397,3 @@ def test_a_study_saved_before_the_index_opens_and_reads_only_the_rows_of_the_hou
         assert list(source.ordered_ids(None, "", {})) == [other_hour + 1]
         assert model.study.uber_data.pickup_points(11) == [MapPoint(latitude=40.8, longitude=-73.8)]
         assert calls * steps_per_call < other_hour
-    finally:
-        model.close()

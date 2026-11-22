@@ -26,7 +26,7 @@ class SalesDashboard(DashboardView):
 
 A dashboard that saves studies sets `has_file_menu = True` and its `extension`. The
 [Uber pickups example](../../src/examples/uberpickups.py) does, so that a study keeps the
-rows that it read.
+hour picked.
 
 ## A first dashboard
 

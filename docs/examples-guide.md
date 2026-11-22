@@ -55,7 +55,7 @@ options, such as `--language` and `-f FILE`.
 | [`pipesweep.py`](../src/examples/pipesweep.py) | web | A job writing to a SQLite model, a progress bar, a line chart and a table on tabs, a French translation |
 | [`largetable.py`](../src/examples/largetable.py) | qt | A large table of a million rows in SQLite, read as they show, sorted by a click on a header, searched and filtered in its bar, exported as CSV |
 | [`uberdashboard.py`](../src/examples/uberdashboard.py) | web | A first dashboard from a CSV: filters of a frame's columns in a sidebar, a multi-combobox, a date range, a range slider, metrics, a bar chart, a map, a large table, and a download of the rows shown |
-| [`uberpickups.py`](../src/examples/uberpickups.py) | web | A CSV URL loaded into SQLite by a loading task, reactive methods, a slider in a sidebar that filters a large table and a street map and marks a bar chart |
+| [`uberpickups.py`](../src/examples/uberpickups.py) | web | A CSV URL loaded once into a SQLite database that the sessions share, reactive methods, a slider in a sidebar that filters a large table and a street map and marks a bar chart |
 | [`uberpickupsframe.py`](../src/examples/uberpickupsframe.py) | web | The Uber pickups app on a Polars frame instead of SQLite: a large table of a dataframe |
 | [`dataexplorer.py`](../src/examples/dataexplorer.py) | web | A user's CSV or Parquet file: an upload, a summary, a large table of any columns, and the rows shown exported |
 | [`figureviewer.py`](../src/examples/figureviewer.py) | web | An image from a file, and a Matplotlib figure that a slider redraws in a task |
@@ -485,12 +485,14 @@ On the web:
 
 It shows:
 
-- a [CSV URL](user-guide/csv-import.md#csv-urls) imported into a typed SQLite table. The
-  app downloads the CSV file when it first starts. A saved study keeps the rows, so the
-  app does not download them again when the study opens.
-- a [loading task](user-guide/threads.md#reusable-loading-tasks) that imports the rows in a
-  job. `Task.show_state` shows its state in a status line: the count of rows read, or the
-  error. It shows the chart and the map once the task has a result.
+- a [CSV URL](user-guide/csv-import.md#csv-urls) imported into a typed SQLite table, in a
+  [database shared by every session](user-guide/sqlite-model.md#filled-once-read-only),
+  read-only. Its `fill` downloads the CSV file once, as the first session starts: on the web,
+  the other sessions wait for it, then read the same rows. A study keeps only the hour and the
+  check box.
+- a [loading task](user-guide/threads.md#reusable-loading-tasks) that waits for the rows in
+  a job (`ready`). `Task.show_state` shows its state in a status line: the count of rows read,
+  or the error. It shows the chart and the map once the task has a result.
 - [reactive methods](user-guide/reactive-methods.md) that give the table, the chart, and the
   map their data, with no callback. One shows the task's result in the chart. One follows the
   slider: it gives the table the rows of the hour, marks the hour on the chart, and starts the
@@ -510,10 +512,9 @@ It shows:
   pickups of the latest hour. The map fits the pickups, and keeps the viewport once the user
   pans or zooms.
 - an [index](user-guide/csv-import.md#a-csv-table) on the hour of each row, so that a move of
-  the slider reads only the rows of that hour. A
-  [migration](user-guide/sqlite-model.md) adds it to a study saved before the index.
+  the slider reads only the rows of that hour.
 - a `DashboardView`: a [wide main view](user-guide/organizing-the-window.md#page-width)
-  without pages. This one keeps the File menu, so that a study saves the rows.
+  without pages. This one keeps the File menu, so that a study saves the hour.
 - the raw data in a [large table](user-guide/tables.md#a-large-table), with the rows of the
   slider's hour. Its [`SqliteSource`](user-guide/tables.md#rows-in-sqlite) selects them with its own
   query. Its [filter bar](user-guide/tables.md#sorting-and-filtering-a-large-table) filters them
