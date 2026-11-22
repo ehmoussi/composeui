@@ -47,13 +47,15 @@ from composeui.webcore._renderers.tables import WebSourceTableRenderer, WebTable
 from composeui.webcore.changes import collect_dirty
 from composeui.webcore.downloads import downloads_marker
 from composeui.webcore.order import PostOrder
-from composeui.webcore.page import jobs_poller, page_marker
+from composeui.webcore.page import NO_LINKS, jobs_poller, page_marker
 from composeui.webcore.rendertarget import RenderTarget, rendering_into
 from composeui.webcore.uploads import MAX_UPLOAD_FILES, UploadRefusal
 from composeui.webcore.webrenderer import UnsupportedEventError, handle_event, render_dirty
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping, Sequence
+
+    from markupsafe import Markup
 
     from composeui.core.model import Model
     from composeui.core.view import DownloadedFile, MainView, Router
@@ -413,12 +415,17 @@ class WebSession(RenderTarget):
             router.navigate(route)
             return True
 
-    def page_html(self, reload_instance: str | None = None) -> str:
-        """Get the whole page; with `reload_instance`, it reloads once its server restarts."""
+    def page_html(self, reload_instance: str | None = None, style_links: Markup = NO_LINKS) -> str:
+        """Get the whole page; with `reload_instance`, it reloads once its server restarts.
+
+        It loads the app's stylesheets of `style_links`.
+        """
         with self.lock:
             assert isinstance(self.main_view.renderer, WebMainRenderer)  # rendered when built
             self.take_pending()  # the whole page shows them
-            return self.main_view.renderer.page_html(reload_instance, session_tag=self.page_tag)
+            return self.main_view.renderer.page_html(
+                reload_instance, session_tag=self.page_tag, style_links=style_links
+            )
 
     def save_to(self, directory: Path, *, code_edits: bool = True) -> None:
         """Save the session's study, its file and language, for `open_saved` to open.

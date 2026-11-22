@@ -118,12 +118,13 @@ class WebButtonRenderer(WebRenderer[ButtonViewLike]):
         variant = _BUTTON_CLASSES[self._view.variant]
         # `self-start`: as wide as its text, not the page's whole column
         return Markup(
-            '<button {root_attributes} type="button"'
+            '<button {root_attributes} type="button" data-variant="{kind}"'
             ' class="btn {variant} self-start"'
             """ hx-post="/widget/{widget_id}" hx-vals='{{"event": "click"}}'"""
             ' hx-swap="none"{disabled}>{text}</button>'
         ).format(
             root_attributes=self._root_attributes(oob=oob),
+            kind=self._view.variant.name.lower(),
             variant=variant,
             widget_id=self.widget_id,
             disabled=disabled,

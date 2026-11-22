@@ -92,7 +92,7 @@ def test_main_view_sets_the_web_content_width_without_a_page(
     with _Browser(app.create_starlette_app()) as client:
         response = client.get("/")
     assert response.status_code == 200
-    main = re.search(r'<main class="([^"]+)"', response.text)
+    main = re.search(r'<main data-cui="content" class="([^"]+)"', response.text)
     assert main is not None
     assert expected_class in main[1].split()
 

@@ -11,6 +11,12 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `run(..., web_style=WebStyle(...))` gives the web app a look of its own: a `Theme` of light
+  and dark `Palette` colors, corners, borders and font, and stylesheets with their fonts and
+  images from a folder. A text color and its background must keep a contrast of 4.5:1. The
+  server refuses to start on a stylesheet that the page couldn't load. The page's parts carry a
+  `data-cui` attribute for the stylesheets to select, and a button a `data-variant`.
+
 - `DownloadView.prepare` reads the views at the click, on the main thread, and returns the
   arguments of `content`, which can run in a job. It refuses the click with a `ValueError` or
   an `OSError`, which an error notification shows. `DownloadView.enabled_if` gives the button
@@ -77,6 +83,8 @@ backends' modules included, can change in any release without an entry here.
 
 ### Changed
 
+- The web backend uses the address `/style/`: a page of a router can no longer have the route
+  `style`. The app stops before it serves, as for the backend's other addresses.
 - A `DownloadView` whose file can't be made says "Can't make the file", without the name of a
   file that was never made. Without `in_job`, an exception of `content` now shows an error
   notification too, as in a job, where it went up through the click. A programming error, such

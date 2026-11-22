@@ -23,7 +23,7 @@ from composeui.core.view import (
 )
 from composeui.webcore.downloads import Downloads, downloads_marker
 from composeui.webcore.icons import icon_url
-from composeui.webcore.page import get_page, jobs_poller, reload_poller
+from composeui.webcore.page import NO_LINKS, get_page, jobs_poller, reload_poller
 from composeui.webcore.rendertarget import _RENDER_TARGET, RenderTarget, call_in_session
 
 if TYPE_CHECKING:
@@ -239,13 +239,13 @@ class WebRouterRenderer(WebRenderer[Router]):
         )
         # a row of its own under the brand on a narrow screen, next to it on a wider one
         return Markup(
-            '<nav aria-label="Pages" class="tabs tabs-box tabs-sm order-last w-full'
-            ' flex-nowrap overflow-x-auto sm:order-none sm:w-auto">{}</nav>'
+            '<nav aria-label="Pages" data-cui="page_tabs" class="tabs tabs-box tabs-sm order-last'
+            ' w-full flex-nowrap overflow-x-auto sm:order-none sm:w-auto">{}</nav>'
         ).format(links)
 
 
 #: first segments of the backend's own addresses, which no page's address can take
-RESERVED_ROUTES: Final = frozenset({"icon", "jobs", "reload", "state", "static", "widget"})
+RESERVED_ROUTES: Final = frozenset({"icon", "jobs", "reload", "state", "static", "style", "widget"})
 
 
 def check_routes(main_view: MainView) -> None:
@@ -342,10 +342,17 @@ class WebMainRenderer(MainRenderer[MainView, str]):
     def call_on_main_thread(self, callback: Callable[[], None]) -> None:
         call_in_session(self._target, callback)
 
-    def page_html(self, reload_instance: str | None = None, *, session_tag: str = "") -> str:
+    def page_html(
+        self,
+        reload_instance: str | None = None,
+        *,
+        session_tag: str = "",
+        style_links: Markup = NO_LINKS,
+    ) -> str:
         """Get the whole page; with `reload_instance`, it reloads once its server restarts.
 
         Its requests carry `session_tag`, the `WebSession.page_tag` of its session, if any.
+        It loads the app's stylesheets of `style_links`.
         """
         menus: list[str] = []
         toolbars: list[str] = []
@@ -380,9 +387,9 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         # bottom padding keeps the last row clear of the fixed status bar; the notification
         # goes above the card, outside it: it isn't the page's content
         main = Markup(
-            '<main class="mx-auto {} px-4 pt-8 pb-20">'
+            '<main data-cui="content" class="mx-auto {} px-4 pt-8 pb-20">'
             "{}"
-            '<div class="card border border-base-300 bg-base-100 shadow-md">'
+            '<div data-cui="card" class="card border border-base-300 bg-base-100 shadow-md">'
             '<div class="card-body gap-6 p-6">'
             "{}"
             "</div></div></main>"
@@ -400,8 +407,8 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             self._view.title,
             # sticky: the menus stay at hand however long the form is
             Markup(
-                '<header class="navbar sticky top-0 z-20 min-h-14{wrap} gap-3 border-b'
-                " border-base-300"
+                '<header data-cui="header" class="navbar sticky top-0 z-20 min-h-14{wrap} gap-3'
+                " border-b border-base-300"
                 ' bg-base-100 px-4">'
                 "{value}{brand_html}{toolbar}"
                 '<nav class="ml-auto flex items-center gap-1">'
@@ -429,6 +436,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             session_tag=session_tag,
             icon=self._app_icon_url(),
             downloads=downloads_marker(self.downloads.tickets()),
+            style_links=style_links,
         )
 
     def _app_icon_url(self) -> str | None:
@@ -465,8 +473,8 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             # on a narrow screen, the title gives way to the header's buttons rather than
             # pushing them to a row of their own
             Markup(
-                '<div id="cui-brand"{swap} class="flex min-w-0 flex-1 basis-0 items-center gap-2'
-                ' sm:flex-none sm:basis-auto">'
+                '<div id="cui-brand"{swap} data-cui="brand" class="flex min-w-0 flex-1 basis-0'
+                ' items-center gap-2 sm:flex-none sm:basis-auto">'
                 "{badge}"
                 '<h1 class="truncate text-lg font-semibold">{title}</h1></div>'
             ).format(swap=swap, badge=badge, title=title)

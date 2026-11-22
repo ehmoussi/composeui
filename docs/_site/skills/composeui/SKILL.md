@@ -79,7 +79,10 @@ Run it with `composeui run app.py`, which reloads on a change, or with `python a
 With `composeui run`, a file that defines one `MainView` class needs no `run` call. A file with a
 model calls `run(HelloMainView, build_model=...)`. The web server's limits, such as how long an
 idle session lives, go to `run(..., web_settings=WebSettings(...))`, from
-`composeui.core.application`: not to class variables of a `WebApplication` subclass.
+`composeui.core.application`: not to class variables of a `WebApplication` subclass. The web
+page's look, its colors, font and stylesheets, goes to `run(..., web_style=WebStyle(...))`, from
+`composeui.core.webstyle`. A stylesheet selects the page's parts by their `data-cui`
+attribute, never by ComposeUI's classes.
 
 ## Find what ComposeUI already has
 

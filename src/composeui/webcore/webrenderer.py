@@ -194,12 +194,17 @@ class WebRenderer(Renderer[TView, str]):
         raise UnsupportedEventError(self, event)
 
     def _root_attributes(self, *, oob: bool) -> Markup:
-        """Get the attributes of the fragment's root tag, kept even when hidden for later swaps."""
+        """Get the attributes of the fragment's root tag, kept even when hidden for later swaps.
+
+        Its ``data-cui``, the kind of widget, is what an app's stylesheet selects it by
+        (`WebStyle`): it stays when the markup changes.
+        """
         attributes = [Markup('id="{}"').format(self.widget_id)]
         if not self._view.is_visible:
             attributes.append(Markup("hidden"))
         if oob:
             attributes.append(Markup('hx-swap-oob="true"'))
+        attributes.append(Markup('data-cui="{}"').format(self._role))
         return Markup(" ").join(attributes)
 
     def _row_attributes(self) -> Markup:
@@ -277,7 +282,7 @@ def _view_html(view: View) -> Markup:
             ["label", "field", "log"] if isinstance(view, FormLabelRowView) else ["field", "log"]
         )
         # field right before log: the page's stylesheet marks a field followed by an error
-        return Markup('<div class="flex flex-col gap-1">{}</div>').format(
+        return Markup('<div data-cui="row" class="flex flex-col gap-1">{}</div>').format(
             Markup("").join(_fragment(renderer.get_renderer(part)) for part in parts)
         )
     return _fragment(renderer)

@@ -323,6 +323,21 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   in pixels, so they keep their size. They stay outside the nested `<svg>`: a text near the edge
   is not cut. Only the browser knows the scale on the page, so an arrow's line stops inside its head
   by a length computed at the largest size that the view can have.
+- **An app's look.** A `WebStyle`'s theme is a stylesheet that `style.py` writes as the server
+  starts, served at `/style/theme.css` by its digest, as the page's policy refuses a `<style>`
+  element. It sets daisyUI's variables under the selectors of ComposeUI's own themes in
+  `css/app.css` and loads after it, so it wins by order, not by a new theme name. So the Theme
+  menu, the browser's preference and a chart's image (`data-theme="composeui"` in `charts.js`)
+  need no change. The app's stylesheets are read and checked once, there too: an `@import` or a
+  `url(...)` that the folder doesn't serve stops the server, as the browser would drop it without
+  an error. The folder's route serves only stylesheets, fonts and images, never a hidden file or
+  one out of the folder. The stylesheets' addresses name no digest, and the route answers
+  `no-cache`: a file edited while the server runs shows at the next page, unchecked until the
+  server starts again. Each part of the page carries a `data-cui`, its renderer's `_role` for a
+  widget, set by `_root_attributes`: the hooks that an app's stylesheet selects, which stay when
+  the classes change. The contrast
+  check judges only the pairs that a palette sets: ComposeUI's own light palette has four pairs
+  below 4.5:1 (secondary, info, success and error).
 - **By design:** `Menu.is_visible` is ignored (a drop-down is always shown). An action's `data`
   is not displayed. Ctrl shortcuts become Alt+Shift. An unknown page address is a 404, not a
   redirect: browsers ask for addresses of their own, like `/favicon.ico`.

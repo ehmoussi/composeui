@@ -47,6 +47,7 @@ if TYPE_CHECKING:
         _ViewOnlyCallback,
     )
     from composeui.core.view import MainView, View
+    from composeui.core.webstyle import WebStyle
 
 __all__ = [
     "Application",
@@ -543,13 +544,14 @@ class WebSettings:
     filter_patterns: bool = True
 
 
-def run(
+def run(  # noqa: PLR0913 (each is an option of the app)
     build_main_view: Callable[[], MainViewT],
     *,
     build_model: Callable[[], ModelT] | None = None,
     setup_model: Callable[[MainViewT, ModelT], None] | None = None,
     default_backend: RendererType = RendererType.WEB,
     web_settings: WebSettings | None = None,
+    web_style: WebStyle | None = None,
 ) -> None:
     """Run the app on the backend the command line names, e.g. ``--backend qt``.
 
@@ -558,7 +560,8 @@ def run(
     ``--port``, ``--help``...). Only that backend is imported, so the others' extras
     needn't be installed; without its own, it stops and names the extra. With `build_model`,
     the app has a model, wired to its main view by `setup_model`: once, or per session on the
-    web. On the web, the server keeps to `web_settings`; the other backends ignore them.
+    web. On the web, the server keeps to `web_settings`, and the pages take the look of
+    `web_style`; the other backends ignore them.
     """
     if build_model is None and setup_model is not None:
         msg = "setup_model needs a model: pass build_model too"
@@ -586,12 +589,13 @@ def run(
             f"the {args.backend} backend needs {', '.join(missing)}, from the "
             f'{backend.extra} extra: pip install "composeui[{backend.extra}]"'
         )
-    # only the web's applications take settings
-    settings = (
-        {"settings": web_settings}
-        if web_settings is not None and backends[args.backend] is RendererType.WEB
-        else {}
-    )
+    # only the web's applications take settings and a style
+    settings: dict[str, object] = {}
+    if backends[args.backend] is RendererType.WEB:
+        if web_settings is not None:
+            settings["settings"] = web_settings
+        if web_style is not None:
+            settings["style"] = web_style
     app: Application[MainViewT]
     if build_model is None:
         app = module.APPLICATION(build_main_view=build_main_view, **settings)

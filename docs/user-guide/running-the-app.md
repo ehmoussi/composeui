@@ -397,6 +397,84 @@ if __name__ == "__main__":
 The API reference of [`WebSettings`](../api/application.md) describes each field, and when to
 change it. A `WebApplication` or a `WebModelApplication` takes them as `settings=`.
 
+### Change the look of the web app
+
+Give the look of the web app to `run` as a `WebStyle`. Its `theme` sets the colors, the
+corners, the borders, and the font. Its `stylesheets` add CSS rules of your own, from a
+`folder` that holds them with their fonts and images. Qt and Textual ignore the style.
+
+```python
+from pathlib import Path
+
+from composeui.core.application import run
+from composeui.core.view import MainView, define_view
+from composeui.core.webstyle import Palette, Theme, WebStyle
+
+
+@define_view
+class StudioMainView(MainView):
+    pass
+
+
+if __name__ == "__main__":
+    run(
+        StudioMainView,
+        web_style=WebStyle(
+            theme=Theme(
+                light=Palette(primary="#0b5cad", primary_content="#ffffff"),
+                dark=Palette(primary="#6ea8ff", primary_content="#0a1a2f"),
+                radius_field="0.125rem",
+                radius_box="0.25rem",
+                font='"Inter", sans-serif',
+            ),
+            folder=Path("style"),
+            stylesheets=("studio.css",),
+        ),
+    )
+```
+
+- **The theme.** A `Palette` holds the colors of the light theme or of the dark theme, each
+  `#rrggbb` or `oklch(L C H)`. A `*_content` color is the text on its color, such as a primary
+  button's text on `primary`. Each value that you leave out keeps ComposeUI's. The header's
+  Theme menu still picks Light, Dark, or the browser's preference, and the charts take their
+  colors from the theme.
+- **Readable colors.** When a palette sets a text color or its background, the two must have a
+  contrast of at least 4.5:1, the WCAG AA level for text. If one of the two is left out,
+  ComposeUI's color is used for it. A pair below 4.5:1 raises `ValueError` and names the two
+  colors.
+- **The stylesheets.** The page loads them after ComposeUI's stylesheet and the theme, in their
+  order, so their rules win. The server serves `folder` at `/style/files/`. A stylesheet names a
+  font or an image of the folder by its relative path, such as `url("fonts/inter.woff2")` in an
+  `@font-face` rule. The server serves no hidden file, no file outside the folder, and only
+  stylesheets, fonts, and images.
+- **The checks at start.** The page's policy blocks files from other addresses. So the server
+  refuses to start when a stylesheet is missing, uses `@import`, or names in `url(...)` an
+  address or a file that the folder doesn't serve. List each stylesheet in `stylesheets`
+  instead of importing it. A stylesheet that you edit while the server runs shows at the next
+  page load, and the server checks it again when it starts again.
+- **The parts to select.** Select a part of the page by its `data-cui` attribute, such as
+  `[data-cui="header"] { border-bottom-width: 4px; }`. ComposeUI keeps these attributes. Its
+  classes and the rest of its markup are not part of the API.
+
+These are the parts that carry a `data-cui`:
+
+| `data-cui` | Part of the page |
+| --- | --- |
+| `header` | The header, with the brand, the pages' tabs, the toolbars, and the menus |
+| `brand` | The app's icon and title, in the header |
+| `page_tabs` | The tabs of the router's pages, in the header |
+| `sidebar` | The sidebar |
+| `content` | The page's column, under the header |
+| `card` | The box of the page's views, in the column |
+| `row` | A form row, in a form or alone: its label, its field, and its message |
+| The kind of widget | Each widget, such as `button`, `input`, `combobox`, `form`, `group_form`, `table`, `chart`, or `tabs` |
+
+A button also has a `data-variant` that gives its `variant`: `primary`, `secondary`, or
+`danger`.
+
+A `WebApplication` or a `WebModelApplication` takes the style as `style=`. The API reference of
+[`WebStyle`](../api/webstyle.md) describes each field.
+
 ### Deploy behind nginx
 
 The app serves plain HTTP. To give other users the app over HTTPS, put it behind a reverse

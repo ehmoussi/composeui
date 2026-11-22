@@ -76,6 +76,7 @@ from composeui.webcore.routes import (
 )
 from composeui.webcore.session import Hibernation, SessionStore
 from composeui.webcore.streaming import StreamPlaces
+from composeui.webcore.style import StyleFiles, style_file, theme
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Sequence
@@ -87,6 +88,7 @@ if TYPE_CHECKING:
     from composeui.core.model import Model
     from composeui.core.signal import Signal
     from composeui.core.view import MainView
+    from composeui.core.webstyle import WebStyle
 
     Ts = TypeVarTuple("Ts")
 
@@ -143,22 +145,26 @@ def _resolve(main_view: MainView, path: _AttributePath) -> object:
     return functools.reduce(getattr, path, cast("object", main_view))
 
 
-def create_starlette_app(
+def create_starlette_app(  # noqa: PLR0913 (each sets a part of the server)
     sessions: SessionStore,
     *,
     max_upload_size: int,
     secret_key: str | None = None,
     reloading: bool = False,
     stream_places: StreamPlaces | None = None,
+    style: WebStyle | None = None,
 ) -> Starlette:
     """Create the Starlette app serving one main view per browser session.
 
     `max_upload_size` sets the largest body of the route of file uploads, and
-    `stream_places` the downloads written at once (`StreamContent`). `secret_key`
+    `stream_places` the downloads written at once (`StreamContent`). The pages load
+    `style`, checked here: `ValueError` if a stylesheet is missing or names what the page
+    couldn't load. `secret_key`
     signs the session cookie, a new one by default. A ``--reload`` server's process
     (`reloading`) saves the sessions as it stops (`SessionStore.save_all`), and its pages
     reload once another process serves (`reload_poll`).
     """
+    style_files = StyleFiles(style)
     app = Starlette(
         routes=[
             Route("/", homepage),
@@ -176,6 +182,8 @@ def create_starlette_app(
             Route("/state/download", state_save, methods=["POST"]),
             Route("/icon/{name}", icon),
             Route("/jobs", jobs_poll),
+            Route("/style/theme.css", theme, methods=["GET"]),
+            Route("/style/files/{name:path}", style_file, methods=["GET"]),
             Mount(
                 "/static",
                 app=StaticFiles(directory=Path(__file__).parent / "static"),
@@ -208,6 +216,8 @@ def create_starlette_app(
         lifespan=_lifespan(sessions, reloading=reloading),
     )
     app.state.sessions = sessions
+    #: the app's theme and stylesheets, which its pages load
+    app.state.style_files = style_files
     #: the places of the downloads written at once (`StreamResponse`)
     app.state.stream_places = StreamPlaces() if stream_places is None else stream_places
     #: this process of a `--reload` server, which its pages name: None for another server
@@ -420,7 +430,8 @@ class WebApplication(Application[MainViewT]):
     the view and the signals sit in the template. Every new session then connects the
     callback to its own view and signals, with its own `view` and `main_view`. Connect
     before serving: a session already open keeps the connections it was built with.
-    The server keeps to `settings`: how long sessions live, and how many it serves.
+    The server keeps to `settings`: how long sessions live, and how many it serves. The
+    pages take the look of `style`, ComposeUI's without one.
     """
 
     backend = RendererType.WEB
@@ -439,10 +450,16 @@ class WebApplication(Application[MainViewT]):
             raise TypeError(msg)
 
     def __init__(
-        self, *, build_main_view: Callable[[], MainViewT], settings: WebSettings | None = None
+        self,
+        *,
+        build_main_view: Callable[[], MainViewT],
+        settings: WebSettings | None = None,
+        style: WebStyle | None = None,
     ) -> None:
         #: the server's limits: `filter_patterns` is read here, the others as it starts
         self.settings = WebSettings() if settings is None else settings
+        #: the pages' look, checked as the server starts
+        self.style = style
         self._build_main_view = build_main_view
         self._connections: list[_Connection] = []
         if not self.settings.filter_patterns:
@@ -521,6 +538,7 @@ class WebApplication(Application[MainViewT]):
             ),
             secret_key=secret_key,
             reloading=saved_sessions is not None,
+            style=self.style,
         )
 
     @override
@@ -637,10 +655,11 @@ class WebModelApplication(WebApplication[MainViewT], Generic[MainViewT, ModelT])
         build_model: Callable[[], ModelT],
         setup_model: Callable[[MainViewT, ModelT], None] | None = None,
         settings: WebSettings | None = None,
+        style: WebStyle | None = None,
     ) -> None:
         self._build_model = build_model
         self._model_setup = setup_model
-        super().__init__(build_main_view=build_main_view, settings=settings)
+        super().__init__(build_main_view=build_main_view, settings=settings, style=style)
 
     @override
     def connect(
