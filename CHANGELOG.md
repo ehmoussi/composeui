@@ -157,6 +157,9 @@ backends' modules included, can change in any release without an entry here.
 
 ### Fixed
 
+- A job waiting for a `@shared_data` load gets the load's last progress, also when the load
+  ends while the job reports the progress before it.
+
 - A job always ends. A job whose work calls `sys.exit` ends as one with a programming error
   does, and its task can start again: before, it stayed running. A job whose thread can't
   start leaves nothing running, and `Task.start_latest` keeps the run before it. A `finished`

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional, cast
 
 import attrs
 import pytest
+from typing_extensions import override
 
 from composeui.core.jobs import CalledInJobError, Job, JobCanceledError
 from composeui.core.shared import SharedData, SharedDataError, shared_data
@@ -121,6 +122,40 @@ def test_sessions_waiting_together_share_one_load_each_with_its_own_clone() -> N
     assert later.result().columns == ["a"]
     assert later.progress == []
     assert load.calls == 1
+
+
+class _SlowReporter(_Session):
+    """A session whose job holds its first progress until the test resumes it."""
+
+    def __init__(self, shared: SharedData[Any, Any]) -> None:
+        self.resume = threading.Event()
+        super().__init__(shared)
+
+    @override
+    def _report(self, value: object) -> None:
+        super()._report(value)
+        if value == 1:
+            assert self.resume.wait(_TIMEOUT)
+
+
+def test_a_session_gets_the_last_progress_of_a_load_that_ended_while_it_reported() -> None:
+    go = threading.Event()
+
+    def load(job: Job[tuple[int, ...], int]) -> tuple[int, ...]:
+        job.report_progress(1)
+        assert go.wait(_TIMEOUT)
+        job.report_progress(2)
+        return (1, 2)
+
+    shared = shared_data(load)
+    session = _SlowReporter(shared)
+    _joined(session)  # reporting 1, its job holds it
+    go.set()
+    assert _Session(shared).result() == (1, 2)  # the load is over: its value is kept
+    session.resume.set()
+
+    assert session.result() == (1, 2)
+    assert session.progress == [1, 2]
 
 
 def test_a_session_canceled_stops_waiting_and_the_others_still_get_the_load() -> None:

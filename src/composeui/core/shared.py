@@ -99,7 +99,8 @@ class SharedData(Generic[R, ProgressT]):
     def _wait(self, job: Job[R, ProgressT], run: _Run[R, ProgressT]) -> R:
         """Wait for `run`'s outcome, under the condition, reporting its progress to `job`."""
         reported = 0
-        while not run.is_over:
+        # its last progress too: the load may end while the job reports the one before
+        while not run.is_over or reported != run.reports:
             if reported != run.reports:
                 reported, progress = run.reports, run.progress
                 # outside the lock: on the web, a session's lock takes the progress
