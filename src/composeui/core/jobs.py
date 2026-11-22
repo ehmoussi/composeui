@@ -497,9 +497,12 @@ class JobSlots:
             msg = f"JobSlots needs a limit of 1 or more, not {limit}"
             raise ValueError(msg)
         self._limit = limit
-        self._condition = threading.Condition()
+        self._lock = threading.Lock()
         # the jobs waiting for a slot, the first one first, and the jobs holding one
-        self._waiting: collections.deque[Job[Any, Any]] = collections.deque()
+        self._waiting: collections.deque[_Waiter] = collections.deque()
+        self._waiters: dict[Job[Any, Any], _Waiter] = {}
+        # those of them with an `on_wait`, woken each time the line moves up
+        self._reporters: set[_Waiter] = set()
         self._holders: set[Job[Any, Any]] = set()
 
     @contextlib.contextmanager
@@ -519,52 +522,87 @@ class JobSlots:
             # the main thread waiting would freeze the app, or a web session's requests
             msg = "JobSlots.slot must be called in the function of its job, in its thread"
             raise RuntimeError(msg)
-        with self._condition:
+        with self._lock:
             # also from `on_wait`, while it waits: with a slot left, the job would take two;
             # without, it would wait for itself
-            if job in self._holders or job in self._waiting:
+            if job in self._holders or job in self._waiters:
                 msg = "The job already holds or waits for a slot: it can't ask for a second one"
                 raise RuntimeError(msg)
-            self._take(job, on_wait or _ignore_place)
+            self._take(_Waiter(job, on_wait or _ignore_place, threading.Condition(self._lock)))
         try:
             yield
         finally:
-            with self._condition:
+            with self._lock:
                 self._holders.discard(job)
-                self._condition.notify_all()
+                self._wake_first()
 
-    def _take(self, job: Job[Any, Any], on_wait: Callable[[int], None]) -> None:
-        """Wait, under the condition, until `job` is first and a slot is free, then take it."""
-        self._waiting.append(job)
+    def _take(self, waiter: _Waiter) -> None:
+        """Wait, under the lock, until `waiter` is first and a slot is free, then take it.
+
+        A wake-up only says that the line moved: the loop reads the line again before it
+        waits, so a wake-up sent while `on_wait` runs, outside the lock, is not missed.
+        """
+        job = waiter.job
+        self._waiting.append(waiter)
+        self._waiters[job] = waiter
+        if waiter.on_wait is not _ignore_place:
+            self._reporters.add(waiter)
         reported = 0
         taken = False
         try:
             while True:
-                is_free = self._waiting[0] is job and len(self._holders) < self._limit
-                place = 0 if is_free else self._waiting.index(job) + 1
+                is_free = self._waiting[0] is waiter and len(self._holders) < self._limit
+                # a job that reports nothing doesn't count its place, which costs the line
+                silent = waiter.on_wait is _ignore_place
+                place = 0 if is_free or silent else self._waiting.index(waiter) + 1
                 if place not in {0, reported}:
                     reported = place
                     # outside the lock: on the web, a report takes a session's lock
-                    self._condition.release()
+                    self._lock.release()
                     try:
-                        on_wait(place)
+                        waiter.on_wait(place)
                     finally:
-                        self._condition.acquire()
+                        self._lock.acquire()
                 elif job.is_canceled:
                     msg = "The job stopped waiting for a slot: it was canceled"
                     raise JobCanceledError(msg)
                 elif is_free:
                     break
                 else:
-                    self._condition.wait(_SLOT_POLL)
+                    waiter.wake.wait(_SLOT_POLL)
             self._waiting.popleft()
             self._holders.add(job)
             taken = True
         finally:
             if not taken:
-                self._waiting.remove(job)
-            # the jobs behind it moved up
-            self._condition.notify_all()
+                self._waiting.remove(waiter)
+            del self._waiters[job]
+            self._reporters.discard(waiter)
+            # the jobs behind it moved up: every job reporting its place looks again, those
+            # ahead finding the same one, and the first one takes a slot left free, e.g. by
+            # this job canceled
+            for each in self._reporters:
+                each.wake.notify()
+            self._wake_first()
+
+    def _wake_first(self) -> None:
+        """Wake the first job waiting if a slot is free, under the lock: its turn came."""
+        if self._waiting and len(self._holders) < self._limit:
+            self._waiting[0].wake.notify()
+
+
+class _Waiter:
+    """A job waiting for a slot of `JobSlots`, woken alone when its turn or place changes."""
+
+    __slots__ = ("job", "on_wait", "wake")
+
+    def __init__(
+        self, job: Job[Any, Any], on_wait: Callable[[int], None], wake: threading.Condition
+    ) -> None:
+        self.job = job
+        self.on_wait = on_wait
+        #: on the slots' lock
+        self.wake = wake
 
 
 def _ignore_place(_place: int) -> None:
