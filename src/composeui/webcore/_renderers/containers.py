@@ -36,6 +36,7 @@ if TYPE_CHECKING:
 from composeui.webcore.webrenderer import UnsupportedEventError, WebRenderer, _is_shown, _view_html
 
 TBuilt = TypeVar("TBuilt", bound=View)
+TLayout = TypeVar("TLayout", bound="HorizontalView | VerticalView | GridView")
 
 
 class _BuiltWhenShown(WebRenderer[TBuilt]):
@@ -117,7 +118,37 @@ class WebPageRenderer(_BuiltWhenShown[PageView]):
         )
 
 
-class WebHorizontalRenderer(WebRenderer[HorizontalView]):
+class _WebLayoutRenderer(WebRenderer[TLayout]):
+    def __init__(self, view: TLayout) -> None:
+        super().__init__(view)
+        if view.frame is not None:
+            self._refresh_dispatcher["frame"] = self._mark_dirty
+
+    @override
+    def render(self) -> None:
+        super().render()
+        self._adopt(self._view.children_views)
+
+    def _layout_html(self, content: Markup, classes: str, *, oob: bool) -> Markup:
+        attributes = self._root_attributes(oob=oob)
+        frame = self._view.frame
+        if frame is None:
+            return Markup('<div {} class="{}">{}</div>').format(attributes, classes, content)
+        legend = (
+            Markup(
+                '<legend class="max-w-full wrap-anywhere px-1 text-sm font-semibold">{}</legend>'
+            ).format(str(frame.title))
+            if frame.title
+            else Markup()
+        )
+        # The fieldset is the swap root; the inner div still measures its own width.
+        return Markup(
+            '<fieldset {} data-cui-frame class="min-w-0 rounded-box border border-base-300 p-4">'
+            '{}<div class="{}">{}</div></fieldset>'
+        ).format(attributes, legend, classes, content)
+
+
+class WebHorizontalRenderer(_WebLayoutRenderer[HorizontalView]):
     """Views side by side, each as wide as its share of the row.
 
     Each view sits in a cell carrying its share, an inline style rather than a class
@@ -129,11 +160,6 @@ class WebHorizontalRenderer(WebRenderer[HorizontalView]):
     """
 
     _role = "horizontal"
-
-    @override
-    def render(self) -> None:
-        super().render()
-        self._adopt(self._view.children_views)
 
     @override
     def to_html(self, *, oob: bool = False) -> Markup:
@@ -150,9 +176,7 @@ class WebHorizontalRenderer(WebRenderer[HorizontalView]):
                 if _is_shown(view)
             )
             align = " justify-end" if self._view.align is Align.END else ""
-            return Markup(
-                '<div {root_attributes} class="flex flex-wrap gap-6{align}">{cells}</div>'
-            ).format(root_attributes=self._root_attributes(oob=oob), align=align, cells=cells)
+            return self._layout_html(cells, f"flex flex-wrap gap-6{align}", oob=oob)
         cells = Markup("").join(
             Markup(
                 '<div class="{}has-[>[hidden]]:hidden @2xl:flex-(--share)" style="--share: {}">'
@@ -170,31 +194,21 @@ class WebHorizontalRenderer(WebRenderer[HorizontalView]):
             for view, stretch in stretched_views
             if _is_shown(view)
         )
-        # the row's own width is queried from its root, the views laid out inside it
-        return Markup(
-            '<div {} class="@container">'
-            '<div class="flex flex-col gap-6 @2xl:flex-row">{}</div></div>'
-        ).format(self._root_attributes(oob=oob), cells)
+        content = Markup('<div class="flex flex-col gap-6 @2xl:flex-row">{}</div>').format(cells)
+        return self._layout_html(content, "@container", oob=oob)
 
 
-class WebVerticalRenderer(WebRenderer[VerticalView]):
+class WebVerticalRenderer(_WebLayoutRenderer[VerticalView]):
     """Views one above the other, at the top of the column, like a page's."""
 
     _role = "vertical"
-
-    @override
-    def render(self) -> None:
-        super().render()
-        self._adopt(self._view.children_views)
 
     @override
     def to_html(self, *, oob: bool = False) -> Markup:
         content = Markup("").join(
             _view_html(view) for view in self._view.children_views if _is_shown(view)
         )
-        return Markup('<div {} class="flex flex-col gap-6">{}</div>').format(
-            self._root_attributes(oob=oob), content
-        )
+        return self._layout_html(content, "flex flex-col gap-6", oob=oob)
 
 
 class WebSplitterRenderer(WebRenderer[SplitterView]):
@@ -652,7 +666,7 @@ class WebTabsRenderer(WebRenderer[TabView]):
         return current is not None and current.renderer is page
 
 
-class WebGridRenderer(WebRenderer[GridView]):
+class WebGridRenderer(_WebLayoutRenderer[GridView]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views.
 
     The columns and each view's cell are variables rather than a class per count; a cell
@@ -662,11 +676,6 @@ class WebGridRenderer(WebRenderer[GridView]):
     """
 
     _role = "grid"
-
-    @override
-    def render(self) -> None:
-        super().render()
-        self._adopt(self._view.children_views)
 
     @override
     def to_html(self, *, oob: bool = False) -> Markup:
@@ -686,9 +695,8 @@ class WebGridRenderer(WebRenderer[GridView]):
             if _is_shown(view)
         )
         columns = f"repeat({self._view.column_count}, minmax(0, 1fr))"
-        # the grid's own width is queried from its root, the views laid out inside it
-        return Markup(
-            '<div {root_attributes} class="@container">'
+        content = Markup(
             '<div class="grid grid-cols-1 items-start gap-6 @2xl:grid-cols-(--columns)"'
-            ' style="--columns: {columns}">{cells}</div></div>'
-        ).format(root_attributes=self._root_attributes(oob=oob), columns=columns, cells=cells)
+            ' style="--columns: {columns}">{cells}</div>'
+        ).format(columns=columns, cells=cells)
+        return self._layout_html(content, "@container", oob=oob)

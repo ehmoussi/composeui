@@ -40,6 +40,7 @@ from composeui.core.view import (
     FloatInputMixin,
     FloatRangeSliderView,
     FloatSliderView,
+    Frame,
     ImageView,
     InputView,
     LabelView,
@@ -74,7 +75,8 @@ from tests.charts import ChartPagesMainView
 from tests.console import RunMainView
 from tests.datafiles import DataFileMainView
 from tests.filters import FiltersMainView
-from tests.horizontal import HorizontalMainView
+from tests.frames import FramedMainView
+from tests.horizontal import HorizontalMainView, TablesRow
 from tests.metrics import JobsMainView
 from tests.ranges import FIRST_DAY, RangesMainView
 from tests.tables import EditableTableMainView
@@ -1669,6 +1671,30 @@ def test_ui_text_is_neither_saved_nor_loaded(tmp_path: Path) -> None:
 
     assert view.heading.text == "Notes"
     assert view.note.text == "a note"
+
+
+def test_a_study_loads_and_resets_the_contents_but_not_the_layout_frame(tmp_path: Path) -> None:
+    original = FramedMainView()
+    original.row.narrow.selected_rows = [1]
+    filepath = tmp_path / "results.frames"
+    original.save_state(filepath)
+    data = json.loads(filepath.read_text())
+    assert "frame" not in data["views"]["row"]
+    data["views"]["row"]["frame"] = None
+    filepath.write_text(json.dumps(data))
+
+    frame = Frame(title="A different frame")
+    reopened = FramedMainView(row=TablesRow(frame=frame))
+    reopened.load_state(filepath)
+    assert reopened.row.narrow.selected_rows == [1]
+    assert reopened.row.frame == frame
+
+    reopened.reset_state()
+    assert reopened.row.narrow.selected_rows == []
+    assert reopened.row.frame == frame
+    frame_attribute = "frame"
+    with pytest.raises(attrs.exceptions.FrozenAttributeError):
+        setattr(reopened.row, frame_attribute, None)
 
 
 def test_load_state_failing_halfway_leaves_the_view_unchanged(tmp_path: Path) -> None:

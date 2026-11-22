@@ -57,6 +57,7 @@ from composeui.core._views.choices import (
 from composeui.core._views.containers import (
     Align,
     ExpanderView,
+    Frame,
     GridPosition,
     GridPositionError,
     GridView,
@@ -308,6 +309,7 @@ __all__ = [
     "FormLabelRowView",
     "FormRowView",
     "FormView",
+    "Frame",
     "GridPosition",
     "GridPositionError",
     "GridView",

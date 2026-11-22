@@ -27,6 +27,7 @@ from composeui.webcore.webrenderer import (
     render_dirty,
 )
 from tests.expander import RecordMainView
+from tests.frames import FramedMainView
 from tests.latepages import LatePagesMainView
 from tests.listview import PIPES, PipeExpander, PipesMainView
 from tests.partial import PartialMainView, UnregisteredView
@@ -54,6 +55,36 @@ from tests.webcore.support import (
     _swapped,
     _widget_id,
 )
+
+
+def test_a_layout_frame_shows_its_title_as_text_and_is_swapped_when_translated() -> None:
+    view = FramedMainView()
+    view.column.button.clicked.connect(lambda: view.set_language("fr"))
+    app = WebApplication(build_main_view=lambda: view).create_starlette_app()
+    with _Browser(app) as client:
+        page = client.get("/").text
+        row_id = _widget_id(view.row.renderer)
+        row = _element(page, row_id)
+        assert row.tag == "fieldset"
+        assert "data-cui-frame" in row.attributes
+        assert any(tag == "legend" for tag, _ in row.descendants)
+        assert "Shape" in row.text
+        assert _holds(page, row_id, _widget_id(view.row.narrow.renderer))
+
+        grid = _element(page, _widget_id(view.grid.renderer))
+        assert grid.tag == "fieldset"
+        assert all(tag != "legend" for tag, _ in grid.descendants)
+
+        column = _element(page, _widget_id(view.column.renderer))
+        assert "<layout-title> & controls" in column.text
+        assert all(tag != "layout-title" for tag, _ in column.descendants)
+
+        button_id = _widget_id(view.column.button.renderer)
+        response = client.post(f"/widget/{button_id}", data={"event": "click"})
+        assert response.status_code == 200
+        translated = _swapped(response.text, row_id)
+        assert translated.tag == "fieldset"
+        assert "Forme" in translated.text
 
 
 def test_a_tab_view_is_a_tab_list_posting_the_tab_picked_never_swapped_back() -> None:

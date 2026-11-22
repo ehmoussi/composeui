@@ -67,6 +67,7 @@ from tests.downloading import ReportMainView
 from tests.drawings import DrawingMainView
 from tests.expander import RecordMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
+from tests.frames import FramedMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView, ManyButtonsMainView
 from tests.listview import PIPES, PipesMainView
@@ -1814,6 +1815,35 @@ def test_a_narrow_grid_view_stacks_its_views_row_by_row(grid_page: Page) -> None
     # back in their cells
     assert first["y"] == pytest.approx(button["y"], abs=1)
     assert spanning["width"] > 2 * first["width"]
+
+
+def test_framed_rows_and_grids_reflow_with_the_space_inside_the_frame(browser: Browser) -> None:
+    app = WebApplication(build_main_view=FramedMainView).create_starlette_app()
+    with _serve(app) as url, browser.new_context(base_url=url) as context:
+        page = context.new_page()
+        page.set_viewport_size({"width": 770, "height": 900})
+        page.goto("/")
+        row = page.get_by_role("group", name="Shape")
+        expect(row).to_have_css("border-top-width", "1px")
+        # The outside clears 42rem, but the space inside is still too narrow.
+        assert _box(row)["width"] > 42 * 16
+        narrow = row.get_by_role("table").filter(has_text="Narrow")
+        wide = row.get_by_role("table").filter(has_text="Wide")
+        first = page.get_by_role("table").filter(has_text="First")
+        spanning = page.get_by_role("table").filter(has_text="Spanning")
+        button = page.get_by_role("group").filter(has=first).get_by_role("button", name="Add")
+
+        assert _box(narrow)["y"] < _box(wide)["y"]
+        assert _box(first)["y"] < _box(button)["y"] < _box(spanning)["y"]
+        assert _box(narrow)["width"] == _box(wide)["width"]
+        assert _box(first)["width"] == _box(spanning)["width"]
+
+        page.set_viewport_size({"width": 1000, "height": 900})
+        narrow_box, wide_box = _box(narrow), _box(wide)
+        assert narrow_box["y"] == wide_box["y"]
+        assert wide_box["width"] == pytest.approx(3 * narrow_box["width"], rel=0.02)
+        assert _box(first)["y"] == pytest.approx(_box(button)["y"], abs=1)
+        assert _box(first)["width"] < _box(spanning)["width"]
 
 
 def test_a_sidebar_retracts_beside_the_pages_and_is_a_drawer_on_a_phone(

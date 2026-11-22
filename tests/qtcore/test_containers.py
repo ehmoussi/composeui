@@ -8,6 +8,7 @@ import pytest
 from qtpy.QtCore import QPoint, Qt
 from qtpy.QtWidgets import (
     QGridLayout,
+    QGroupBox,
     QLabel,
     QMainWindow,
     QScrollArea,
@@ -20,6 +21,7 @@ from qtpy.QtWidgets import (
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.registry import RendererType
 from composeui.core.view import (
+    Frame,
     LabelView,
     TabView,
 )
@@ -29,8 +31,14 @@ from composeui.qtcore.widgets.qexpander import QExpander
 from examples.pipecatalogue import PipeCatalogueMainView
 from examples.pipeform import PipeMainView
 from tests.expander import RecordMainView
+from tests.frames import FramedMainView
 from tests.grid import GridMainView
-from tests.horizontal import ButtonsMainView, HorizontalMainView, ManyButtonsMainView
+from tests.horizontal import (
+    ButtonsMainView,
+    HorizontalMainView,
+    ManyButtonsMainView,
+    ManyStartButtons,
+)
 from tests.listview import PIPES, Pipe, PipeExpander, PipesMainView
 from tests.markdown import HelpMainView
 from tests.pages import (
@@ -53,6 +61,35 @@ if TYPE_CHECKING:
     from composeui.core.view import MainView, View
 
 from tests.qtcore.support import _field_widget, _move_pressed, _press, _release, _widget
+
+
+def test_a_layout_frame_keeps_its_contents_when_its_title_is_translated(qtbot: QtBot) -> None:
+    view = FramedMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+
+    row, grid, column = (_widget(layout) for layout in (view.row, view.grid, view.column))
+    assert isinstance(row, QGroupBox)
+    assert isinstance(grid, QGroupBox)
+    assert isinstance(column, QGroupBox)
+    assert (row.title(), grid.title(), column.title()) == ("Shape", "", "<layout-title> & controls")
+
+    table = _widget(view.row.narrow)
+    assert row.isAncestorOf(table)
+    assert table.isVisible()
+    assert grid.isAncestorOf(_widget(view.grid.button))
+    assert column.isAncestorOf(_widget(view.column.button))
+    first_children = (table, _widget(view.grid.first), _widget(view.column.table))
+    for box, first in zip((row, grid, column), first_children):
+        assert first.geometry().left() > box.contentsRect().left()
+        assert first.geometry().top() > box.contentsRect().top()
+    view.set_language("fr")
+    assert _widget(view.row) is row
+    assert row.title() == "Forme"
+    assert row.isAncestorOf(table)
+    assert table.isVisible()
 
 
 def test_markdown_takes_the_spare_height_of_the_window(qtbot: QtBot) -> None:
@@ -406,6 +443,21 @@ def test_buttons_with_no_share_wrap_onto_lines_as_wide_as_their_row(qtbot: QtBot
     assert retry.geometry().right() <= width - 1
     top = max(widget.mapTo(window, widget.rect().bottomLeft()).y() for widget in (note, retry))
     assert _widget(view.below).mapTo(window, QPoint(0, 0)).y() > top
+
+
+def test_a_framed_button_row_wraps_inside_its_padding(qtbot: QtBot) -> None:
+    view = ManyButtonsMainView(start=ManyStartButtons(frame=Frame(title="Actions")))
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.resize(400, 600)
+    window.show()
+    qtbot.waitExposed(window)
+
+    area = _widget(view.start).contentsRect()
+    buttons = [_widget(button).geometry() for button in view.start.buttons]
+    assert buttons[-1].top() > buttons[0].bottom()
+    assert all(area.adjusted(1, 1, -1, -1).contains(button) for button in buttons)
 
 
 def test_a_list_view_shows_a_view_per_record_as_the_records_change(qtbot: QtBot) -> None:

@@ -37,6 +37,7 @@ from composeui.textualcore.widgets.composetabbedcontent import ComposeTabbedCont
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbarButton
 from examples.pipeform import EdgeType, PipeMainView
 from tests.expander import RecordMainView
+from tests.frames import FramedMainView
 from tests.grid import GridMainView
 from tests.horizontal import ButtonsMainView, HorizontalMainView, ManyButtonsMainView
 from tests.listview import PIPES, Pipe, PipeExpander, PipesMainView
@@ -50,6 +51,25 @@ if TYPE_CHECKING:
     from composeui.core.view import View
 
 from tests.textualcore.support import _app_of, _field_widget, _widget
+
+
+@pytest.mark.asyncio
+async def test_layout_frames_enclose_their_widgets_and_show_the_translated_title() -> None:
+    view = FramedMainView()
+    view.render(RendererType.TEXTUAL)
+    app = _app_of(view)
+
+    async with app.run_test(size=(120, 45)):
+        row, grid, column = (_widget(layout) for layout in (view.row, view.grid, view.column))
+        for widget in (row, grid, column):
+            assert widget.styles.border.top[0] == "round"
+        assert row.border_title == "Shape"
+        assert _widget(view.row.narrow).region.x > row.region.x
+        assert _widget(view.grid.first).region.x > grid.region.x
+        assert _widget(view.column.table).region.x > column.region.x
+
+        view.set_language("fr")
+        assert row.border_title == "Forme"
 
 
 @pytest.mark.asyncio

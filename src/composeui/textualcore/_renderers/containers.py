@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from textual.containers import Container, Grid, Horizontal, Vertical
 from textual.content import Content
@@ -37,6 +37,11 @@ from composeui.textualcore.widgets.composetabbedcontent import ComposeTabbedCont
 if TYPE_CHECKING:
     from textual.widget import AwaitMount
 
+    from composeui.core.view import Frame
+
+TLayout = TypeVar("TLayout", bound="HorizontalView | VerticalView | GridView")
+TWidget = TypeVar("TWidget", bound=Widget)
+
 
 class TextualPageRenderer(TextualWidgetRenderer[PageView, Vertical]):
     """A page's views in a column, like the screen's own."""
@@ -53,7 +58,20 @@ class TextualPageRenderer(TextualWidgetRenderer[PageView, Vertical]):
             self._rendered_object.styles.height = "auto"
 
 
-class TextualHorizontalRenderer(TextualWidgetRenderer[HorizontalView, Widget]):
+class _TextualLayoutRenderer(TextualWidgetRenderer[TLayout, TWidget]):
+    def __init__(self, view: TLayout) -> None:
+        super().__init__(view)
+        if view.frame is not None:
+            self._refresh_dispatcher["frame"] = self._refresh_frame
+
+    @staticmethod
+    def _refresh_frame(_view: TLayout, widget: TWidget, frame: Frame) -> None:
+        widget.styles.border = ("round", "gray")
+        widget.styles.padding = (0, 1)
+        widget.border_title = Content(frame.title)
+
+
+class TextualHorizontalRenderer(_TextualLayoutRenderer[HorizontalView, Widget]):
     """Views side by side, each as wide as its share of the row.
 
     When none has a share (e.g. buttons), each keeps its own width, and the views that
@@ -82,7 +100,7 @@ class TextualHorizontalRenderer(TextualWidgetRenderer[HorizontalView, Widget]):
                 self._rendered_object = ComposeFlow(*widgets, align_end=align_end)
 
 
-class TextualVerticalRenderer(TextualWidgetRenderer[VerticalView, Vertical]):
+class TextualVerticalRenderer(_TextualLayoutRenderer[VerticalView, Vertical]):
     """Views one above the other, at the top of the column."""
 
     @override
@@ -337,7 +355,7 @@ class TextualTabsRenderer(TextualWidgetRenderer[TabView, ComposeTabbedContent]):
         self._view.current_changed.emit(index)
 
 
-class TextualGridRenderer(TextualWidgetRenderer[GridView, Grid]):
+class TextualGridRenderer(_TextualLayoutRenderer[GridView, Grid]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views.
 
     Textual's grid flows its widgets into the next free cell: each view sits in a cell

@@ -44,6 +44,8 @@ from composeui.core.registry import RendererType, renders_on_demand
 from composeui.core.signal import Signal
 from composeui.core.translation import (
     T,
+    Translate,
+    translate_again,
 )
 
 if TYPE_CHECKING:
@@ -68,8 +70,28 @@ class Align(enum.Enum):
     END = enum.auto()
 
 
+@attrs.frozen(kw_only=True)
+class Frame:
+    """A border around a layout, with an optional title."""
+
+    title: str = ""
+
+    def translated(self, translate: Translate) -> Frame:
+        """Get the frame with its title translated again."""
+        title = translate_again(self.title, translate)
+        return self if title is self.title else attrs.evolve(self, title=title)
+
+
 @define_view
-class HorizontalView(View):
+class _FramedView(View):
+    #: the frame around this layout, set at construction and not saved in a study
+    frame: Optional[Frame] = attrs.field(
+        default=None, on_setattr=attrs.setters.frozen, metadata={OMIT: True}
+    )
+
+
+@define_view
+class HorizontalView(_FramedView):
     """Its view fields laid out side by side, in a row.
 
     Each field takes a share of the row's width, set by its `STRETCH` metadata:
@@ -97,7 +119,7 @@ class HorizontalView(View):
 
 
 @define_view
-class VerticalView(View):
+class VerticalView(_FramedView):
     """Its view fields laid out one above the other, in a column, as tall as their content.
 
     A page is already a column: this one is for a column inside a `HorizontalView`, e.g.
@@ -307,7 +329,7 @@ def grid_cell(
 
 
 @define_view
-class GridView(View):
+class GridView(_FramedView):
     """Its view fields laid out in a grid: equally wide columns, rows as tall as their views.
 
     Each field sets its cell with `grid_cell`:
