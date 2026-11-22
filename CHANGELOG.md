@@ -115,6 +115,11 @@ backends' modules included, can change in any release without an entry here.
   Before, the browser showed each line break as a space.
 - The main view's questions before it replaces a file or discards unsaved changes are
   destructive: Enter now cancels them, instead of replacing or discarding.
+- A `SqliteSource` reads its rows' order from SQLite as JSON text, not one row at a time, when
+  SQLite is 3.44 or newer. Sessions that sort or filter large tables at once no longer slow each
+  other down: with 4 sessions, sorting a million rows takes 3.3 s instead of 132 s. A session
+  alone takes up to 1.5 times as long to sort more than 100,000 rows. Ids that JSON can't hold
+  exactly, such as real numbers and blobs, are still read one row at a time.
 - On Qt and Textual, what jobs hand to the main thread while it is busy comes to it
   together: each progress value is still emitted, and the reactive methods run once after
   them, not once per value.

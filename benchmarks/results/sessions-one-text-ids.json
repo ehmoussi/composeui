@@ -1,0 +1,144 @@
+{
+  "environment": {
+    "composeui": "0.4.1.dev53+g2a8e74e4a",
+    "commit": "2a8e74e4a730d876a46bddb5f788d0503dd3907e",
+    "python": "3.9.23",
+    "platform": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+    "processor": "x86_64",
+    "cpus": 16,
+    "data": "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
+  },
+  "cases": {
+    "uberpickups": {
+      "cleanup": {
+        "load_median_s": 9.589559656000347,
+        "first_session_rss_mib": 33.1953125,
+        "per_session_rss_mib": 15.23046875,
+        "per_session_files_mib": 125.32283782958984,
+        "per_session_descriptors": 5.0,
+        "per_session_threads": 0.0,
+        "close_s_per_session": 0.011627174750174163,
+        "rss_mib": {
+          "opened": 137.20703125,
+          "ended": 114.1640625
+        },
+        "descriptors": {
+          "before": 8,
+          "ended": 8
+        },
+        "main_views_freed": "4 of 4",
+        "files_left": 0
+      },
+      "left_during_load": {
+        "0.1": {
+          "runs": 1,
+          "crashes": 0,
+          "failed_jobs": 0,
+          "load_running": 1,
+          "files_left": 0,
+          "freed_max_s": 1.3769846700015478
+        },
+        "0.5": {
+          "runs": 1,
+          "crashes": 0,
+          "failed_jobs": 0,
+          "load_running": 1,
+          "files_left": 0,
+          "freed_max_s": 0.9250849159943755
+        },
+        "1.0": {
+          "runs": 1,
+          "crashes": 0,
+          "failed_jobs": 0,
+          "load_running": 1,
+          "files_left": 0,
+          "freed_max_s": 0.10795052199682686
+        },
+        "2.0": {
+          "runs": 1,
+          "crashes": 0,
+          "failed_jobs": 0,
+          "load_running": 1,
+          "files_left": 0,
+          "freed_max_s": 1.2918549189998885
+        },
+        "4.0": {
+          "runs": 1,
+          "crashes": 0,
+          "failed_jobs": 0,
+          "load_running": 1,
+          "files_left": 0,
+          "freed_max_s": 0.5246599020028953
+        }
+      },
+      "concurrency": {
+        "1": {
+          "load": {
+            "count": 1,
+            "median_s": 9.303116720002436,
+            "p95_s": 9.303116720002436,
+            "max_s": 9.303116720002436
+          },
+          "move_response": {
+            "count": 5,
+            "median_s": 0.10815381000429625,
+            "p95_s": 0.14782473600644153,
+            "max_s": 0.14782473600644153
+          },
+          "move_done": {
+            "count": 5,
+            "median_s": 0.4312696019987925,
+            "p95_s": 0.4541680750044179,
+            "max_s": 0.4541680750044179
+          },
+          "moves_per_second": 2.406579638405789,
+          "peak_rss_mib": 124.62890625
+        },
+        "2": {
+          "load": {
+            "count": 2,
+            "median_s": 15.414978482498555,
+            "p95_s": 15.547084022997296,
+            "max_s": 15.547084022997296
+          },
+          "move_response": {
+            "count": 10,
+            "median_s": 0.12790047350063105,
+            "p95_s": 0.21058428099786397,
+            "max_s": 0.21058428099786397
+          },
+          "move_done": {
+            "count": 10,
+            "median_s": 0.4645625810007914,
+            "p95_s": 0.5948120789980749,
+            "max_s": 0.5948120789980749
+          },
+          "moves_per_second": 4.1983173332165755,
+          "peak_rss_mib": 168.17578125
+        },
+        "4": {
+          "load": {
+            "count": 4,
+            "median_s": 33.28426385450075,
+            "p95_s": 33.432558387001336,
+            "max_s": 33.432558387001336
+          },
+          "move_response": {
+            "count": 20,
+            "median_s": 0.2252003980029258,
+            "p95_s": 0.3509106250057812,
+            "max_s": 0.3509106250057812
+          },
+          "move_done": {
+            "count": 20,
+            "median_s": 0.509634604502935,
+            "p95_s": 0.7953073500029859,
+            "max_s": 0.7953073500029859
+          },
+          "moves_per_second": 7.098300927928985,
+          "peak_rss_mib": 255.1875
+        }
+      }
+    }
+  }
+}

@@ -17,6 +17,7 @@ import functools
 import gzip
 import io
 import itertools
+import json
 import math
 import operator
 import os
@@ -55,7 +56,7 @@ from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.view import CONVERTER, Filter, FilterOperator, Sort, SourceColumn
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Iterable, Mapping, Sequence
+    from collections.abc import Generator, Iterable, Iterator, Mapping, Sequence
     from http.client import HTTPMessage
     from typing import IO
     from urllib.request import Request
@@ -893,6 +894,10 @@ def _folded(cell: str, *, is_ascii: bool) -> str:
 
 #: the ids read from SQLite at a time, as Python objects
 ID_BATCH = 10_000
+#: the ids a source reads in one JSON text at most: about 4 MiB of Python objects at once
+ONE_TEXT_IDS = 100_000
+#: whether SQLite orders an aggregate's values (``json_group_array(id ORDER BY ...)``)
+_ORDERS_AGGREGATES = sqlite3.sqlite_version_info >= (3, 44, 0)
 #: SQLite's instructions that the check of empty cells may take before the sort gives up on
 #: it: the check of an indexed column takes a few, one computing an app's GROUP BY millions
 EMPTY_CHECK_BUDGET = 100_000
@@ -924,20 +929,41 @@ def _has_no_empty_cell(db: sqlite3.Connection, check: str) -> bool:
         db.set_progress_handler(None, 0)
 
 
-def _read_ids(cursors: Iterable[sqlite3.Cursor]) -> Sequence[Any]:
-    """Read the ids of `cursors`, in turn: in an `array` while integers, else in a list."""
+def _numbered_ids(
+    db: sqlite3.Connection, ordered: str, parameters: list[Any], count: int
+) -> Iterator[list[Any]]:
+    """Read the `count` ids of the query `ordered` in JSON texts of `ID_BATCH` ids.
+
+    SQLite numbers them in a temporary table, in an index's order when the sort has one:
+    a window's ``row_number()`` would take 3 times as long. Each insert takes the next
+    number, in the order of the query's rows. The caller's transaction holds the table.
+    """
+    db.execute("CREATE TEMP TABLE composeui_ids (n INTEGER PRIMARY KEY, id)")
+    try:
+        db.execute(f"INSERT INTO temp.composeui_ids (id) {ordered}", parameters)
+        for start in range(1, count + 1, ID_BATCH):
+            ((text,),) = db.execute(
+                "SELECT json_group_array(id ORDER BY n) FROM temp.composeui_ids"
+                " WHERE n >= ? AND n < ?",
+                (start, start + ID_BATCH),
+            ).fetchall()
+            yield json.loads(text)
+    finally:
+        db.execute("DROP TABLE temp.composeui_ids")
+
+
+def _read_ids(batches: Iterable[list[Any]]) -> Sequence[Any]:
+    """Keep the ids of `batches`, in turn: in an `array` while integers, else in a list."""
     ids: array.array[int] | list[Any] = array.array("q")
-    for cursor in cursors:
-        while rows := cursor.fetchmany(ID_BATCH):
-            batch = [row[0] for row in rows]
-            if isinstance(ids, array.array):
-                size = len(ids)
-                try:
-                    ids.extend(batch)
-                    continue
-                except TypeError:  # e.g. a text id (SQLite's integers fit in 64 bits)
-                    ids = ids[:size].tolist()  # the batch's ids extended before it failed
-            ids.extend(batch)
+    for batch in batches:
+        if isinstance(ids, array.array):
+            size = len(ids)
+            try:
+                ids.extend(batch)
+                continue
+            except TypeError:  # e.g. a text id (SQLite's integers fit in 64 bits)
+                ids = ids[:size].tolist()  # the batch's ids extended before it failed
+        ids.extend(batch)
     return ids
 
 
@@ -1061,18 +1087,48 @@ class SqliteSource:
                 if empty_check is not None and _has_no_empty_cell(db, empty_check):
                     queries = plain
                 return _read_ids(
-                    db.execute(self._select_ids(where, order_by), parameters)
+                    batch
                     for where, order_by in queries
+                    for batch in self._id_batches(db, where, order_by, parameters)
                 )
             finally:
                 db.rollback()
 
-    def _select_ids(self, conditions: list[str], order_by: str) -> str:
-        """Get the query of the ids of the rows passing `conditions`, ordered by `order_by`."""
-        sql = f"SELECT {self._id} FROM ({self._query})"  # noqa: S608 (quoted, the app's query)
+    def _id_batches(
+        self, db: sqlite3.Connection, conditions: list[str], order_by: str, parameters: list[Any]
+    ) -> Iterator[list[Any]]:
+        """Read the ids of the rows passing `conditions`, ordered by `order_by`, in batches.
+
+        A row read gives the GIL to another thread, which another CPU must wake: sessions
+        reading at once wait on each other at each row. So SQLite puts the ids in JSON texts,
+        one row each, when it can order an aggregate's values: all in one text up to
+        `ONE_TEXT_IDS`, else `ID_BATCH` a text, numbered in a temporary table. The read's
+        transaction (`ordered_ids`) holds the count and the rows the same.
+        """
+        rows = f"FROM ({self._query})"
         if len(conditions) > 0:
-            sql += " WHERE " + " AND ".join(conditions)
-        return f"{sql} ORDER BY {order_by}"
+            rows += " WHERE " + " AND ".join(conditions)
+        ordered = f"SELECT {self._id} {rows} ORDER BY {order_by}"
+        if _ORDERS_AGGREGATES:
+            # JSON keeps integers and texts as they are, not a real's last digits, and takes
+            # a blob for JSON of its own: other ids are read row by row
+            count, has_other = db.execute(
+                f"SELECT count(*), max(typeof({self._id}) NOT IN ('integer', 'text', 'null'))"
+                f" {rows}",
+                parameters,
+            ).fetchone()
+            if not has_other:  # None without rows
+                if count <= ONE_TEXT_IDS:
+                    # SQLite sorts the values itself, not in an index's order: fine for few
+                    sql = f"SELECT json_group_array({self._id} ORDER BY {order_by}) {rows}"
+                    ((text,),) = db.execute(sql, parameters).fetchall()
+                    yield json.loads(text)
+                else:
+                    yield from _numbered_ids(db, ordered, parameters, count)
+                return
+        cursor = db.execute(ordered, parameters)
+        while batch_rows := cursor.fetchmany(ID_BATCH):
+            yield [row[0] for row in batch_rows]
 
     def cells(self, ids: Sequence[Any], columns: Sequence[str]) -> dict[Any, list[Any]]:
         types = [self._column(name).type for name in columns]
