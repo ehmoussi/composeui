@@ -657,9 +657,15 @@
   /* tabs (see `WebTabsRenderer`): a click on a tab shows its panel at once, then htmx
      posts the pick; the arrow keys, Home and End move to a tab that can be picked, and
      pick it, as an ARIA tab list does. Only the tab shown is in the tab order. */
-  /** @param {HTMLElement} tab */
-  function showTab(tab) {
+  var tabMotion = window.matchMedia("(prefers-reduced-motion: no-preference)");
+  /** @param {HTMLElement} tab @param {boolean} animate */
+  function showTab(tab, animate) {
+    if (tab.getAttribute("aria-selected") === "true") return;
     var list = /** @type {HTMLElement} */ (tab.closest('[role="tablist"]'));
+    // Read the old line where it is now, not where the last click sent it.
+    var from = animate && tabMotion.matches
+      ? list.querySelector('[aria-selected="true"] > .cui-tab-line')?.getBoundingClientRect()
+      : undefined;
     list.querySelectorAll('[role="tab"]').forEach(function (element) {
       var other = /** @type {HTMLElement} */ (element);
       var isShown = other === tab;
@@ -671,12 +677,24 @@
       );
       panel.hidden = !isShown;
     });
+    if (from === undefined || from.width === 0) return;
+    var line = /** @type {HTMLElement} */ (tab.querySelector(".cui-tab-line"));
+    var to = line.getBoundingClientRect();
+    // Wrapped tabs on different rows snap into place rather than slide over the labels.
+    if (to.width === 0 || Math.abs(from.bottom - to.bottom) >= 1) return;
+    // Put the new line in the old line's place, then let CSS move it to its own tab.
+    line.style.transition = "none";
+    line.style.transform =
+      `translateX(${100 * (from.left - to.left) / to.width}%) scaleX(${from.width / to.width})`;
+    line.getBoundingClientRect();  // apply the start before restoring the transition
+    line.style.removeProperty("transition");
+    line.style.removeProperty("transform");
   }
   document.addEventListener("click", function (event) {
     var tab = /** @type {HTMLButtonElement | null} */ (
       /** @type {Element} */ (event.target).closest("[data-tab]")
     );
-    if (tab !== null && !tab.disabled) showTab(tab);
+    if (tab !== null && !tab.disabled) showTab(tab, event.detail > 0);
   });
   document.addEventListener("keydown", function (event) {
     var tab = event.target;
