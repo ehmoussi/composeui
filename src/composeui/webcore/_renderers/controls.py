@@ -147,7 +147,9 @@ class WebDownloadRenderer(WebButtonRenderer):
         super().__init__(view)
         # nothing shown: each click reads them
         self._refresh_dispatcher.update(
-            dict.fromkeys(("filename", "media_type", "content", "in_job"), self._noop)
+            dict.fromkeys(
+                ("filename", "media_type", "content", "in_job", "prepare", "enabled_if"), self._noop
+            )
         )
 
     @staticmethod

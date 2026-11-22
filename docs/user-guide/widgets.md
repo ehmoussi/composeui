@@ -614,8 +614,11 @@ class ResultsView(VerticalView):
 - **`media_type`** says what the file holds, such as `"text/csv"`. When it is `None`, the type
   comes from the extension of `filename`.
 - **`in_job`** runs `content` in a [job](threads.md), for a file that takes a while to make. The
-  button stays disabled until the file is made. If `content` raises an exception, a notification
-  says why. New and Open drop the job, and give no file.
+  button stays disabled until the file is made. New and Open drop the job, and give no file.
+
+If `content` raises an exception, with or without a job, an error notification says why. A
+programming error, such as a `TypeError`, goes up instead, as it does in any
+[job](threads.md#how-jobs-behave).
 
 To name the file at the click, for example after the run that the page shows, `content` returns
 a `DownloadedFile` instead. Its name and its media type replace `filename` and `media_type`:
@@ -643,6 +646,48 @@ class RunView(VerticalView):
     def run_log(self) -> DownloadedFile:
         return DownloadedFile(f"{self.run.text}.log", b"Run ended.\n", "text/plain")
 ```
+
+In a job, `content` can't read the views, as the user can change them meanwhile. Set `prepare`
+to a function that reads them at the click, on the main thread. It returns a tuple, which
+ComposeUI passes to `content` as its arguments. To refuse the click, `prepare` raises a
+`ValueError` or an `OSError`: an error notification then shows the error's text, and no file is
+made. Set `enabled_if` to the condition that the button needs, such as a selected row:
+
+```python
+from composeui.core.view import (
+    DownloadedFile,
+    DownloadView,
+    TableView,
+    VerticalView,
+    child,
+    define_view,
+)
+
+
+@define_view
+class HistoryView(VerticalView):
+    runs: TableView = child(TableView, headers=["Run"], rows=[["run-1"], ["run-2"]])
+    archive: DownloadView = child(DownloadView, text="Download the run", in_job=True)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.archive.prepare = self.selected_run
+        self.archive.content = self.run_archive
+        self.archive.enabled_if = lambda: bool(self.runs.selected_rows)
+
+    def selected_run(self) -> tuple[str]:
+        if not self.runs.selected_rows:
+            raise ValueError("Select a run")
+        return (self.runs.rows[self.runs.selected_rows[0]][0],)
+
+    def run_archive(self, run: str) -> DownloadedFile:
+        # in the job: it reads no view
+        return DownloadedFile(f"{run}.zip", run.encode(), "application/zip")
+```
+
+The button is then enabled only while the condition is true and no file is being made.
+ComposeUI checks the condition again when a view field that it reads changes. With
+`enabled_if`, the button owns its `is_enabled`: the app doesn't set it.
 
 It is a [button](#buttons) too: its `variant` is `SECONDARY` by default, and `clicked` emits
 before the file is made. The state saves none of its fields: the app's code sets them.

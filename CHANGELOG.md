@@ -11,6 +11,12 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `DownloadView.prepare` reads the views at the click, on the main thread, and returns the
+  arguments of `content`, which can run in a job. It refuses the click with a `ValueError` or
+  an `OSError`, which an error notification shows. `DownloadView.enabled_if` gives the button
+  a condition of its own, such as a selected row: the end of a download no longer enables a
+  button whose condition is false.
+
 - `MainView.notify(message, kind)` shows a message above the page, with its severity, on every
   backend: a warning or an error stays until the user closes it, an information goes after
   `notification.timeout`. `clear_notification()` removes it, and `notification.closed` emits
@@ -70,6 +76,11 @@ backends' modules included, can change in any release without an entry here.
   itself.
 
 ### Changed
+
+- A `DownloadView` whose file can't be made says "Can't make the file", without the name of a
+  file that was never made. Without `in_job`, an exception of `content` now shows an error
+  notification too, as in a job, where it went up through the click. A programming error, such
+  as a `TypeError`, still goes up.
 
 - ComposeUI's own failures show in the notification, no longer in the status bar, where they
   went after 3 seconds: a study, a file or an export that can't be opened or saved, a failed

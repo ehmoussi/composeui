@@ -20,6 +20,7 @@ import attrs
 from typing_extensions import override
 
 from composeui.core._views.base import (
+    LOGGER,
     OMIT,
     UI_TEXT,
     LogType,
@@ -29,7 +30,7 @@ from composeui.core._views.base import (
 )
 from composeui.core._views.files import DownloadedFile, StreamContent
 from composeui.core._views.inputs import _RANGE_ENDS
-from composeui.core.jobs import Task
+from composeui.core.jobs import PROGRAMMING_ERRORS, Task
 from composeui.core.reactivity import (
     follow,
 )
@@ -457,10 +458,23 @@ class DownloadView(ButtonView):
     instead, whose name and type replace `filename` and `media_type`. Then the main view
     gives the file (`MainView.download`): the web downloads it, and Qt and Textual ask where
     to save it. With `in_job`, `content` runs in a job, and the button is disabled until the
-    file is made; a notification says why it failed.
+    file is made. A notification says why the file can't be made.
+
+    `prepare` runs on the main thread first: it reads the views, e.g. the selected run, and
+    returns the arguments of `content`, or refuses the click. `enabled_if` gives the button
+    a condition of its own, e.g. a selected row.
     """
 
     _renderer_key = "download"
+
+    def _follow_condition(
+        self, attribute: attrs.Attribute[Any], enabled_if: Optional[Callable[[], bool]]
+    ) -> Optional[Callable[[], bool]]:
+        """Have the task follow the condition from its first set, then notify the renderer."""
+        # before the field holds it: the task's first check runs now, in this hook
+        self._condition = enabled_if
+        self._follow_allowed()  # None too: the button is then enabled while no file is made
+        return cast("Optional[Callable[[], bool]]", notify_renderer(self, attribute, enabled_if))
 
     variant: ButtonVariant = attrs.field(default=ButtonVariant.SECONDARY)
     #: the name offered for the file, unless `content` returns a `DownloadedFile`
@@ -469,35 +483,88 @@ class DownloadView(ButtonView):
     media_type: Optional[str] = attrs.field(default=None, metadata={OMIT: True})
     #: makes the file: its bytes, the path of a file the app wrote, a `StreamContent` that
     #: writes it as the user receives it, or a `DownloadedFile` that also names it; None
-    #: gives nothing
-    content: Optional[Callable[[], _Download]] = attrs.field(
+    #: gives nothing. It takes the arguments that `prepare` returns, else none
+    content: Optional[Callable[..., _Download]] = attrs.field(
         default=None, eq=False, repr=False, metadata={OMIT: True}
     )
     #: whether `content` runs in a job, for a file that takes a while to make
     in_job: bool = attrs.field(default=False, metadata={OMIT: True})
-    #: makes the file in a job, built at the first click with `in_job`
+    #: run at the click, on the main thread, before `content`: returns its arguments, or
+    #: raises `ValueError` or `OSError` to refuse the click, with the error as notification
+    prepare: Optional[Callable[[], tuple[Any, ...]]] = attrs.field(
+        default=None, eq=False, repr=False, metadata={OMIT: True}
+    )
+    #: the button is enabled only while this returns True and the file isn't being made,
+    #: checked again when what it reads changes; it then owns `is_enabled`
+    enabled_if: Optional[Callable[[], bool]] = attrs.field(
+        default=None, eq=False, repr=False, metadata={OMIT: True}, on_setattr=_follow_condition
+    )
+    #: makes the file in a job, built at the first click with `in_job`, or with `enabled_if`
     _task: Optional[Task[Any, Any, Any]] = attrs.field(
         default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+    #: `enabled_if`, set by its hook before the field is
+    _condition: Optional[Callable[[], bool]] = attrs.field(
+        default=None, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+    #: whether the task follows `enabled_if`: from the first one set, whichever comes next
+    _follows_condition: bool = attrs.field(
+        default=False, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
 
     @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
         self.clicked.connect(self._give)
+        if self.enabled_if is not None:
+            self._condition = self.enabled_if
+            self._follow_allowed()
+
+    def _follow_allowed(self) -> None:
+        if not self._follows_condition:
+            self._follows_condition = True
+            # its enabler runs after the one that a click without a condition added: it wins
+            self._own_task().disables(self, enabled_if=self._is_allowed)
+
+    def _is_allowed(self) -> bool:
+        # reads the field, an input of the check: a condition set later is followed too. Its
+        # first set comes before the view follows it, so the check calls `_condition`
+        _ = self.enabled_if
+        return self._condition is None or self._condition()
+
+    def _own_task(self) -> Task[Any, Any, Any]:
+        if self._task is None:
+            self._task = self.build_task(_make)
+            self._task.finished.connect(self._made)
+            self._task.failed.connect(self._failed)
+        return self._task
 
     def _give(self, main_view: MainView) -> None:
         content = self.content
         if content is None:
             return
+        arguments: tuple[Any, ...] = ()
+        if self.prepare is not None:
+            try:
+                arguments = self.prepare()
+            except (ValueError, OSError) as error:
+                main_view.notify(str(error), LogType.ERROR)
+                return
         if not self.in_job:
-            self._made(content(), main_view)
+            try:
+                made = content(*arguments)
+            except PROGRAMMING_ERRORS:
+                raise  # a bug: it escapes a job too
+            except Exception as error:  # noqa: BLE001 (the app's code: it fails as a job does)
+                name = getattr(content, "__name__", "content")
+                LOGGER.exception("The download %s failed", name)
+                self._failed(error, main_view)
+                return
+            self._made(made, main_view)
             return
-        if self._task is None:
-            self._task = self.build_task(_make)
-            self._task.disables(self)
-            self._task.finished.connect(self._made)
-            self._task.failed.connect(self._failed)
-        self._task.start(content)
+        if self._task is None:  # else built by `enabled_if`, and following it
+            self._own_task().disables(self)
+        self._own_task().start(content, *arguments)
 
     def _made(self, content: _Download, main_view: MainView) -> None:
         if isinstance(content, DownloadedFile):
@@ -506,13 +573,16 @@ class DownloadView(ButtonView):
             main_view.download(self.filename, content, self.media_type)
 
     def _failed(self, error: Exception, main_view: MainView) -> None:
-        failed = self.tr("Can't make {name}: {error}.")
-        main_view.notify(failed.format(name=self.filename, error=error), LogType.ERROR)
+        # names no file: `content` may name it, and it failed before
+        failed = self.tr("Can't make the file: {error}.")
+        main_view.notify(failed.format(error=error), LogType.ERROR)
 
 
-def _make(_job: Job[_Download, Any], content: Callable[[], _Download]) -> _Download:
+def _make(
+    _job: Job[_Download, Any], content: Callable[..., _Download], *arguments: Any
+) -> _Download:
     """Make a `DownloadView`'s file, in its job."""
-    return content()
+    return content(*arguments)
 
 
 @define_view

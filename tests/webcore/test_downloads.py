@@ -208,7 +208,7 @@ def test_a_file_made_in_a_job_is_named_by_the_jobs_poll_the_button_disabled_mean
     assert 'id="cui-downloads"' not in after_drop
     assert "disabled" not in _swapped(polled, later_id).attributes
     assert (name, fetched.content) == ("later.csv", b"late")
-    assert "Can't make later.csv: disk full." in html.unescape(failed)
+    assert "Can't make the file: disk full." in html.unescape(failed)
     assert "disabled" not in _swapped(failed, later_id).attributes
     assert 'id="cui-downloads"' not in failed
 
