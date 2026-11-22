@@ -49,6 +49,15 @@ from composeui.webcore.downloads import downloads_marker
 from composeui.webcore.order import PostOrder
 from composeui.webcore.page import NO_LINKS, jobs_poller, page_marker
 from composeui.webcore.rendertarget import RenderTarget, rendering_into
+from composeui.webcore.sessionfolder import (
+    SEEN_NAME,
+    UPLOADS_FOLDER_NAME,
+    FolderLock,
+    claim,
+    folder_key,
+    read_seen,
+    write_seen,
+)
 from composeui.webcore.uploads import MAX_UPLOAD_FILES, UploadRefusal
 from composeui.webcore.webrenderer import UnsupportedEventError, handle_event, render_dirty
 
@@ -219,12 +228,16 @@ def _views(main_view: MainView) -> Iterator[View]:
         views.extend(view.children_views)
 
 
-def _saved_uploads(file: Path) -> Path | None:
-    """Get the uploads' directory that a saved session names, only if it's one of ours."""
+def _saved_uploads(file: Path, uploads_folder: Path | None) -> Path | None:
+    """Get the uploads' directory that a saved session names, only if it's one of ours.
+
+    Ours: in `uploads_folder`, a session folder's, else in the system's temporary folder.
+    """
     if not file.exists():
         return None
     path = Path(file.read_text(encoding="utf-8"))
-    is_ours = path.parent == Path(tempfile.gettempdir()) and path.name.startswith("composeui-")
+    parent = Path(tempfile.gettempdir()) if uploads_folder is None else uploads_folder
+    is_ours = path.parent == parent and path.name.startswith("composeui-")
     return path if is_ours and path.is_dir() and not path.is_symlink() else None
 
 
@@ -237,9 +250,14 @@ def _holds_upload(view: object) -> bool:
 class WebSession(RenderTarget):
     """A session's view tree, rendered once and then driven by its browser's requests."""
 
-    def __init__(self, main_view: MainView, model: Model | None = None) -> None:
+    def __init__(
+        self, main_view: MainView, model: Model | None = None, uploads_folder: Path | None = None
+    ) -> None:
         super().__init__()
         self.main_view = main_view
+        #: where `_uploads` is made: a session folder's, so that uploads outlive the server,
+        #: else (None) the system's temporary folder
+        self._uploads_folder = uploads_folder
         #: names this session in its pages, which send it back with their requests: a page
         #: another session served (e.g. one before the server restarted, whose tab is still
         #: open) then reloads, rather than act on views it doesn't show
@@ -441,7 +459,7 @@ class WebSession(RenderTarget):
         """Open what `save_to` saved, if it still fits the main view (else it's dropped)."""
         with self.lock, collect_dirty():  # the whole page is sent next: drop the fragments
             load_reloaded_state(self.main_view, self.model, directory)
-            self._uploads = _saved_uploads(directory / _UPLOADS_NAME)
+            self._uploads = _saved_uploads(directory / _UPLOADS_NAME, self._uploads_folder)
             self._note_loaded_sources()
 
     def handle_event(
@@ -720,7 +738,7 @@ class WebSession(RenderTarget):
     def _upload_directory(self, widget_id: str) -> Path:
         """Get a new directory for a field's upload, which `_hold_upload` makes the field's."""
         if self._uploads is None:
-            self._uploads = Path(tempfile.mkdtemp(prefix="composeui-"))
+            self._uploads = Path(tempfile.mkdtemp(prefix="composeui-", dir=self._uploads_folder))
         field = self._uploads / widget_id
         field.mkdir(exist_ok=True)
         return Path(tempfile.mkdtemp(dir=field))
@@ -756,7 +774,7 @@ class WebSession(RenderTarget):
         its own directory, removed once no path of `kept` is in it.
         """
         if self._uploads is None:
-            self._uploads = Path(tempfile.mkdtemp(prefix="composeui-"))
+            self._uploads = Path(tempfile.mkdtemp(prefix="composeui-", dir=self._uploads_folder))
         table = self._uploads / widget_id
         table.mkdir(exist_ok=True)
         for directory in table.iterdir():
@@ -963,9 +981,35 @@ class WebSession(RenderTarget):
 _SESSION_ID = re.compile(r"[A-Za-z0-9_-]{43}")
 
 
-def _remove_saved(directory: Path) -> None:
+def _release_after_workers(lock: FolderLock, sessions: list[WebSession]) -> None:
+    """Release `lock` once the job threads of every one of `sessions` have ended: now if none.
+
+    Their uploads are removed then (`WebSession.close`), in the folder that `lock` holds.
+    """
+    remaining = len(sessions) + 1
+    counted = threading.Lock()
+
+    def one_done() -> None:
+        nonlocal remaining
+        with counted:
+            remaining -= 1
+            last = remaining == 0
+        if last:
+            lock.release()
+
+    for session in sessions:
+        session.main_view.jobs.after_workers(one_done)
+    one_done()
+
+
+def _is_session_name(name: str, suffix: str) -> bool:
+    """Tell whether `name` is a session's id followed by `suffix`, as the store names them."""
+    return name.endswith(suffix) and _SESSION_ID.fullmatch(name[: -len(suffix)]) is not None
+
+
+def _remove_saved(directory: Path, uploads_folder: Path | None) -> None:
     """Remove a session saved in `directory`, with the uploads it names, if they're ours."""
-    uploads = _saved_uploads(directory / _UPLOADS_NAME)
+    uploads = _saved_uploads(directory / _UPLOADS_NAME, uploads_folder)
     if uploads is not None:
         shutil.rmtree(uploads, ignore_errors=True)
     shutil.rmtree(directory, ignore_errors=True)
@@ -977,6 +1021,14 @@ class Hibernation(NamedTuple):
     #: seconds a session is idle before it's saved and freed
     idle: float
     #: most sessions on disk at once: past it, the idle ones stay in memory
+    max_saved: int
+
+
+class SessionFolder(NamedTuple):
+    """Where the sessions outlive the server (`WebSettings.session_folder`)."""
+
+    path: Path
+    #: most sessions on disk at once: past it, the server's stop saves no more
     max_saved: int
 
 
@@ -1037,6 +1089,11 @@ class SessionStore:
     With `saved`, a ``--reload`` server's directory, `save_all` saves the live sessions
     there as the server stops. The server started next opens one there when its browser
     comes back, under the same id: its cookie, signed with the same key, still names it.
+
+    With `saved` a `SessionFolder`, the sessions go to its path, which only this store uses
+    while it serves (`open_folder`, `FolderLock`), and which holds the cookies' key
+    (`secret_key`). Hibernation saves there, and `keep_all` saves the live sessions as the
+    server stops. The next server opens them. A crash loses the sessions in memory only.
     """
 
     def __init__(
@@ -1045,7 +1102,7 @@ class SessionStore:
         *,
         ttl: float,
         max_sessions: int,
-        saved: Path | None = None,
+        saved: Path | SessionFolder | None = None,
         hibernation: Hibernation | None = None,
     ) -> None:
         self._build_session = build_session
@@ -1056,23 +1113,104 @@ class SessionStore:
         #: sessions being built, outside the lock: they count against `max_sessions` too
         self._building = 0
         self._lock = threading.Lock()
+        # absolute: the paths of its uploads, which the fields hold, are then too, on every
+        # Python (`mkdtemp` gives a relative one in a relative folder before 3.12)
+        folder = (
+            saved._replace(path=saved.path.absolute()) if isinstance(saved, SessionFolder) else None
+        )
         #: where the sessions on disk are, each in the directory of its id
-        self._directory: Path | None = saved
+        self._directory: Path | None = saved if isinstance(saved, Path) else None
         #: whether the store made `_directory`, and so removes it with the server
         self._owns_directory = False
-        if saved is not None:
-            self._find_saved(saved)
+        #: whether the code may change before a save opens: a `--reload` server's next
+        #: process only. Another server opens its saves as they are: its fields' initial
+        #: values may change at each build (a date)
+        self._code_may_change = self._directory is not None
+        self._folder = folder
+        #: held while this store serves the folder's sessions; None when another may
+        self._folder_lock: FolderLock | None = None
+        #: the key that signs the cookies of the sessions in `folder`; None without one
+        self.secret_key: str | None = None
+        #: where the sessions keep their uploads: in `folder`, else (None) in the system's
+        #: temporary folder, which a restart may empty
+        self._uploads_folder: Path | None = None
+        if folder is not None:
+            self._directory = folder.path
+            self._uploads_folder = folder.path / UPLOADS_FOLDER_NAME
+            self.open_folder()
+        elif self._directory is not None:
+            self._find_saved(self._directory)
         elif hibernation is not None:
             self._directory = Path(tempfile.mkdtemp(prefix="composeui-sessions-"))
             self._owns_directory = True
 
+    def open_folder(self) -> None:
+        """Take the folder for this store, and the sessions in it, unless it holds it already.
+
+        As it's made, and as the server starts again after a stop (`keep_all`), which
+        another server may have used meanwhile: `FolderInUseError` while one does.
+        """
+        assert self._folder is not None  # only a store with one opens it
+        if self._folder_lock is not None:
+            return
+        # first: another server may be writing there
+        lock = FolderLock(self._folder.path)
+        try:
+            claim(self._folder.path)
+            self.secret_key = folder_key(self._folder.path)
+            self._entries.clear()
+            self._find_saved(self._folder.path)
+            self._remove_unnamed_uploads()
+        except BaseException:
+            # this server doesn't start: the next one may
+            lock.release()
+            raise
+        self._folder_lock = lock
+
+    def close_folder(self) -> None:
+        """Let another server use the folder, e.g. once this server failed to be made."""
+        assert self._folder_lock is not None  # held since the store was made
+        self._folder_lock.release()
+        self._folder_lock = None
+
     def _find_saved(self, directory: Path) -> None:
-        """Take the sessions that the previous process saved; remove what it left unfinished."""
+        """Take the sessions that the previous process saved; remove what it left unfinished.
+
+        In a folder, each is idle since its last request, which its save says
+        (`SEEN_NAME`), else since the save: one idle for `ttl` while no server ran is
+        dropped at the first request.
+        """
+        # a session's own names only: another program's files may be there too
         for path in directory.iterdir():
-            if path.name.endswith(_PARTIAL_SUFFIX):
+            if _is_session_name(path.name, _PARTIAL_SUFFIX):
                 shutil.rmtree(path, ignore_errors=True)
             elif _SESSION_ID.fullmatch(path.name) is not None and path.is_dir():
-                self._entries[path.name] = _Entry(None, _Place.ON_DISK)
+                entry = _Entry(None, _Place.ON_DISK)
+                if self._folder is not None:
+                    seen = read_seen(path / SEEN_NAME)
+                    # unreadable: the save's own time, never later than its last use
+                    clock = path.stat().st_mtime if seen is None else seen
+                    # never later than now: a clock set back would keep it longer
+                    entry.last_seen = time.monotonic() - max(time.time() - clock, 0.0)
+                self._entries[path.name] = entry
+
+    def _remove_unnamed_uploads(self) -> None:
+        """Make the folder of the sessions' uploads; remove those that no saved session names.
+
+        E.g. the uploads of a session in memory that the crash of its server lost: nothing
+        else would ever remove them.
+        """
+        assert self._directory is not None  # a session folder's
+        assert self._uploads_folder is not None
+        self._uploads_folder.mkdir(mode=0o700, exist_ok=True)
+        named = {
+            _saved_uploads(self._directory / session_id / _UPLOADS_NAME, self._uploads_folder)
+            for session_id in self._entries
+        }
+        for path in self._uploads_folder.iterdir():
+            # as `mkdtemp` names them: another program's files are left alone
+            if path.name.startswith("composeui-") and path not in named:
+                shutil.rmtree(path, ignore_errors=True)
 
     def get(self, session_id: Any) -> WebSession | None:
         """Return the session with this id (from a cookie, so of any type), or None.
@@ -1143,17 +1281,23 @@ class SessionStore:
         directory = self._directory / session_id
         try:
             session = self._built_session()
-            try:
-                session.open_saved(directory)
-            except BaseException:
-                session.close()
-                raise
         except BaseException:
-            # its next request starts a new session, rather than fail the same way
+            # the app's code failed, maybe for a while: the save stays, for its next request
+            with self._lock:
+                entry.place = _Place.ON_DISK
+                settled = self._settled(entry)
+            settled.set()
+            raise
+        try:
+            session.open_saved(directory)
+        except BaseException:
+            session.close()
+            # the save can't be opened: its next request starts a new session, rather than
+            # fail the same way
             with self._lock:
                 self._entries.pop(session_id, None)
                 settled = self._settled(entry)
-            _remove_saved(directory)
+            _remove_saved(directory, self._uploads_folder)
             settled.set()
             raise
         # not its uploads, which the session now holds
@@ -1195,7 +1339,7 @@ class SessionStore:
         """Build a session, closing its model if the session can't take it."""
         main_view, model = self._build_session()
         try:
-            return WebSession(main_view, model)
+            return WebSession(main_view, model, self._uploads_folder)
         except BaseException:
             if model is not None:
                 model.close()
@@ -1218,8 +1362,7 @@ class SessionStore:
                 and not entry.unsaveable
                 and now - entry.idle_since() >= hibernation.idle
             ]
-            # counted once: a session kept in memory still counts, until the next sweep
-            saved = sum(entry.place is not _Place.LIVE for entry in self._entries.values())
+            saved = self._saved_count()
         for session_id in idle:
             if saved >= hibernation.max_saved:
                 return
@@ -1232,33 +1375,58 @@ class SessionStore:
                     or time.monotonic() - entry.idle_since() < hibernation.idle
                 ):
                     continue
-                saved += 1
                 entry.place = _Place.SAVING
                 entry.settled = threading.Event()
                 entry.touched = False
-            self._hibernate(session_id, entry)
+            # counted once on disk: one that can't be saved leaves its place to the next
+            saved += self._hibernate(session_id, entry)
 
-    def _hibernate(self, session_id: str, entry: _Entry) -> None:
-        """Save `entry`'s session into its directory, then free it, unless a request came."""
-        assert self._directory is not None  # made with `hibernation`
-        session = entry.session
-        assert session is not None  # in memory until now
+    def _saved_count(self) -> int:
+        """Count the sessions on disk, or being saved or woken. With the lock held."""
+        return sum(entry.place is not _Place.LIVE for entry in self._entries.values())
+
+    def _save(self, session_id: str, session: WebSession, last_seen: float) -> bool:
+        """Save `session` into its directory, if it `can_hibernate`; tell whether it did.
+
+        In a folder, with when it was `last_seen` (`time.monotonic`), as a clock time: the
+        next process's `monotonic` starts elsewhere. Written beside it, then put in its
+        place: a crash leaves only the partial one, which the next start removes.
+        """
+        assert self._directory is not None  # only a store with one saves
         directory = self._directory / session_id
         partial = directory.with_name(f"{session_id}{_PARTIAL_SUFFIX}")
+        try:
+            # its requests wait on the store, or on its lock, as a timer does
+            with session.lock:
+                if not session.can_hibernate():
+                    return False
+                shutil.rmtree(partial, ignore_errors=True)
+                # only the server's user reads it, wherever the folder is
+                partial.mkdir(mode=0o700)
+                # the same code opens it, but a `--reload` server's next process: a field
+                # that starts with another value at each build, e.g. a date, would else be
+                # taken for an edit of the code
+                session.save_to(partial, code_edits=self._code_may_change)
+                if self._folder is not None:
+                    seen = time.time() - (time.monotonic() - last_seen)
+                    write_seen(partial / SEEN_NAME, seen)
+                # complete, under its id: a crash before leaves only the partial one
+                partial.replace(directory)
+        except BaseException:
+            shutil.rmtree(partial, ignore_errors=True)
+            raise
+        return True
+
+    def _hibernate(self, session_id: str, entry: _Entry) -> bool:
+        """Save `entry`'s session into its directory, then free it, unless a request came.
+
+        Tell whether it's on disk now.
+        """
+        session = entry.session
+        assert session is not None  # in memory until now
         failed = False
         try:
-            # its requests wait on the store, but a timer takes the session's lock too
-            with session.lock:
-                can_hibernate = session.can_hibernate()
-                if can_hibernate:
-                    shutil.rmtree(partial, ignore_errors=True)
-                    partial.mkdir()
-                    # the same code opens it, but a `--reload` server's next process: a field
-                    # that starts with another value at each build, e.g. a date, would else
-                    # be taken for an edit of the code
-                    session.save_to(partial, code_edits=not self._owns_directory)
-                    # complete, under its id: a crash before leaves only the partial one
-                    partial.replace(directory)
+            can_hibernate = self._save(session_id, session, entry.idle_since())
         except Exception:
             LOGGER.exception("Can't save an idle session to disk: it stays in memory.")
             failed = True
@@ -1277,10 +1445,16 @@ class SessionStore:
         # only the requests that came during the save wait, and they keep it in memory
         settled.set()
         if kept:
-            shutil.rmtree(partial, ignore_errors=True)
-            shutil.rmtree(directory, ignore_errors=True)
+            assert self._directory is not None  # where it was saved
+            shutil.rmtree(self._directory / session_id, ignore_errors=True)
         else:
             session.suspend()
+        return not kept
+
+    @property
+    def keeps_sessions(self) -> bool:
+        """Whether the sessions outlive the server, in a `SessionFolder` (`keep_all`)."""
+        return self._folder is not None
 
     def save_all(self) -> None:
         """Save every live session into `saved`, as a ``--reload`` server's process stops."""
@@ -1303,8 +1477,93 @@ class SessionStore:
             if entry is None or entry.place is not _Place.LIVE:
                 return
             del self._entries[session_id]
-        assert entry.session is not None  # live
-        entry.session.close()
+        self._end(session_id, entry)
+
+    def keep_all(self) -> None:
+        """Save every live session into the folder as the server stops, then let it go.
+
+        Within `SessionFolder.max_saved` on disk, once the expired sessions are dropped. One
+        that can't be saved, or finds no room, is closed. The next server gets the folder
+        once the jobs of those closed are over: their uploads, in it, go only then, and it
+        would take them for a crash's. Once no request runs, nor `hibernate_idle`.
+        """
+        assert self._folder is not None  # only a store with a folder keeps them
+        lock = self._folder_lock
+        assert lock is not None  # held since the server started
+        self._folder_lock = None
+        now = time.monotonic()
+        with self._lock:
+            expired = [
+                (session_id, self._entries.pop(session_id))
+                for session_id, entry in list(self._entries.items())
+                if entry.is_expired(now, self._ttl)
+            ]
+            live = [
+                (session_id, entry)
+                for session_id, entry in self._entries.items()
+                if entry.place is _Place.LIVE
+            ]
+            saved = self._saved_count()
+        closed: list[WebSession] = []
+        try:
+            for session_id, entry in expired:
+                if entry.session is not None:
+                    closed.append(entry.session)
+                self._release(session_id, entry)
+            for session_id, entry in live:
+                session = entry.session
+                assert session is not None  # live
+                if self._keep(session_id, entry, has_place=saved < self._folder.max_saved):
+                    saved += 1
+                else:
+                    closed.append(session)
+        finally:
+            _release_after_workers(lock, closed)
+
+    def _keep(self, session_id: str, entry: _Entry, *, has_place: bool) -> bool:
+        """Save one live session as the server stops, then release it; else close it.
+
+        Without `has_place` on disk, it's closed, as the most saved sessions are there. Tell
+        whether it was saved.
+        """
+        session = entry.session
+        assert session is not None  # live
+        kept = False
+        if not has_place:
+            try:
+                # not said of one that couldn't be saved anyway
+                could_be_saved = not entry.unsaveable and session.can_hibernate()
+            except Exception:
+                LOGGER.exception("Can't tell whether a session can be saved: it's lost.")
+                could_be_saved = False
+            if could_be_saved:
+                LOGGER.warning("No room on disk for a session as the server stops: it's lost.")
+        elif not entry.unsaveable:
+            try:
+                # exactly when it was used: no request comes after the stop
+                kept = self._save(session_id, session, entry.idle_since())
+            except Exception:
+                LOGGER.exception("Can't save a session as the server stops: it's lost.")
+        if kept:
+            # its entry stays: the next start reads the folder again (`open_folder`)
+            try:
+                session.suspend()
+            except Exception:
+                # e.g. an app's model failing to close: the next sessions are still saved
+                LOGGER.exception("Can't release a session as the server stops.")
+        else:
+            with self._lock:
+                self._entries.pop(session_id, None)
+            self._release(session_id, entry)
+        return kept
+
+    def _release(self, session_id: str, entry: _Entry) -> None:
+        """End a session as the server stops, whatever its model does: the next are saved."""
+        try:
+            self._end(session_id, entry)
+        except Exception:
+            # e.g. an app's model failing to close
+            LOGGER.exception("Can't release a session as the server stops.")
 
     def close_all(self) -> None:
         """Close every session as the server stops: nothing else removes their uploads.
@@ -1340,4 +1599,4 @@ class SessionStore:
             entry.session.close()
         else:
             assert self._directory is not None  # where it is
-            _remove_saved(self._directory / session_id)
+            _remove_saved(self._directory / session_id, self._uploads_folder)

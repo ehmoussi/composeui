@@ -204,8 +204,9 @@ The SQLite model is complete otherwise: do not rebuild it.
 - **A container** (Now). A Dockerfile, the port from `PORT`, a `/health` route, settings from
   environment variables, documented logs, and a clean shutdown on SIGTERM. The docs list what
   any platform must give the app.
-- **Sessions that survive a restart** (Now). A data folder on a volume: the sessions saved at
-  intervals and on shutdown, and the cookies' signing key.
+- **Sessions that survive a crash** (Later). `session_folder` keeps them across a restart, and
+  the idle ones across a crash: a copy of each session in memory at intervals, with its uploads
+  kept while a copy names them and one writer for its last use.
 - **A clean exit during a write** (Now). An exit waits briefly for a write, and the next start
   removes what a crash left.
 - **Formulas in CSV exports** (Now, before data is shared between users). A table's Export CSV

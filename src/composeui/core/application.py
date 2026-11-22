@@ -525,9 +525,19 @@ class WebSettings:
     #: memory. Set it when dozens of sessions stay open but idle. A session that holds what
     #: a study doesn't keep stays in memory (see `MainView.can_hibernate`).
     session_idle: Optional[float] = None
-    #: Most sessions on disk at once, with `session_idle`. Past it, idle sessions stay in
-    #: memory.
+    #: Most sessions on disk at once, with `session_idle` or `session_folder`. Past it, idle
+    #: sessions stay in memory, and the server's stop saves no more.
     max_saved_sessions: int = 10_000
+    #: The folder where the sessions outlive a restart of the server. The server saves
+    #: every session there as it stops, and keeps there the key that signs the cookies and
+    #: the files uploaded to path fields and table cells. With `session_idle`, the idle
+    #: sessions wait there, and survive a crash too. A crash loses the sessions in memory.
+    #: A session that holds what a study doesn't keep (see `MainView.can_hibernate`) is lost
+    #: at a restart. One server at a time uses a folder, of its own. A ``--reload`` server
+    #: keeps its own. None, the default, loses every session at a restart.
+    session_folder: Optional[Path] = attrs.field(
+        default=None, converter=attrs.converters.optional(Path)
+    )
     #: Most large downloads (`StreamContent`) sent at once, for all sessions. Each takes a
     #: thread until it is sent, and the next waits for one to end. Raise it when many users
     #: download large files at the same time.

@@ -829,19 +829,27 @@ class _UnopenableModel(_SlowSavedModel):
         raise RuntimeError(msg)
 
 
-@pytest.mark.parametrize("fails_to", ["build", "open"])
-def test_a_session_that_fails_to_wake_is_gone_and_its_next_request_starts_anew(
-    fails_to: str,
+@pytest.mark.parametrize(("fails_to", "is_kept"), [("build", True), ("open", False)])
+def test_a_session_that_fails_to_wake_keeps_its_save_while_the_save_may_still_open(
+    fails_to: str, *, is_kept: bool
 ) -> None:
+    """The app's code failing, maybe for a while, leaves the save for the next request.
+
+    A save that fails to open is gone: its next request starts anew, rather than fail again.
+    """
     clock = _Clock()
     models: list[_SlowSavedModel] = []
+    builds: list[None] = []
 
     def build() -> tuple[MainView, Model | None]:
-        if len(models) == 1 and fails_to == "build":  # e.g. a database the app can't reach
+        builds.append(None)
+        if len(builds) == 2 and fails_to == "build":  # e.g. a database the app can't reach
             msg = "can't open data.txt"
             raise RuntimeError(msg)
-        models.append(_UnopenableModel())
-        return HelloMainView(), models[-1]
+        model = _UnopenableModel() if fails_to == "open" else _SlowSavedModel()
+        model.may_save.set()
+        models.append(model)
+        return HelloMainView(), model
 
     with mock.patch.object(session_module, "time", clock):
         store = SessionStore(build, ttl=60.0, max_sessions=1, hibernation=Hibernation(5.0, 10))
@@ -853,8 +861,9 @@ def test_a_session_that_fails_to_wake_is_gone_and_its_next_request_starts_anew(
 
         with pytest.raises(RuntimeError, match=r"can't open data\.txt"):
             store.get(session_id)
-        assert store.get(session_id) is None
+        retried = store.get(session_id)
     store.close_all()
+    assert (retried is not None) is is_kept
     assert all(model.is_closed for model in models)  # the woken one's too
 
 

@@ -24,9 +24,11 @@ from typing import (
     Any,
     Callable,
     Generic,
+    Literal,
     NamedTuple,
     TypeVar,
     cast,
+    overload,
 )
 
 import attrs
@@ -74,11 +76,12 @@ from composeui.webcore.routes import (
     widget_file,
     widget_fragment,
 )
-from composeui.webcore.session import Hibernation, SessionStore
+from composeui.webcore.session import Hibernation, SessionFolder, SessionStore
 from composeui.webcore.streaming import StreamPlaces
 from composeui.webcore.style import StyleFiles, style_file, theme
 
 if TYPE_CHECKING:
+    import datetime
     from collections.abc import AsyncIterator, Sequence
 
     from starlette.types import ASGIApp, Receive, Scope, Send
@@ -201,12 +204,13 @@ def create_starlette_app(  # noqa: PLR0913 (each sets a part of the server)
             Middleware(SameOriginMiddleware),
             # A per-process signing key is enough: sessions live in this process only,
             # so a cookie from before a restart has no session left to point at anyway;
-            # a `--reload` server's processes share one, as their sessions outlive them.
+            # a `--reload` server's processes share one, as their sessions outlive them,
+            # and so do the servers of a session folder, which holds it (`folder_key`).
             # `same_site="lax"`: cross-site POSTs carry no session cookie, a layer under
             # `SameOriginMiddleware`, which also refuses other ports and subdomains.
             Middleware(
                 _SessionMiddleware,
-                secret_key=secret_key or secrets.token_urlsafe(32),
+                secret_key=secret_key or sessions.secret_key or secrets.token_urlsafe(32),
                 same_site="lax",
             ),
             # the stylesheet, the scripts and a chart's points shrink several times
@@ -246,6 +250,44 @@ class _SteadySigner(itsdangerous.TimestampSigner):
         with self._lock:
             self._latest = max(self._latest, int(time.time()))
             return self._latest
+
+    @overload
+    @override
+    def unsign(
+        self,
+        signed_value: str | bytes,
+        max_age: int | None = None,
+        return_timestamp: Literal[False] = False,
+    ) -> bytes: ...
+
+    @overload
+    @override
+    def unsign(
+        self,
+        signed_value: str | bytes,
+        max_age: int | None = None,
+        return_timestamp: Literal[True] = True,
+    ) -> tuple[bytes, datetime.datetime]: ...
+
+    @override
+    def unsign(
+        self,
+        signed_value: str | bytes,
+        max_age: int | None = None,
+        return_timestamp: bool = False,
+    ) -> tuple[bytes, datetime.datetime] | bytes:
+        """Check a cookie as itsdangerous does, but take one signed later than now.
+
+        As one that another process signed before the clock stepped back, e.g. a server
+        whose sessions outlive it (`session_folder`): the key still proves it, and the
+        session's own idle time still ends it.
+        """
+        value, signed = super().unsign(signed_value, return_timestamp=True)
+        age = self.get_timestamp() - int(signed.timestamp())
+        if max_age is not None and age > max_age:
+            msg = f"Signature age {age} > {max_age} seconds"
+            raise itsdangerous.SignatureExpired(msg, payload=value, date_signed=signed)
+        return (value, signed) if return_timestamp else value
 
 
 class _SessionMiddleware(SessionMiddleware):
@@ -309,12 +351,16 @@ def _lifespan(
     """Get the server's lifespan: idle sessions saved to disk while it runs.
 
     A session goes to disk once idle for `WebSettings.session_idle`. Once the server stops,
-    the sessions are closed, their uploads removed, or a ``--reload`` server's saved for its
-    next process. The programs that jobs still run are stopped.
+    the sessions are closed, their uploads removed, or kept in `WebSettings.session_folder`,
+    or a ``--reload`` server's saved for its next process. The programs that jobs still run
+    are stopped. A server started again takes its session folder again.
     """
 
     @contextlib.asynccontextmanager
     async def lifespan(_app: Starlette) -> AsyncIterator[None]:
+        if sessions.keeps_sessions:
+            # held since the app was made, or taken again after a stop
+            sessions.open_folder()
         stopping = asyncio.Event()
         sweeper = None
         if sessions.hibernation is not None:
@@ -332,6 +378,8 @@ def _lifespan(
                 await sweeper
             if reloading:
                 sessions.save_all()
+            elif sessions.keeps_sessions:
+                sessions.keep_all()
             else:
                 sessions.close_all()
             # uvicorn ends on SIGTERM by sending it again: Python's exit then doesn't run
@@ -520,26 +568,36 @@ class WebApplication(Application[MainViewT]):
         next, and `secret_key`, which they all sign the sessions' cookies with.
         """
         check_routes(self.main_view)
+        settings = self.settings
         sessions = SessionStore(
             self._new_session,
-            ttl=self.settings.session_ttl,
-            max_sessions=self.settings.max_sessions,
-            saved=saved_sessions,
+            ttl=settings.session_ttl,
+            max_sessions=settings.max_sessions,
+            # a `--reload` server keeps its sessions in a directory of its own
+            saved=saved_sessions
+            if saved_sessions is not None or settings.session_folder is None
+            else SessionFolder(settings.session_folder, settings.max_saved_sessions),
             hibernation=None
-            if self.settings.session_idle is None
-            else Hibernation(self.settings.session_idle, self.settings.max_saved_sessions),
+            if settings.session_idle is None
+            else Hibernation(settings.session_idle, settings.max_saved_sessions),
         )
-        return create_starlette_app(
-            sessions,
-            max_upload_size=self.main_view.max_upload_size,
-            stream_places=StreamPlaces(
-                self.settings.max_download_streams,
-                self.settings.max_session_download_streams,
-            ),
-            secret_key=secret_key,
-            reloading=saved_sessions is not None,
-            style=self.style,
-        )
+        try:
+            return create_starlette_app(
+                sessions,
+                max_upload_size=self.main_view.max_upload_size,
+                stream_places=StreamPlaces(
+                    self.settings.max_download_streams,
+                    self.settings.max_session_download_streams,
+                ),
+                secret_key=secret_key,
+                reloading=saved_sessions is not None,
+                style=self.style,
+            )
+        except BaseException:
+            # e.g. a stylesheet missing: the app fixed, the server made again takes it
+            if sessions.keeps_sessions:
+                sessions.close_folder()
+            raise
 
     @override
     def run(self) -> None:

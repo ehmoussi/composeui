@@ -241,12 +241,12 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
 
   1. **Save.** The lifespan's sweep runs `hibernate_idle` in a thread. It saves one idle session
      at a time. `save_to` writes `<id>.partial`, then the store renames the directory to `<id>`.
-     If the process crashes before the rename, the next `--reload` process removes the partial
-     directory.
+     If the process crashes before the rename, the next process that reads the directory
+     removes the partial one.
   2. **Wait for a save or restore.** A request that finds either operation in progress waits.
      If a request arrives during a save, the store keeps the session in memory and removes the
-     saved directory. Async routes look up sessions that are not ready in the thread pool
-     (`_session_off_loop`).
+     saved directory, unless it is in a session folder, where the save stays as a copy. Async
+     routes look up sessions that are not ready in the thread pool (`_session_off_loop`).
   3. **Restore.** `get_or_create` decides under the store's lock whether to find, restore, or
      create a session. If there is no room to restore a session, the store refuses the request.
      It does not create a replacement that would take over the old session's cookie. The store
@@ -268,8 +268,58 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   last `loaded`. The session records these sources after a request that emitted `loaded`,
   including its reactive methods. It also records them after `open_saved` and Open.
   The save includes the initial state for comparison with changed code (`code_edits`) only
-  when the store uses a `--reload` server's directory. Otherwise the same code opens the state.
-  A field whose default changes on every build, such as a date, could look like a code edit.
+  when the store uses a `--reload` server's directory or a session folder. Otherwise the same
+  code opens the state. A field whose default changes on every build, such as a date, could look
+  like a code edit.
+- **Sessions in a folder** (`session_folder`, `SessionFolder` in `session.py`, the files in
+  `sessionfolder.py`). The store saves into the folder as it does for `session_idle`, and keeps
+  the sessions in memory there as the server stops (`keep_all`). It makes no copy of a session
+  in memory: a crash loses those, as without a folder. Copies for crashes were tried and left
+  out: their uploads, times and places each needed rules of their own.
+  - **A folder of its own.** `claim` refuses a folder that holds no `secret-key` but other
+    files than a server that stopped as it started leaves (`lock`, `secret-key.partial`): the
+    start would remove them. In its own folder too, the store acts only on the names it gives:
+    a session's id, with `.partial`, and `uploads/composeui-*`.
+  - **A lock for each serving.** `open_folder` locks `lock` (`fcntl.flock`, `msvcrt.locking` on
+    Windows) before it reads the folder: a second server would remove the partial saves that
+    the first one is writing. The store takes it as it's made, for the key that the cookie's
+    middleware needs, and the lifespan takes it again at each start after a stop, reading the
+    folder again. A server that fails to be made, e.g. on a missing stylesheet, releases it
+    (`close_folder`). The system releases the lock when the process ends, even killed.
+    `keep_all` releases it once the job threads of the sessions it closed have ended
+    (`Jobs.after_workers`): their uploads, in the folder, go only then, and the next server's
+    start would take them for a crash's. On Windows, the release unlocks first: Windows releases
+    the lock of a closed file only after a delay.
+  - **The key.** `secret-key` holds the cookies' key, written once, beside it, then renamed, with
+    mode 0600. An empty key stops the server: it would sign cookies that anyone can make.
+    `_SteadySigner.unsign` takes a cookie signed later than its clock, as one a previous
+    server signed before the clock stepped back: the key proves it, `max_age` and the session's
+    own idle time still end it.
+  - **Plain saves.** A folder's saves don't hold the views' initial values (`code_edits` off),
+    as hibernation's: that check builds a main view of its own (`build_initial_view`), whose
+    fields may start with new values at each build (a date). After an edit of the code, a save
+    that no longer fits is dropped.
+  - **The stop.** `keep_all` drops the expired sessions first, then saves each live one through
+    `can_hibernate`, within `max_saved_sessions` on disk. A place counts once its save is there:
+    one that can't be saved leaves it to the next. With no room, it checks `can_hibernate` only
+    to log the loss, and a failure of the app's check is logged too. A model that fails to close
+    is logged, and the next sessions are still saved.
+  - **Times.** Each save holds the clock time of its session's last request (`last-seen`,
+    written in the save before it takes its name). The next process turns it into its own
+    `time.monotonic`, so a session idle for `session_ttl` while no server ran expires at the
+    first request. A clock set back counts as no time passed. One unreadable counts from the
+    save's own time, never later than its last use.
+  - **A failed wake.** A session whose build fails, the app's code failing maybe for a while,
+    goes back on disk for its next request. One whose save fails to open is dropped, there as
+    without a folder: its next request starts anew, rather than fail again.
+  - **Uploads.** A path field's or a table cell's uploads go to `uploads/composeui-*` in the
+    folder, not to the system's temporary folder, which a new container or a reboot empties.
+    `_saved_uploads` owns only a directory there, so a save that names another one, such as
+    another server's in the temporary folder, never deletes it. At start, the store removes the
+    directories that no save names: those of the sessions in memory that a crash lost. A file
+    arrives in the temporary folder first, and is moved there once whole. The store makes the
+    folder's path absolute, so the uploads' paths are too: before Python 3.12, `mkdtemp` gives a
+    relative path in a relative folder.
 
 ## Pages, tabs, and dialogs
 

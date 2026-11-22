@@ -300,10 +300,11 @@ Read this section before other people use the app, on a network or behind a reve
   Before you give it an address that other people can reach, restrict the access in front
   of it, for example with a password in the reverse proxy (see
   [Deploy behind nginx](#deploy-behind-nginx)).
-- **Single process only.** The sessions live in the memory of one server process. A restart
-  starts them all over. The server signs the session cookie with a key that it makes when it
-  starts. So after a restart, each browser gets a new, empty session, and the work that its
-  user did not save is lost.
+- **Single process only.** The sessions live in the memory of one server process. By default,
+  a restart starts them all over. The server signs the session cookie with a key that it makes
+  when it starts. So after a restart, each browser gets a new, empty session, and the work that
+  its user did not save is lost. To keep the sessions, set `session_folder` (see
+  "Sessions can outlive a restart" below).
 - **Sessions have limits.** You can change each limit (see
   [Change the server's limits](#change-the-servers-limits)). The server drops a session after
   an hour without use (`session_ttl`). It keeps at most 1000 sessions at a time
@@ -338,6 +339,35 @@ Read this section before other people use the app, on a network or behind a reve
     views' state and its model's data don't, for example an object that a callback built. A
     study saves neither the attributes of a view that are not fields nor the variables of a
     callback: a session that wakes doesn't have them.
+- **Sessions can outlive a restart.** Set `session_folder` to a folder that the restart keeps,
+  for example `WebSettings(session_folder="/data/sessions")`, on a volume in a container. Give
+  the sessions a folder of their own: the server refuses to start on a folder that holds other
+  files, which it could remove. The server then keeps the sessions there:
+  - **As it stops,** it saves there each session in memory, within `max_saved_sessions`: past
+    it, a session is lost.
+  - **As it starts,** it reads the folder. The browser of a saved session keeps its cookie,
+    signed with the key that the folder holds, even if the clock was set back meanwhile. Its
+    next request opens the session, and its page reloads, as for a session on disk. A session
+    comes back as it was saved. If the new code changed the views so that the save no longer
+    fits, the browser gets a new session.
+  - **With `session_idle`,** idle sessions wait in this folder instead of the temporary folder,
+    so they also survive a crash. A crash loses the sessions in memory.
+
+  A session comes back with what a session on disk keeps. The files uploaded to its path fields
+  and table cells are kept in the folder too, so a new container or a reboot keeps them. A
+  session that holds what it can't save (see the previous bullet) is lost at a restart: it
+  would come back other than it was. So is a session that ended, for example with Exit. A
+  session ends after `session_ttl` without a request, counted from its last request, also while
+  no server runs. A main view that the app builds with arguments comes back once it overrides
+  `MainView.build_initial_view` (see
+  [Saving and loading state](building-views.md#saving-and-loading-state)). One server at a time
+  uses a folder: a second one on the same folder stops with an error, also while the jobs of a
+  stopped server's sessions still run. `--reload` keeps its own folder.
+- **The session folder is secret.** It holds the key that signs the cookies, and what the
+  users entered. Anyone who reads the folder can open any session in it. Anyone who writes in it
+  can replace the key, or add a session of their own. On Linux and macOS, the server lets only
+  its own user read the key and the sessions. Give the folder itself to that user alone, for
+  reading and for writing.
 - **Set `session_idle` when many sessions stay idle.** In memory, a session takes what its views
   and its model hold: about 0.4 to 1 MiB for an app of 20 pages without data. On disk, it takes
   about 83 KiB. With `session_idle`, the server's memory follows the users active in the last
