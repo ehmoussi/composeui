@@ -84,6 +84,11 @@ backends' modules included, can change in any release without an entry here.
 
 ### Fixed
 
+- A job always ends. A job whose work calls `sys.exit` ends as one with a programming error
+  does, and its task can start again: before, it stayed running. A job whose thread can't
+  start leaves nothing running, and `Task.start_latest` keeps the run before it. A `finished`
+  or `failed` callback that raises no longer stops `running_changed` from reporting the end.
+
 - The translation check's `--write` writes the catalog beside it, then puts it in its place.
   Before, a write that failed, for example on text that UTF-8 can't encode, left the catalog
   empty, and the translations in it were lost.
