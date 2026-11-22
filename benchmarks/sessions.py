@@ -202,7 +202,10 @@ def _cleanup_case(example: str, data: Path, count: int) -> dict[str, Any]:
         measures["expiry_s"] = time.perf_counter() - start
         measures["after"] = _snapshot()
         measures["main_views_freed"] = sum(reference() is None for reference in main_views)
-        measures["files_left"] = sum(Path(path).exists() for path in databases)
+        # still open: the process's own, such as a shared database, which outlives the sessions
+        held = _session_files()
+        measures["files_held"] = len(held)
+        measures["files_left"] = sum(Path(path).exists() and path not in held for path in databases)
     return measures
 
 
@@ -334,7 +337,11 @@ def _cleanup_summary(run: dict[str, Any]) -> dict[str, Any]:
     count = len(opened)
     return {
         "load_median_s": statistics.median(run["load_s"]),
+        # the first load also fills what the sessions share, e.g. a shared database
+        "first_load_s": run["load_s"][0],
+        "later_load_median_s": statistics.median(run["load_s"][1:]),
         "first_session_rss_mib": opened[0]["rss_mib"] - run["before"]["rss_mib"],
+        "first_session_files_mib": opened[0]["files_mib"] - run["before"]["files_mib"],
         **{
             f"per_session_{name}": (opened[-1][name] - opened[0][name]) / (count - 1)
             for name in ("rss_mib", "files_mib", "descriptors", "threads")
@@ -346,6 +353,7 @@ def _cleanup_summary(run: dict[str, Any]) -> dict[str, Any]:
             "ended": run["after"]["descriptors"],
         },
         "main_views_freed": f"{run['main_views_freed']} of {count}",
+        "files_held": run["files_held"],
         "files_left": run["files_left"],
     }
 

@@ -1,0 +1,283 @@
+{
+  "environment": {
+    "composeui": "0.4.1.dev53+g2a8e74e4a",
+    "commit": "6eb5c36662041d873915ca2b06bd8e255609442e",
+    "python": "3.9.23",
+    "platform": "Linux-6.18.58.1-microsoft-standard-WSL2-x86_64-with-glibc2.35",
+    "processor": "x86_64",
+    "cpus": 16,
+    "data": "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
+  },
+  "cases": {
+    "uberpickups": {
+      "cleanup": {
+        "load_median_s": 0.544104321001214,
+        "first_load_s": 9.336131539996131,
+        "later_load_median_s": 0.5420922639968921,
+        "first_session_rss_mib": 31.07421875,
+        "first_session_files_mib": 125.32283782958984,
+        "per_session_rss_mib": 0.8203125,
+        "per_session_files_mib": 0.0,
+        "per_session_descriptors": 0.0,
+        "per_session_threads": 0.0,
+        "close_s_per_session": 0.0005122920010762755,
+        "rss_mib": {
+          "opened": 93.2578125,
+          "ended": 92.2578125
+        },
+        "descriptors": {
+          "before": 8,
+          "ended": 13
+        },
+        "main_views_freed": "4 of 4",
+        "files_held": 3,
+        "files_left": 0
+      },
+      "left_during_load": {
+        "0.1": {
+          "runs": 1,
+          "crashes": 0,
+          "failed_jobs": 0,
+          "load_running": 1,
+          "files_left": 0,
+          "freed_max_s": 0.023424539998813998
+        },
+        "0.5": {
+          "runs": 1,
+          "crashes": 0,
+          "failed_jobs": 0,
+          "load_running": 1,
+          "files_left": 0,
+          "freed_max_s": 0.027510914995218627
+        },
+        "1.0": {
+          "runs": 1,
+          "crashes": 0,
+          "failed_jobs": 0,
+          "load_running": 1,
+          "files_left": 0,
+          "freed_max_s": 0.03079849200003082
+        },
+        "2.0": {
+          "runs": 1,
+          "crashes": 0,
+          "failed_jobs": 0,
+          "load_running": 1,
+          "files_left": 0,
+          "freed_max_s": 0.033805822997237556
+        },
+        "4.0": {
+          "runs": 1,
+          "crashes": 0,
+          "failed_jobs": 0,
+          "load_running": 1,
+          "files_left": 0,
+          "freed_max_s": 0.037039116003143135
+        }
+      },
+      "concurrency": {
+        "1": {
+          "load": {
+            "count": 2,
+            "median_s": 9.38472249500046,
+            "p95_s": 9.395062249001057,
+            "max_s": 9.395062249001057
+          },
+          "move_response": {
+            "count": 30,
+            "median_s": 0.0989871569981915,
+            "p95_s": 0.14044323899724986,
+            "max_s": 0.14141943499998888
+          },
+          "move_done": {
+            "count": 30,
+            "median_s": 0.39504775049863383,
+            "p95_s": 0.459209444001317,
+            "max_s": 0.45939446600095835
+          },
+          "moves_per_second": 2.5471382019430266,
+          "peak_rss_mib": 125.462890625
+        },
+        "2": {
+          "load": {
+            "count": 4,
+            "median_s": 9.344561075999081,
+            "p95_s": 9.533510909001052,
+            "max_s": 9.533510909001052
+          },
+          "move_response": {
+            "count": 60,
+            "median_s": 0.12903733350322,
+            "p95_s": 0.22021980799763696,
+            "max_s": 0.26844959200388985
+          },
+          "move_done": {
+            "count": 60,
+            "median_s": 0.4726683549997688,
+            "p95_s": 0.5836046199983684,
+            "max_s": 0.6624229840017506
+          },
+          "moves_per_second": 4.264352958421018,
+          "peak_rss_mib": 125.357421875
+        },
+        "4": {
+          "load": {
+            "count": 8,
+            "median_s": 9.60058435099927,
+            "p95_s": 9.917652559997805,
+            "max_s": 9.917652559997805
+          },
+          "move_response": {
+            "count": 120,
+            "median_s": 0.20403508150047855,
+            "p95_s": 0.3320323890002328,
+            "max_s": 0.39933930600091117
+          },
+          "move_done": {
+            "count": 120,
+            "median_s": 0.5307081374994596,
+            "p95_s": 0.731942711994634,
+            "max_s": 0.9316130669976701
+          },
+          "moves_per_second": 7.190508759734195,
+          "peak_rss_mib": 128.822265625
+        }
+      }
+    },
+    "uberpickupsframe": {
+      "cleanup": {
+        "load_median_s": 0.15064466499825357,
+        "first_load_s": 0.25789073199848644,
+        "later_load_median_s": 0.14978840399999171,
+        "first_session_rss_mib": 234.265625,
+        "first_session_files_mib": 0.0,
+        "per_session_rss_mib": 4.852864583333333,
+        "per_session_files_mib": 0.0,
+        "per_session_descriptors": 0.0,
+        "per_session_threads": 0.0,
+        "close_s_per_session": 0.0005864965005457634,
+        "rss_mib": {
+          "opened": 323.90234375,
+          "ended": 321.90234375
+        },
+        "descriptors": {
+          "before": 8,
+          "ended": 11
+        },
+        "main_views_freed": "4 of 4",
+        "files_held": 0,
+        "files_left": 0
+      },
+      "left_during_load": {
+        "0.1": {
+          "runs": 1,
+          "crashes": 0,
+          "failed_jobs": 0,
+          "load_running": 0,
+          "files_left": 0,
+          "freed_max_s": 0.020747358998050913
+        },
+        "0.5": {
+          "runs": 1,
+          "crashes": 0,
+          "failed_jobs": 0,
+          "load_running": 0,
+          "files_left": 0,
+          "freed_max_s": 0.026335010006732773
+        },
+        "1.0": {
+          "runs": 1,
+          "crashes": 0,
+          "failed_jobs": 0,
+          "load_running": 0,
+          "files_left": 0,
+          "freed_max_s": 0.037510203997953795
+        },
+        "2.0": {
+          "runs": 1,
+          "crashes": 0,
+          "failed_jobs": 0,
+          "load_running": 0,
+          "files_left": 0,
+          "freed_max_s": 0.01923590200021863
+        },
+        "4.0": {
+          "runs": 1,
+          "crashes": 0,
+          "failed_jobs": 0,
+          "load_running": 0,
+          "files_left": 0,
+          "freed_max_s": 0.03147440400061896
+        }
+      },
+      "concurrency": {
+        "1": {
+          "load": {
+            "count": 2,
+            "median_s": 0.5216152195025643,
+            "p95_s": 0.5372570969993831,
+            "max_s": 0.5372570969993831
+          },
+          "move_response": {
+            "count": 30,
+            "median_s": 0.18031882050127024,
+            "p95_s": 0.20281689600233221,
+            "max_s": 0.20524773099896265
+          },
+          "move_done": {
+            "count": 30,
+            "median_s": 0.22505093549989397,
+            "p95_s": 0.2482315080051194,
+            "max_s": 0.26000854399899254
+          },
+          "moves_per_second": 4.547449051512915,
+          "peak_rss_mib": 306.1875
+        },
+        "2": {
+          "load": {
+            "count": 4,
+            "median_s": 0.5675950539989572,
+            "p95_s": 0.6091143449957599,
+            "max_s": 0.6091143449957599
+          },
+          "move_response": {
+            "count": 60,
+            "median_s": 0.21280843950080452,
+            "p95_s": 0.2853804459955427,
+            "max_s": 0.3150518219990772
+          },
+          "move_done": {
+            "count": 60,
+            "median_s": 0.2820382450008765,
+            "p95_s": 0.378507636996801,
+            "max_s": 0.42198469799768645
+          },
+          "moves_per_second": 7.058553738281807,
+          "peak_rss_mib": 317.650390625
+        },
+        "4": {
+          "load": {
+            "count": 8,
+            "median_s": 0.6731147585014696,
+            "p95_s": 0.8029956440004753,
+            "max_s": 0.8029956440004753
+          },
+          "move_response": {
+            "count": 120,
+            "median_s": 0.3506492824999441,
+            "p95_s": 0.4728468190005515,
+            "max_s": 0.565361827997549
+          },
+          "move_done": {
+            "count": 120,
+            "median_s": 0.487874495494907,
+            "p95_s": 0.5600006930035306,
+            "max_s": 0.6283607419973123
+          },
+          "moves_per_second": 8.520403527945621,
+          "peak_rss_mib": 336.119140625
+        }
+      }
+    }
+  }
+}
