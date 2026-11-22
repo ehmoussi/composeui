@@ -216,6 +216,28 @@ body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {
   }
 }
 
+/* Replace daisyUI's underline so the script can measure it while it moves. */
+.tabs-border > [data-tab]::before {
+  content: none;
+}
+.cui-tab-line {
+  display: none;
+  position: absolute;
+  inset: auto var(--tab-p) 0;
+  border-top: 3px solid var(--color-primary);
+  border-radius: var(--radius-field);
+  pointer-events: none;
+  transform-origin: left center;
+}
+[data-tab][aria-selected="true"]:not(:disabled) > .cui-tab-line {
+  display: block;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cui-tab-line {
+    transition: transform 250ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+}
+
 /* A field followed by a log showing an error is invalid too, as is one a failing check
    of its form names (`data-form-error`); text the browser itself rejects (a float
    field's pattern) as well, once the user has interacted with it. */

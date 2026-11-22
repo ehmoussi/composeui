@@ -602,7 +602,8 @@ class WebTabsRenderer(WebRenderer[TabView]):
                     ' aria-selected="{lower}" tabindex="{value}"'
                     ' class="tab{active}" data-tab hx-post="/widget/{widget_id}"'
                     """ hx-vals='{{"event": "select", "index": "{index}"}}' hx-swap='none'"""
-                    "{hidden}{disabled}>{title}</button>"
+                    "{hidden}{disabled}>{title}"
+                    '<span class="cui-tab-line" aria-hidden="true"></span></button>'
                 ).format(
                     tab_id=tab_id,
                     panel_id=panel_id,
