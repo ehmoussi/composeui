@@ -1,14 +1,18 @@
-"""Explore NYC pickups with hourly counts and a sampled map, based on Streamlit's tutorial."""
+"""Explore NYC pickups with hourly counts and a sampled map, based on Streamlit's tutorial.
+
+The pickups are read once from their CSV file into a SQLite database that every session
+shares, read-only (`shared`): on the web, the users don't each download and store them.
+"""
 
 from __future__ import annotations
 
 import contextlib
 import json
 from datetime import datetime
-from types import MappingProxyType
 from typing import TYPE_CHECKING
 
 import attrs
+from typing_extensions import override
 
 from composeui.core.application import run
 from composeui.core.dashboard import DashboardView, bar_chart
@@ -20,7 +24,7 @@ from composeui.core.sqlitemodel import (
     SqliteSource,
     csv_field,
     define_csv_row,
-    per_session,
+    shared,
     table,
 )
 from composeui.core.view import (
@@ -40,8 +44,6 @@ from composeui.core.view import (
 )
 
 if TYPE_CHECKING:
-    import sqlite3
-
     from composeui.core.jobs import Job
 
 
@@ -64,10 +66,6 @@ class UberPickupsTable(CSVSqliteTable, row_type=UberPickup, name="uber_data"):
     indexes = """--sql
     CREATE INDEX uber_data_hour ON uber_data(CAST(strftime('%H', date_time) AS INTEGER));
     """
-
-    def has_data(self) -> bool:
-        with self.connection() as db:
-            return db.execute("SELECT 1 FROM uber_data LIMIT 1").fetchone() is not None
 
     def pickups_by_hour(self) -> list[int]:
         with self.connection() as db:
@@ -121,35 +119,34 @@ class UberPickupsTable(CSVSqliteTable, row_type=UberPickup, name="uber_data"):
             return [MapPoint(latitude=lat, longitude=lon) for lat, lon in json.loads(points)]
 
 
-def _index_hours(db: sqlite3.Connection) -> None:
-    db.execute(UberPickupsTable.indexes)
+DATA_URL: str = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
 
 
-class PickupsDatabase(SqliteDatabase):
-    schema_version = 2
-    migrations = MappingProxyType({1: _index_hours})
-
+class Pickups(SqliteDatabase):
     uber_data = table(UberPickupsTable)
+
+    @override
+    def fill(self, job: Job[None, int]) -> None:
+        """Read the rows from the CSV file, once for every session."""
+        with contextlib.closing(self.uber_data.fill_from_url(DATA_URL)) as batches:
+            for nb_read in batches:
+                if job.is_canceled:  # no session waits any longer: nothing is kept
+                    return
+                job.report_progress(nb_read)
 
 
 class UberPickupsModel(DatabaseModel):
-    study = per_session(PickupsDatabase, data_name="data.sqlite")
+    pickups = shared(Pickups, read_only=True)
 
-    def load_pickups(self, job: Job[list[int], int], url: str) -> list[int]:
-        """Read the rows, unless the table has them already; get the pickups by hour."""
-        if not self.study.uber_data.has_data():
-            with contextlib.closing(self.study.uber_data.fill_from_url(url)) as batches:
-                for nb_read in batches:
-                    if job.is_canceled:
-                        return []
-                    job.report_progress(nb_read)
-        return self.study.uber_data.pickups_by_hour()
+    def load_pickups(self, job: Job[list[int], int]) -> list[int]:
+        """Wait for the rows, which the first session reads; get the pickups by hour."""
+        self.pickups.ready(job)
+        return self.pickups.uber_data.pickups_by_hour()
 
     def load_points(self, _job: Job[list[MapPoint]], at_hour: int) -> list[MapPoint]:
-        return self.study.uber_data.pickup_points(at_hour)
+        return self.pickups.uber_data.pickup_points(at_hour)
 
 
-DATA_URL: str = "https://s3-us-west-2.amazonaws.com/streamlit-demo-data/uber-raw-data-sep14.csv.gz"
 HOURS = [f"{hour:02d}:00" for hour in range(24)]
 
 
@@ -162,7 +159,7 @@ class PickupFilters(SidebarView):
 @define_view
 class UberPickupsMainView(DashboardView):
     app_title = "Uber pickups in NYC"
-    # a study keeps the rows read, so that opening it downloads none
+    # a study keeps the hour picked; the rows are the process's
     has_file_menu = True
     extension = ".streamlit"
 
@@ -188,17 +185,18 @@ class UberPickupsMainView(DashboardView):
         self.loader.show_state(
             self.status,
             views=[self.pickups_chart, self.pickups_map],
-            loading_text="Loading rows from SQLite or CSV",
+            loading_text="Loading the rows",
             progress_text="Read {progress:,} rows from CSV",
             failed_text="Failed to read the CSV: {error}",
         )
         self.filters.show_raw_data.shows(self.table)
-        # New and Open replace the rows: read them again
-        model.study.uber_data.changed.connect(self._start_loading, now=True)
+        # New and Open drop the loader's result: get it again, at once once the rows are read
+        self.loaded.connect(self._start_loading)
+        self._start_loading()
 
     def _start_loading(self) -> None:
         if not self.loader.is_running:
-            self.loader.start(DATA_URL)
+            self.loader.start()
 
     @reactive
     def show_pickups(self) -> None:
@@ -208,9 +206,9 @@ class UberPickupsMainView(DashboardView):
     def show_hour(self) -> None:
         # the hour picked filters the table and the map, and stands out on the chart
         hour = self.filters.hour.value
-        self.table.source = self.model.study.uber_data.source_at(hour)
         self.pickups_chart.reference_lines = [ReferenceLine(hour, HOURS[hour], vertical=True)]
-        if self.loader.has_result:
+        if self.loader.has_result:  # the rows are read: the session may query them
+            self.table.source = self.model.pickups.uber_data.source_at(hour)
             # a query per hour picked: the latest one shows, however long the previous ones take
             self.points.start_latest(hour)
 

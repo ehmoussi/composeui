@@ -213,27 +213,8 @@ def _textual_demo(main_view: Any, _model: Optional[Model]) -> None:
     form.shape.value_changed.emit("HEXAGON")
 
 
-def _uberpickups_setup(main_view: Any, model: Any) -> None:
-    # Generated rows avoid downloading the full CSV; street tiles still need the network.
-    with model.study.uber_data.connection() as db:
-        db.executemany(
-            "INSERT INTO uber_data VALUES (?, ?, ?, ?)",
-            [
-                (
-                    f"2014-09-01T{hour:02d}:01:00",
-                    40.70 + index * 0.002,
-                    -74.02 + index * 0.002 + hour * 0.0005,
-                    "B02512",
-                )
-                for hour in range(24)
-                for index in range(10 + hour)
-            ],
-        )
-    main_view.connect_model(model)
-
-
-def _uberpickupsframe_setup(main_view: Any, model: Any) -> None:
-    # the same generated rows as `_uberpickups_setup`, in a CSV the app reads
+def _generated_pickups() -> Path:
+    """Write generated pickups in a CSV file: no download of the full one."""
     lines = ["Date/Time,Lat,Lon,Base"] + [
         f"9/1/2014 {hour}:01:00,{40.70 + index * 0.002},"
         f"{-74.02 + index * 0.002 + hour * 0.0005},B02512"
@@ -242,7 +223,18 @@ def _uberpickupsframe_setup(main_view: Any, model: Any) -> None:
     ]
     path = Path(tempfile.mkdtemp()) / "pickups.csv"
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    uberpickupsframe.DATA_URL = str(path)
+    return path
+
+
+def _uberpickups_setup(main_view: Any, model: Any) -> None:
+    # the shared database reads them as the loader starts; street tiles still need the network
+    uberpickups.DATA_URL = _generated_pickups().as_uri()
+    model.pickups.forget()  # read the CSV just written, not one read before
+    main_view.connect_model(model)
+
+
+def _uberpickupsframe_setup(main_view: Any, model: Any) -> None:
+    uberpickupsframe.DATA_URL = str(_generated_pickups())
     uberpickupsframe.read_pickups.forget()  # read the CSV just written, not one read before
     main_view.connect_model(model)
 
