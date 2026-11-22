@@ -131,6 +131,8 @@ backends' modules included, can change in any release without an entry here.
   keeps the file name of the studies saved before. Without it, the study names the file
   after the model's attribute (`study.sqlite`).
 
+- On the web, the underline slides to the tab you click without delaying selection. It moves
+  without animation when you use the keyboard or your browser requests reduced motion.
 - The web backend uses the address `/style/`: a page of a router can no longer have the route
   `style`. The app stops before it serves, as for the backend's other addresses.
 - A `DownloadView` whose file can't be made says "Can't make the file", without the name of a

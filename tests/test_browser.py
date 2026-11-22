@@ -1959,6 +1959,54 @@ def test_a_tab_view_shows_the_tab_picked_by_a_click_or_the_arrow_keys(
     context.close()
 
 
+def test_the_tab_underline_follows_clicks_but_does_not_delay_selection(
+    browser: Browser, tabs_base_url: str
+) -> None:
+    def center(element: Locator) -> float:
+        box = element.bounding_box()
+        assert box is not None
+        return box["x"] + box["width"] / 2
+
+    context = browser.new_context(base_url=tabs_base_url, reduced_motion="no-preference")
+    page = context.new_page()
+    page.goto("/")
+    details, history, notes = (
+        page.get_by_role("tab", name=name) for name in ("Details", "History", "Notes")
+    )
+    line = page.get_by_role("tab", selected=True).locator('[aria-hidden="true"]')
+    start = center(line)
+    clock = context.new_cdp_session(page)
+    # Hold the motion in progress, even if the server takes longer to answer than the slide.
+    clock.send("Animation.setPlaybackRate", {"playbackRate": 0})
+    with _posted(page):
+        history.click()
+    expect(history).to_have_attribute("aria-selected", "true")
+    expect(page.get_by_text("Created on Monday")).to_be_visible()
+    assert center(line) == pytest.approx(start, abs=1)
+
+    with _posted(page):
+        notes.click()
+    expect(notes).to_have_attribute("aria-selected", "true")
+    assert center(line) == pytest.approx(start, abs=1)
+
+    def check_landing() -> None:
+        assert center(line) == pytest.approx(center(notes), abs=1)
+
+    clock.send("Animation.setPlaybackRate", {"playbackRate": 1})
+    _eventually(check_landing)
+    clock.send("Animation.setPlaybackRate", {"playbackRate": 0})
+    with _posted(page):
+        notes.press("ArrowLeft")
+    expect(history).to_be_focused()
+    assert center(line) == pytest.approx(center(history), abs=1)
+
+    page.emulate_media(reduced_motion="reduce")
+    with _posted(page):
+        details.click()
+    assert center(line) == pytest.approx(center(details), abs=1)
+    context.close()
+
+
 def test_a_form_dialog_s_ok_follows_its_form_as_the_user_types(
     browser: Browser, edited_pipe_base_url: str
 ) -> None:
