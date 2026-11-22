@@ -25,6 +25,7 @@ not in the package: run them from a clone of the repository (see
   - [Define a view](user-guide/building-views.md#define-a-view)
   - [`child` or `Factory`](user-guide/building-views.md#child-or-factory)
   - [Lay out views](user-guide/building-views.md#lay-out-views)
+    - [Frame a layout](user-guide/building-views.md#frame-a-layout)
   - [Forms and their fields](user-guide/building-views.md#forms-and-their-fields)
   - [Check a form](user-guide/building-views.md#check-a-form)
   - [Compose views from mixins](user-guide/building-views.md#compose-views-from-mixins)

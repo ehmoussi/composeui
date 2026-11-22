@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from qtpy.QtCore import Qt
 from qtpy.QtWidgets import (
     QGridLayout,
+    QGroupBox,
     QHBoxLayout,
     QPushButton,
     QScrollArea,
@@ -48,6 +49,13 @@ from composeui.qtcore.widgets.qflowlayout import QFlowLayout
 from composeui.qtcore.widgets.qpagearea import QPageArea
 from composeui.qtcore.widgets.qsourcetable import QDataFilterTable
 from composeui.qtcore.widgets.qsplitter import QComposeSplitter
+
+if TYPE_CHECKING:
+    from qtpy.QtWidgets import QLayout
+
+    from composeui.core.view import Frame
+
+TLayout = TypeVar("TLayout", bound="HorizontalView | VerticalView | GridView")
 
 #: widgets scrolling within themselves: as tall as the room they're given, rather than
 #: their content, so they take a column's spare height, and a row's whole height; a
@@ -130,7 +138,27 @@ class QtPageRenderer(QtWidgetRenderer[PageView, QPageArea]):
             self.refresh()
 
 
-class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
+class _QtLayoutRenderer(QtWidgetRenderer[TLayout, QWidget]):
+    def __init__(self, view: TLayout) -> None:
+        super().__init__(view)
+        if view.frame is not None:
+            self._refresh_dispatcher["frame"] = self._refresh_frame
+
+    def _layout_widget(self) -> QWidget:
+        return QWidget() if self._view.frame is None else QGroupBox()
+
+    def _set_layout_margins(self, layout: QLayout) -> None:
+        # A plain layout needs no inset of its own. In a group box, use the Qt style's inset.
+        margin = 0 if self._view.frame is None else -1
+        layout.setContentsMargins(margin, margin, margin, margin)
+
+    @staticmethod
+    def _refresh_frame(_view: TLayout, widget: QWidget, frame: Frame) -> None:
+        assert isinstance(widget, QGroupBox)
+        widget.setTitle(frame.title)
+
+
+class QtHorizontalRenderer(_QtLayoutRenderer[HorizontalView]):
     """Views side by side, each as wide as its share of the row.
 
     When none has a share (e.g. buttons), each keeps its own width, and the views that
@@ -140,7 +168,7 @@ class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
     @override
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = QWidget()
+            self._rendered_object = self._layout_widget()
             widgets = [
                 (widget, stretch)
                 for view, stretch in self._view.stretched_views
@@ -148,8 +176,7 @@ class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
             ]
             if any(stretch > 0 for _, stretch in widgets):
                 layout = QHBoxLayout(self._rendered_object)
-                # the column holding the row already insets it
-                layout.setContentsMargins(0, 0, 0, 0)
+                self._set_layout_margins(layout)
                 # a spacer with no share: it takes the free width only while the views
                 # with a share are hidden, ahead of views (e.g. buttons) that would grow
                 if self._view.align is Align.END:
@@ -173,21 +200,21 @@ class QtHorizontalRenderer(QtWidgetRenderer[HorizontalView, QWidget]):
                     align_end=self._view.align is Align.END,
                     one_line_hint=True,
                 )
+                self._set_layout_margins(flow)
                 for widget, _ in widgets:
                     flow.addWidget(widget)
             self.refresh()
 
 
-class QtVerticalRenderer(QtWidgetRenderer[VerticalView, QWidget]):
+class QtVerticalRenderer(_QtLayoutRenderer[VerticalView]):
     """Views one above the other, at the top of the column."""
 
     @override
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = QWidget()
+            self._rendered_object = self._layout_widget()
             layout = QColumnLayout(self._rendered_object)
-            # the row holding the column already insets it
-            layout.setContentsMargins(0, 0, 0, 0)
+            self._set_layout_margins(layout)
             for view in self._view.children_views:
                 widget = _widget_of(view)
                 if widget is not None:
@@ -459,16 +486,15 @@ class QtTabsRenderer(QtWidgetRenderer[TabView, QTabWidget]):
             renderer.build()
 
 
-class QtGridRenderer(QtWidgetRenderer[GridView, QWidget]):
+class QtGridRenderer(_QtLayoutRenderer[GridView]):
     """Views in a grid's cells: equally wide columns, rows as tall as their views."""
 
     @override
     def render(self) -> None:
         if self._rendered_object is None:
-            self._rendered_object = QWidget()
+            self._rendered_object = self._layout_widget()
             layout = QGridLayout(self._rendered_object)
-            # the column holding the grid already insets it
-            layout.setContentsMargins(0, 0, 0, 0)
+            self._set_layout_margins(layout)
             for view, position in self._view.positioned_views:
                 widget = _widget_of(view)
                 if widget is not None:

@@ -71,12 +71,14 @@ class QFlowLayout(QLayout):
 
     @override
     def heightForWidth(self, width: int) -> int:
-        return self._lay_out(QRect(0, 0, width, 0), move=False)
+        margins = self._margins_size()
+        content = QRect(0, 0, max(0, width - margins.width()), 0)
+        return self._lay_out(content, move=False) + margins.height()
 
     @override
     def setGeometry(self, rect: QRect) -> None:
         super().setGeometry(rect)
-        self._lay_out(rect, move=True)
+        self._lay_out(self.contentsRect(), move=True)
 
     @override
     def sizeHint(self) -> QSize:

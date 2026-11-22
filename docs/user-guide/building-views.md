@@ -130,6 +130,34 @@ or text built from other fields.
 
 For panes that the user resizes, see [Resizable panes](organizing-the-window.md#resizable-panes).
 
+### Frame a layout
+
+Set `frame=Frame(title=...)` on a `VerticalView`, `HorizontalView`, or `GridView` to draw a
+border around its content. Use `Frame()` for a border without a title, or leave out `frame`
+for no border.
+
+```python
+from composeui.core.view import T, Frame, LabelView, MainView, VerticalView, child, define_view
+
+
+@define_view
+class ResultsView(VerticalView):
+    summary: LabelView = child(LabelView, text=T("No results yet"))
+
+
+@define_view
+class ReportView(MainView):
+    results: ResultsView = child(ResultsView, frame=Frame(title=T("Results")))
+```
+
+Set the frame when you build the layout. A study does not save or restore it. A title marked
+with `T(...)` follows the app's language.
+
+Qt uses a `QGroupBox`. Textual draws a border with the title on its top edge. The web uses a
+`<fieldset>` with a `<legend>` for the title. On the web, grids and rows with stretch stack
+when the width inside the frame is less than 42rem. To change the web border,
+select `[data-cui-frame]` in a [web stylesheet](running-the-app.md#change-the-look-of-the-web-app).
+
 ## Forms and their fields
 
 A `FormView` shows its rows one above the other, with their labels aligned. A

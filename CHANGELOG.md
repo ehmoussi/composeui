@@ -11,6 +11,9 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `VerticalView`, `HorizontalView`, and `GridView` take a `frame=Frame(...)`. It draws a border
+  around their content on Qt, Textual, and the web, with an optional title.
+
 - `run(..., web_style=WebStyle(...))` gives the web app a look of its own: a `Theme` of light
   and dark `Palette` colors, corners, borders and font, and stylesheets with their fonts and
   images from a folder. A text color and its background must keep a contrast of 4.5:1. The
