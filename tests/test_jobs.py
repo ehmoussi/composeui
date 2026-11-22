@@ -261,12 +261,21 @@ def test_a_job_changing_the_jobs_surfaces_and_clears_its_runtime_state(
 
 
 @pytest.mark.parametrize(
-    "error_type", [AssertionError, AttributeError, NameError, NotImplementedError, TypeError]
+    "error_type",
+    [
+        AssertionError,
+        AttributeError,
+        NameError,
+        NotImplementedError,
+        TypeError,
+        SystemExit,
+        KeyboardInterrupt,
+    ],
 )
-def test_programming_errors_escape_to_the_thread_exception_handler(
+def test_programming_errors_and_exits_escape_to_the_thread_exception_handler(
     app: ModelApplication[MainView, _Model],
     thread_errors: tuple[list[BaseException], threading.Event],
-    error_type: type[Exception],
+    error_type: type[BaseException],
 ) -> None:
     error = error_type("programming mistake")
     errors, surfaced = thread_errors
@@ -615,6 +624,61 @@ def test_a_callback_raising_doesn_t_stop_what_the_job_handed_over_after_it(
 
     assert values == [1, 2, 3]
     assert [exception for _type, exception, _traceback in exceptions] == [error]
+
+
+def test_the_jobs_report_their_end_when_a_result_s_callback_raises() -> None:
+    main_view = MainView()
+    running: list[bool] = []
+    main_view.jobs.running_changed.connect(running.append)
+    error = ValueError("no luck")
+
+    def show(_result: int) -> None:
+        raise error
+
+    main_view.jobs.start(_double, 1).finished.connect(show)
+    with pytest.raises(ValueError, match="no luck"):
+        main_view.jobs.wait()
+
+    assert running == [True, False]
+
+
+def test_a_job_whose_thread_doesn_t_start_leaves_nothing_running(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main_view = MainView()
+    running: list[bool] = []
+    main_view.jobs.running_changed.connect(running.append)
+    task = main_view.jobs.task(_double)
+    latest = main_view.jobs.task(_sleep)
+    start = threading.Thread.start
+
+    def fail(_thread: threading.Thread) -> None:
+        msg = "can't start new thread"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(threading.Thread, "start", fail)
+    with pytest.raises(RuntimeError, match="can't start"):
+        task.start(1)
+    assert not task.is_running
+    assert not main_view.jobs.has_workers
+    assert running == [True, False]
+    monkeypatch.setattr(threading.Thread, "start", start)
+    latest.start()
+    try:
+        monkeypatch.setattr(threading.Thread, "start", fail)
+        with pytest.raises(RuntimeError, match="can't start"):
+            latest.start_latest()
+    finally:
+        monkeypatch.setattr(threading.Thread, "start", start)
+        # the run before goes on, no thread replaced it: it's the one canceled
+        latest.cancel()
+    main_view.jobs.wait()
+
+    assert latest.result is False
+    assert running == [True, False, True, False]
+    assert task.start(2)
+    main_view.jobs.wait()
+    assert task.result == 4
 
 
 def test_a_callback_s_nested_event_loop_gets_what_the_job_handed_over_in_order(

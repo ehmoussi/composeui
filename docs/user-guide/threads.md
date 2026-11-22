@@ -694,6 +694,8 @@ These rules hold for every job, and for the jobs of a task.
 - **Programming errors.** An uncaught `CalledInJobError`, `AssertionError`,
   `AttributeError`, `NameError`, `NotImplementedError`, or `TypeError` leaves the function
   of the job. The job chooses by the type of the exception, not by its cause.
+  An uncaught `SystemExit` or `KeyboardInterrupt`, for example from `sys.exit` in the work,
+  follows the same path.
   - Python reports its traceback through `threading.excepthook`. `failed` does not emit
     it, and a [task](#reusable-loading-tasks) does not keep it as its `error`.
   - The job no longer counts as running. Its task, if any, goes back to idle and emits

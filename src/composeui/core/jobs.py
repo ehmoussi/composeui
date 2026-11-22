@@ -318,7 +318,12 @@ class Task(Generic[R, P, ProgressT]):
         job.progress.connect(self._report_progress)
         job.finished.connect(self._finish)
         job.failed.connect(self._fail)
-        jobs._start_job(job, self._work, args, kwargs)  # noqa: SLF001 (shared job lifecycle)
+        try:
+            jobs._start_job(job, self._work, args, kwargs)  # noqa: SLF001 (shared job lifecycle)
+        except BaseException:
+            self._job = None  # no thread: the task can start again
+            self.changed.emit()
+            raise
         self.changed.emit()
         return True
 
@@ -333,7 +338,7 @@ class Task(Generic[R, P, ProgressT]):
         _check_main_thread("Task.start_latest")
         check_change(self._source, f"starts the task {self._name}")
         jobs = self._bound_jobs()
-        old = self._job
+        old, progress, error = self._job, self._progress, self._error
         job = jobs._new_job(self._work)  # noqa: SLF001 (shared job lifecycle)
         self._job = job
         self._progress = None
@@ -342,7 +347,12 @@ class Task(Generic[R, P, ProgressT]):
         job.finished.connect(self._finish)
         job.failed.connect(self._fail)
         work = functools.partial(_debounced, self._work, self.debounce)
-        jobs._start_job(job, work, args, kwargs)  # noqa: SLF001 (shared job lifecycle)
+        try:
+            jobs._start_job(job, work, args, kwargs)  # noqa: SLF001 (shared job lifecycle)
+        except BaseException:
+            # no thread: the run before goes on, its outcome still the task's
+            self._job, self._progress, self._error = old, progress, error
+            raise
         if old is not None:
             jobs._forget(old)  # noqa: SLF001 (shared job lifecycle)
         self.changed.emit()
@@ -991,7 +1001,14 @@ class Jobs:
             self._workers += 1
         # a daemon: closing the app doesn't wait for it
         thread = threading.Thread(target=self._work, args=(job, work, args, kwargs), daemon=True)
-        thread.start()
+        try:
+            thread.start()
+        except BaseException:  # e.g. no thread left: the job never runs, nor ends
+            self._worker_ended()
+            self._running.discard(job)
+            if not self.is_running:
+                self.running_changed.emit(False)  # noqa: FBT003
+            raise
 
     @property
     def has_workers(self) -> bool:
@@ -1020,13 +1037,17 @@ class Jobs:
         try:
             self._run(job, work, args, kwargs)
         finally:
-            with self._workers_lock:
-                self._workers -= 1
-                callbacks: list[Callable[[], None]] = []
-                if self._workers == 0:
-                    callbacks, self._after_workers = self._after_workers, []
-            for callback in callbacks:
-                callback()
+            self._worker_ended()
+
+    def _worker_ended(self) -> None:
+        """Count a job's thread as over, and call `after_workers`' callbacks if it was the last."""
+        with self._workers_lock:
+            self._workers -= 1
+            callbacks: list[Callable[[], None]] = []
+            if self._workers == 0:
+                callbacks, self._after_workers = self._after_workers, []
+        for callback in callbacks:
+            callback()
 
     def _forget(self, job: Job[Any, Any]) -> None:
         """Cancel `job`, replaced or its task released: its progress and outcome won't be emitted.
@@ -1126,6 +1147,10 @@ class Jobs:
             else:
                 LOGGER.exception("The job %s failed", name)
             self._on_main_thread(job, functools.partial(self._end, job, job.failed, error))
+        except BaseException:
+            # e.g. `sys.exit` in the work: no outcome to emit, but the job is over
+            self._on_main_thread(job, functools.partial(self._abort, job))
+            raise
         else:
             self._on_main_thread(job, functools.partial(self._end, job, job.finished, result))
 
@@ -1211,9 +1236,11 @@ class Jobs:
         if job not in self._running:
             return
         self._running.discard(job)
-        self._deliver(job, functools.partial(signal.emit, outcome))
-        if not self.is_running:
-            self.running_changed.emit(False)  # noqa: FBT003
+        try:
+            self._deliver(job, functools.partial(signal.emit, outcome))
+        finally:  # a callback that raises leaves the jobs over all the same
+            if not self.is_running:
+                self.running_changed.emit(False)  # noqa: FBT003
 
     def _deliver(self, job: Job[Any, Any], deliver: Callable[[], None]) -> None:
         """Call `deliver`, what `job` gives the main thread.
