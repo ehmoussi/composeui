@@ -92,7 +92,7 @@ def test_a_main_view_sets_the_largest_file_a_user_can_upload(
         assert (accepted.name, accepted.stat().st_size) == ("large.csv", limit)
 
         response = client.post(url, files={"file": ("over.csv", b"#" * (limit + 1))})
-        status = _swapped(response.text, _widget_id(main_view.status_bar.renderer))
+        status = _swapped(response.text, _widget_id(main_view.notification.renderer))
         assert "'over.csv': the file is larger than" in status.text
         assert main_view.field.path == accepted
 
@@ -259,7 +259,7 @@ def test_a_full_disk_says_so_and_never_hands_over_a_cut_file(
         )
 
         assert response.status_code == 200
-        status = _swapped(response.text, _widget_id(main_view.status_bar.renderer))
+        status = _swapped(response.text, _widget_id(main_view.notification.renderer))
         assert status.text == "Can't open 'small.csv': the server has no room for it right now."
         assert dataset.file is None
         assert list(tmp_path.iterdir()) == []
@@ -289,7 +289,7 @@ def test_a_file_that_would_fill_the_disk_is_refused_and_keeps_the_field_s_file(
         monkeypatch.setattr(DataFileMainView, "min_free_disk", 2**62)
         response = client.post(url, files={"file": ("new.csv", b"2")})
 
-        status = _swapped(response.text, _widget_id(main_view.status_bar.renderer))
+        status = _swapped(response.text, _widget_id(main_view.notification.renderer))
         assert status.text == "Can't open 'new.csv': the server has no room for it right now."
         assert dataset.file == kept
         assert kept.path.read_bytes() == b"1"
@@ -481,7 +481,7 @@ def test_a_file_the_page_kept_for_its_size_is_refused_by_name(
 
     response = help_client.post(f"/widget/{_widget_id(action.renderer)}/file", files=too_large)
 
-    status = _swapped(response.text, _widget_id(main_view.status_bar.renderer))
+    status = _swapped(response.text, _widget_id(main_view.notification.renderer))
     assert status.text == "Can't open 'huge.md': the file is larger than 5 MiB."
     assert picked == []
     # a widget that takes no file has nothing to refuse
@@ -750,7 +750,7 @@ def test_a_body_larger_than_any_upload_is_refused_before_it_is_read(
     response = client.post("/state", content=content, headers=headers)
 
     assert response.status_code == 413
-    assert main_view.status_bar.message == ""  # the route never ran
+    assert main_view.notification.message == ""  # the route never ran
 
 
 @pytest.mark.parametrize("path", ["/state", "/widget/{}", "/state/download"])

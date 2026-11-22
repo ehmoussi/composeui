@@ -158,7 +158,7 @@ def test_an_export_writes_the_rows_shown_in_a_job_the_status_bar_saying_so(
 
     table.export_csv(tmp_path / "missing" / "lyon.csv")
     main_view.jobs.wait()
-    assert main_view.status_bar.message.startswith("Can't export to lyon.csv: [Errno 2]")
+    assert main_view.notification.message.startswith("Can't export to lyon.csv: [Errno 2]")
 
 
 def test_a_study_saves_the_search_without_the_readings(

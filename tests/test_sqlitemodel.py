@@ -624,7 +624,7 @@ def test_a_study_that_does_not_fit_changes_nothing_and_says_why(
 
     _open(app, path)
 
-    assert app.main_view.status_bar.message == f"Can't open 'study.hello': {reason}."
+    assert app.main_view.notification.message == f"Can't open 'study.hello': {reason}."
     assert app.model.runs.radii() == [80.0]
     assert app.main_view.form.name.text == "Bob"
     assert app.main_view.state_filepath is None
@@ -712,7 +712,7 @@ def test_an_archive_lying_about_its_size_is_refused_before_it_is_unpacked(
         tracemalloc.stop()
 
     assert (
-        app.main_view.status_bar.message
+        app.main_view.notification.message
         == "Can't open 'study.hello': it isn't a valid .hello file."
     )
     assert peak < 8 * 1024 * 1024
@@ -756,7 +756,7 @@ def test_a_database_not_made_as_a_new_one_is_refused(app: App, tmp_path: Path, s
     _open(app, path)
 
     message = "Can't open 'study.hello': its data doesn't match this application."
-    assert app.main_view.status_bar.message == message
+    assert app.main_view.notification.message == message
     assert app.model.runs.radii() == [80.0]
 
 
@@ -783,7 +783,7 @@ def test_opening_a_database_is_cut_after_its_time_limit(app: App, tmp_path: Path
 
     assert not opening.is_alive()
     message = "Can't open 'study.hello': its data isn't a valid database."
-    assert slow.main_view.status_bar.message == message
+    assert slow.main_view.notification.message == message
     slow.model.close()
 
 
@@ -840,7 +840,7 @@ def test_a_failed_save_leaves_the_previous_study_whole(
 
     _save(app, path)
 
-    message = app.main_view.status_bar.message
+    message = app.main_view.notification.message
     assert message == "Can't save to study.hello: [Errno 28] No space left on device."
     assert path.read_bytes() == saved
     assert [file.name for file in tmp_path.iterdir()] == ["study.hello"]
@@ -931,13 +931,13 @@ def test_a_refusal_says_why_in_the_apps_language(
 
     main_view.table.emit_cell_edited(1, 0, "")
 
-    assert main_view.status_bar.message == (
+    assert main_view.notification.message == (
         "Impossible de renommer l'étiquette : une étiquette doit avoir un nom"
     )
     assert tags_app.model.tags.names() == ["blue", "red"]
     # the refusal's text follows the language too
     main_view.set_language("en")
-    assert main_view.status_bar.message == "Can't rename the tag: a tag needs a name"
+    assert main_view.notification.message == "Can't rename the tag: a tag needs a name"
 
 
 def test_a_refusal_no_key_names_shows_sqlites_message(tags_app: TagsApp) -> None:
@@ -945,7 +945,7 @@ def test_a_refusal_no_key_names_shows_sqlites_message(tags_app: TagsApp) -> None
 
     main_view.table.emit_cell_edited(1, 0, "blue")
 
-    assert main_view.status_bar.message == (
+    assert main_view.notification.message == (
         "Can't rename the tag: UNIQUE constraint failed: tag.name"
     )
 
@@ -955,7 +955,7 @@ def test_a_refusal_outside_an_edit_only_says_why(tags_app: TagsApp) -> None:
 
     main_view.add.clicked.emit()
 
-    assert main_view.status_bar.message == "Can't add the tag: a tag needs a name"
+    assert main_view.notification.message == "Can't add the tag: a tag needs a name"
     assert tags_app.model.tags.names() == ["blue", "red"]
 
 
@@ -1035,7 +1035,7 @@ def test_a_database_damaged_or_of_no_version_is_refused(
 
     _open(app, path)
 
-    assert app.main_view.status_bar.message == f"Can't open 'study.hello': {reason}."
+    assert app.main_view.notification.message == f"Can't open 'study.hello': {reason}."
     assert app.model.runs.radii() == [80.0]
 
 
@@ -1047,7 +1047,7 @@ def test_a_study_a_migration_can_t_bring_up_to_date_is_refused(app: App, tmp_pat
     _open(third, path)
 
     reason = "its data (version 1) can't be brought up to date"
-    assert third.main_view.status_bar.message == f"Can't open 'study.hello': {reason}."
+    assert third.main_view.notification.message == f"Can't open 'study.hello': {reason}."
     third.model.close()
 
 

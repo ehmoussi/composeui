@@ -36,6 +36,7 @@ from composeui.textualcore._renderers.content import (
     TextualLogRenderer,
     TextualMarkdownRenderer,
     TextualMetricRenderer,
+    TextualNotificationBarRenderer,
     TextualStatusBarRenderer,
 )
 from composeui.textualcore._renderers.controls import (
@@ -137,6 +138,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "separator": TextualSeparatorRenderer,
     "sidebar": TextualSidebarRenderer,
     "splitter": TextualSplitterRenderer,
+    "notification_bar": TextualNotificationBarRenderer,
     "status_bar": TextualStatusBarRenderer,
     "table": TextualTableRenderer,
     "text_area": TextualTextAreaRenderer,

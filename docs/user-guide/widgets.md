@@ -405,8 +405,8 @@ What each backend does:
   each session keeps its own copy. While the file goes, the button takes no click, and
   `uploading_text` shows beside it. A click elsewhere on the page does not wait for a long upload:
   the app sees the new file only in `uploaded`. A main view's `max_upload_size` limits the size (see
-  [How the web differs from a window](running-the-app.md#how-the-web-differs-from-a-window)). The
-  status bar says why a file is refused.
+  [How the web differs from a window](running-the-app.md#how-the-web-differs-from-a-window)). A
+  [notification](building-views.md#notifications) says why a file is refused.
 
 ### Several files at once
 
@@ -452,7 +452,7 @@ class ShapesView(MainView):
   one upload gets.
 - **On the web, a choice is kept whole, or refused whole.** A file of a type that `extensions`
   does not give refuses the choice. So do two names that one folder cannot hold apart, such as
-  `Roads.shp` and `roads.shp`. The status bar says why, and the view keeps its previous files.
+  `Roads.shp` and `roads.shp`. A notification says why, and the view keeps its previous files.
 - **On the web, the limits apply to the whole choice.** `max_upload_size` limits the size of the
   files together, and a choice holds at most 100 files.
 - **`files_text`** shows beside the button while the view holds several files: `{count} files`
@@ -614,7 +614,7 @@ class ResultsView(VerticalView):
 - **`media_type`** says what the file holds, such as `"text/csv"`. When it is `None`, the type
   comes from the extension of `filename`.
 - **`in_job`** runs `content` in a [job](threads.md), for a file that takes a while to make. The
-  button stays disabled until the file is made. If `content` raises an exception, the status bar
+  button stays disabled until the file is made. If `content` raises an exception, a notification
   says why. New and Open drop the job, and give no file.
 
 To name the file at the click, for example after the run that the page shows, `content` returns
@@ -664,7 +664,7 @@ What each backend does with the file:
 
 On Qt and Textual, a file that comes while a dialog is open waits for that dialog. The file is
 written beside the target first, then replaces it, so a failed write leaves the target as it was.
-The status bar says when the file is saved, or why it can't be.
+The status bar says when the file is saved, and a notification why it can't be.
 
 ### Large files
 
@@ -1195,7 +1195,8 @@ assert main_view.output.text == "Step 1\nDone\n"
 - **Not study data.** The text is the app's output: a study never saves, loads, or resets it.
 - **Save or copy the output.** The user saves the text to a file, named `export_filename`
   (`output.txt` by default) at first, or copies the whole text to the clipboard. In code,
-  `export_text(path)` writes it in UTF-8, and the status bar says how it went.
+  `export_text(path)` writes it in UTF-8. The status bar says when it's saved, and a notification
+  why it can't be.
   `texts["save"]` and `texts["copy"]` name the controls, "Save output" and "Copy all" by
   default.
 - **Search the output.** The user searches the text: plain text, in any case. Every match is

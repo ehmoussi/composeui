@@ -40,6 +40,7 @@ from composeui.core._views.base import (
     OMIT,
     UI_TEXT,
     EditRefusedError,
+    LogType,
     View,
     _editing_cell,
     define_view,
@@ -471,7 +472,7 @@ class CellWidget:
     own file, unless no cell holds its path once the edit is over, e.g. refused.
     Its button is enabled only in an editable column. With `server_roots`, the web lists
     the server's files in them instead, and refuses a path typed outside them: the cell
-    keeps its text, and the status bar says why. A folder path cell and a save path cell
+    keeps its text, and a notification says why. A folder path cell and a save path cell
     pick as `FolderPathInputView` and `SavePathInputView` do: on the web, without
     `server_roots`, their path is typed, and they have no button. With `base_folder`, a
     relative path names a path in that folder, and a path picked in it shows relative to
@@ -1442,7 +1443,7 @@ class RecordTableView(TableView, Generic[RecordT]):
     its cell (`str`, None as an empty cell): assign new `records`, not `rows`.
 
     The user's edit is parsed into the field's type with `CONVERTER`. A cell that doesn't
-    parse refuses the edit, and the status bar says why. Else `record_edited` emits the
+    parse refuses the edit, and a notification says why. Else `record_edited` emits the
     old and the new record while `records` still holds the old one. Then the new record
     replaces the old one, unless the callbacks assigned `records` themselves. Refusing the
     edit works as with `cell_edited` (`View.refusing`).
@@ -1586,8 +1587,8 @@ class RecordTableView(TableView, Generic[RecordT]):
             main_view = None if self._main_view is None else self._main_view()
             if main_view is not None:
                 message = self.tr('{header}: "{text}" isn\'t a valid value')
-                main_view.status_bar.show_message(
-                    message.format(header=self.headers[column], text=text)
+                main_view.notify(
+                    message.format(header=self.headers[column], text=text), LogType.ERROR
                 )
             raise EditRefusedError from error
         # `old` as `Any`: mypy's attrs plugin doesn't take a bound type variable
@@ -2229,7 +2230,8 @@ class SourceTableView(View):
         """Write the rows shown to the CSV file `path`, in UTF-8, as `csv_chunks` gives them.
 
         In an app, a job writes them, the app staying responsive, and the status bar says
-        when it's done, or why it failed. Else they are written before the call returns.
+        when it's done, or a notification why it failed. Else they are written before the
+        call returns.
         """
         chunks, count = self.csv_chunks(), self.row_count
         main_view = None if self._main_view is None else self._main_view()
@@ -2239,14 +2241,16 @@ class SourceTableView(View):
         job = main_view.jobs.start(_write_csv, chunks, path)
         done = self.tr("Exported {count} rows to {name}.")
         failed = self.tr("Can't export to {name}: {error}.")
-        show = main_view.status_bar.show_message
 
         def report(is_written: bool) -> None:
             if is_written:
-                show(done.format(count=f"{count:,}", name=path.name))
+                main_view.status_bar.show_message(done.format(count=f"{count:,}", name=path.name))
+
+        def report_failure(error: Exception) -> None:
+            main_view.notify(failed.format(name=path.name, error=error), LogType.ERROR)
 
         job.finished.connect(report)
-        job.failed.connect(lambda error: show(failed.format(name=path.name, error=error)))
+        job.failed.connect(report_failure)
 
     def is_selected(self, row_id: Any) -> bool:
         """Tell whether the row `row_id` is selected."""

@@ -464,7 +464,7 @@ def test_a_failed_snapshot_keeps_the_previous_one_says_so_and_the_next_tick_trie
     first.main_view.note.text = "written again"
     _tick(first.main_view)
 
-    assert first.main_view.status_bar.message == (
+    assert first.main_view.notification.message == (
         "Can't autosave the unsaved work: [Errno 28] No space left on device."
     )
     folder = _folder_of(first.main_view)
@@ -540,10 +540,10 @@ def test_a_model_s_data_that_can_t_be_pinned_is_copied_at_the_tick() -> None:
     model.texts, model.version = ["first"], 1
     first.model.fails = True
     _tick(first.main_view)
-    assert first.main_view.status_bar.message == ""  # shown at the next tick
+    assert first.main_view.notification.message == ""  # shown at the next tick
     first.model.fails = False
     _tick(first.main_view)
-    assert first.main_view.status_bar.message == (
+    assert first.main_view.notification.message == (
         "Can't autosave the unsaved work: [Errno 28] No space left on device."
     )
     _crash(first)
@@ -754,7 +754,7 @@ def test_work_that_doesn_t_open_is_moved_aside_and_the_app_starts_a_new_study(
     second = apps()
 
     assert second.main_view.note.text == ""
-    assert second.main_view.status_bar.message.startswith("Can't restore the unsaved work: ")
+    assert second.main_view.notification.message.startswith("Can't restore the unsaved work: ")
     assert not second.main_view.has_unsaved_changes()
     (aside,) = (autosaves / "notes").glob(f"{folder.name}.invalid-*")
     assert path.name in {p.name for p in aside.iterdir()}

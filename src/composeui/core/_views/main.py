@@ -37,6 +37,7 @@ from composeui.core._views.base import (
     OMIT,
     SESSION,
     UI_TEXT,
+    LogType,
     View,
     _attach_jobs,
     _retranslate,
@@ -46,7 +47,7 @@ from composeui.core._views.base import (
 from composeui.core._views.charts import ChartView
 from composeui.core._views.choices import ChoicesMixin
 from composeui.core._views.containers import PageWidth
-from composeui.core._views.content import StatusBar
+from composeui.core._views.content import NotificationBar, StatusBar
 from composeui.core._views.controls import CheckBoxMixin
 from composeui.core._views.dialogs import (
     DialogView,
@@ -386,7 +387,7 @@ class MainView(View):
     #: ``max_upload_size = 200 * 1024 * 1024``
     max_upload_size: ClassVar[int] = 5 * 1024 * 1024
     #: the bytes that an upload to the web app leaves free on the disk, 1 GiB by default: the
-    #: status bar refuses a file that goes below it. 0 refuses only when the disk is full.
+    #: app refuses a file that goes below it. 0 refuses only when the disk is full.
     #: A subclass sets it, e.g. for a small container: ``min_free_disk = 100 * 1024 * 1024``
     min_free_disk: ClassVar[int] = 1024 * 1024 * 1024
     #: whether Qt and Textual save the unsaved work to a folder of the app's own, every
@@ -423,6 +424,9 @@ class MainView(View):
     )
     # message_view: MessageView = MessageView()
     status_bar: StatusBar = attrs.Factory(StatusBar)
+    #: a message above the page that stays until closed, such as an error (`notify`); not
+    #: study data: never saved, loaded or reset
+    notification: NotificationBar = attrs.field(factory=NotificationBar, metadata={OMIT: True})
     #: the question before `write_file` replaces a file that exists
     replace_file: ReplaceFileDialogView = attrs.Factory(ReplaceFileDialogView)
     #: the question before New, Open or Exit loses unsaved changes (`ask_discard_changes`)
@@ -667,7 +671,7 @@ class MainView(View):
 
         It compares what Save would write: the views' state and the model's data (see
         `Model.data_version`). A change undone is no change; nor is UI text, a dialog, the
-        status bar's message, or the study's file name.
+        status bar's message, a notification, or the study's file name.
         """
         return self._saved_study is not None and self._saved_study != self._study_mark()
 
@@ -716,6 +720,19 @@ class MainView(View):
         digest = hashlib.blake2b(json.dumps(views).encode(), digest_size=16).hexdigest()
         model = None if self._model_reference is None else self._model_reference()
         return digest, 0 if model is None else model.data_version
+
+    def notify(self, message: str, kind: LogType = LogType.INFO) -> None:
+        """Show `message` above the page, as `kind`, instead of the message shown.
+
+        A warning or an error stays until the user closes it or `clear_notification`, an
+        information for `notification`'s timeout. The status bar suits a passing message,
+        such as "Saved".
+        """
+        self.notification.show(message, kind)
+
+    def clear_notification(self) -> None:
+        """Remove the message that `notify` shows, if any."""
+        self.notification.clear()
 
     def ask_discard_changes(self, proceed: Callable[[], object]) -> None:
         """Call `proceed()` now if the study has no unsaved changes, else once the user agrees.
@@ -787,7 +804,7 @@ class MainView(View):
         user saves it and never deleted, or a `StreamContent`, which writes the file as the
         user receives it. `filename` names the file; `media_type` says what it holds,
         guessed from `filename` when None. The web downloads it in the browser. Qt and
-        Textual ask where to save it, then write it, and the status bar says how it went.
+        Textual ask where to save it, then write it, and say how it went.
         Call it on the main thread, e.g. from a job's `finished` callback. While no backend
         shows the main view, e.g. in a test, `downloads` keeps the file.
         """

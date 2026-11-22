@@ -54,10 +54,11 @@ def test_the_status_bar_greets_the_name_typed() -> None:
   then emits its signal. So set the field, then emit the signal, for example `text` then
   `text_edited`. For a button, emit `clicked`. For a menu or toolbar action, emit
   `triggered`.
-- **Check the fields.** For example `status_bar.message`, the `text` of a label, the `rows`
-  of a table, or `is_enabled`.
+- **Check the fields.** For example `status_bar.message`, `notification.message` for an
+  error, the `text` of a label, the `rows` of a table, or `is_enabled`.
 - **Keep the messages.** The status bar clears a message after its `timeout`, in a timer of
-  its own. With a `timeout` of 0, the message stays, so a slow test still sees it.
+  its own, and a notification clears an information too. With a `timeout` of 0, the message
+  stays, so a slow test still sees it. A notification's warning or error always stays.
 
 ## Test a component
 

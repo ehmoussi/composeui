@@ -82,7 +82,7 @@ def test_an_app_s_file_is_saved_where_the_user_picks_one_dialog_at_a_time(
     assert view.status_bar.message == "Saved a.csv."
 
     qtbot.mouseClick(export, Qt.MouseButton.LeftButton)  # into a folder that doesn't exist
-    assert view.status_bar.message.startswith("Can't save to b.csv: ")
+    assert view.notification.message.startswith("Can't save to b.csv: ")
     assert sorted(tmp_path.iterdir()) == [tmp_path / "a.csv"]
 
     view.report = tmp_path / "a.csv"  # a file the app wrote: copied, and kept

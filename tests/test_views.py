@@ -210,7 +210,7 @@ class _RefusingMainView(MainView):
     name: LabelView = Factory(LabelView)
 
 
-def test_a_refusal_shows_in_the_status_bar_or_raises_outside_an_app() -> None:
+def test_a_refusal_shows_in_a_notification_or_raises_outside_an_app() -> None:
     app = Application(build_main_view=_RefusingMainView)
     view = app.main_view.name
     lone = LabelView()
@@ -221,7 +221,7 @@ def test_a_refusal_shows_in_the_status_bar_or_raises_outside_an_app() -> None:
     with pytest.raises(RefusedError), lone.refusing("Can't rename: {error}"):
         raise RefusedError(taken)  # nowhere to show it
 
-    assert app.main_view.status_bar.message == "Can't rename: the name is taken"
+    assert app.main_view.notification.message == "Can't rename: the name is taken"
 
 
 def test_a_table_and_a_tree_name_their_marks() -> None:
@@ -364,7 +364,7 @@ def test_a_console_saves_its_text_and_says_how_it_went(tmp_path: Path) -> None:
     assert (tmp_path / "run.log").read_text(encoding="utf-8") == "Ready <ok>\n"
     assert status_bar.message == "Saved the output to run.log."
     output.export_text(tmp_path)  # a folder: not written
-    assert status_bar.message.startswith(f"Can't save to {tmp_path.name}: ")
+    assert app.main_view.notification.message.startswith(f"Can't save to {tmp_path.name}: ")
 
     with pytest.raises(OSError):  # noqa: PT011 (whichever the system raises)
         ConsoleView().export_text(tmp_path)  # outside a main view
@@ -473,11 +473,11 @@ def test_saving_the_summary_asks_before_replacing_a_file_unless_the_picker_did(
     assert summary.read_text().count("\n") == 1
     field.text = "other.txt"
     assert not field.is_replace_agreed
-    # a folder there: asked, then the write fails, which the status bar says
+    # a folder there: asked, then the write fails, which a notification says
     (tmp_path / "other.txt").mkdir()
     view.save_summary()
     dialog.accept()
-    assert view.status_bar.message.startswith("Can't save 'other.txt': ")
+    assert view.notification.message.startswith("Can't save 'other.txt': ")
     # a path rather than a field: asked too, in the main view's language
     view.set_language("fr")
     view.write_file(summary, written.append)
@@ -614,7 +614,7 @@ def test_a_stream_is_saved_in_a_job_and_a_failure_or_a_cancel_leaves_the_file_as
     saved = main_view.status_bar.message
     save_download(main_view, target, StreamContent(fails))
     main_view.jobs.wait()
-    failed = main_view.status_bar.message
+    failed = main_view.notification.message
     save_download(main_view, target, StreamContent(waits))
     assert started.wait(10)
     main_view.jobs.cancel()  # as New, Open and closing the app do
@@ -623,7 +623,8 @@ def test_a_stream_is_saved_in_a_job_and_a_failure_or_a_cancel_leaves_the_file_as
 
     assert saved == "Saved out.csv."
     assert failed == "Can't save to out.csv: source gone."
-    assert main_view.status_bar.message == failed  # a cancel says nothing
+    # a cancel says nothing
+    assert (main_view.status_bar.message, main_view.notification.message) == (saved, failed)
     assert target.read_text(encoding="utf-8") == "".join(rows)
     assert list(tmp_path.iterdir()) == [target]  # no partial file left
 

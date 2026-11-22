@@ -16,7 +16,7 @@ import attrs
 from typing_extensions import override
 
 from composeui.core import study
-from composeui.core._views.base import OMIT, UI_TEXT, View, define_view
+from composeui.core._views.base import OMIT, UI_TEXT, LogType, View, define_view
 from composeui.core._views.dialogs import _CHANGED_ON_DISK_QUESTION
 from composeui.core.model import InvalidStateError, Model
 from composeui.core.renderer import MainRenderer
@@ -263,7 +263,7 @@ class FileMenu(Menu):
             study.open_study(main_view, model, filepath)
         except InvalidStateError as error:
             message = main_view.tr("Can't open {name}: {error}.")
-            main_view.status_bar.show_message(message.format(name=repr(filepath.name), error=error))
+            main_view.notify(message.format(name=repr(filepath.name), error=error), LogType.ERROR)
 
     def _save(self, *, main_view: MainView, model: Optional[Model] = None) -> None:
         """Save the study into its file; without one, ask for it, as Save As does.
@@ -293,12 +293,12 @@ class FileMenu(Menu):
 
     @staticmethod
     def _save_study(main_view: MainView, model: Optional[Model], filepath: Path) -> None:
-        """Save the study into `filepath`; the status bar says why it can't."""
+        """Save the study into `filepath`; a notification says why it can't."""
         try:
             study.save_study(main_view, model, filepath)
         except OSError as error:  # e.g. its folder is gone, or the disk is full
             failed = main_view.tr("Can't save to {name}: {error}.")
-            main_view.status_bar.show_message(failed.format(name=filepath.name, error=error))
+            main_view.notify(failed.format(name=filepath.name, error=error), LogType.ERROR)
 
 
 @define_view

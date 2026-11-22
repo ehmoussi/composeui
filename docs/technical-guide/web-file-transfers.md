@@ -9,7 +9,7 @@ the Open and Save actions transfer a study file. For request order and session l
 - **Uploads.** `widget_file` reads the multipart body itself (`uploads.py`), not through
   Starlette's form parser, whose spooled file a route can only copy. The body goes to a scratch
   file with no lock held, and `WebSession.pick_file` moves that file. A file over the limit
-  keeps being read, to answer in the status bar, but stops going to the disk. Open still reads
+  keeps being read, to answer in a notification, but stops going to the disk. Open still reads
   through Starlette: a study is small. A replaced upload stays until `jobs.is_running` is false:
   nothing says which file a job reads, and a job may not have opened it yet. Holding a file
   through the app's code would bring the same failure back each time an app forgets.

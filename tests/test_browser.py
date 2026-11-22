@@ -1447,11 +1447,36 @@ def test_files_chosen_together_are_uploaded_together_unless_too_large_together(
 
         with _posted(page):
             picker.set_input_files(large)
-        expect(page.locator("footer")).to_contain_text(
+        expect(page.get_by_role("alert")).to_contain_text(
             "Can't open 'large.shp' and 1 other file: the files are larger than 5 MiB together."
         )
         expect(group).to_contain_text("2 files")
         context.close()
+
+
+def test_an_error_stays_in_view_as_the_page_scrolls_until_the_user_closes_it(
+    pipe_page: Page, tmp_path: Path
+) -> None:
+    page = pipe_page
+    page.set_viewport_size({"width": 800, "height": 400})
+    page.goto("/")
+    study = tmp_path / "broken.pipe"
+    study.write_text("not a study", encoding="utf-8")
+
+    with page.expect_response(lambda response: response.url.endswith("/state")):
+        page.locator('input[type="file"][accept=".pipe"]').set_input_files(study)
+    alert = page.get_by_role("alert")
+    expect(alert).to_contain_text("Can't open 'broken.pipe'")
+    for _ in range(100):  # the wheel doesn't wait for the scroll
+        if page.evaluate("window.scrollY") > 300:  # past where the alert first showed
+            break
+        page.mouse.wheel(0, 200)
+
+    assert page.evaluate("window.scrollY") > 300
+    expect(alert).to_be_in_viewport(ratio=1)
+    with _posted(page):
+        alert.get_by_role("button", name="Close").click()
+    expect(alert).to_be_hidden()
 
 
 def test_a_move_of_a_slider_brings_a_new_figure_at_the_figure_s_own_size(browser: Browser) -> None:
@@ -1551,7 +1576,7 @@ def test_a_picked_file_is_uploaded_and_shown(help_page: Page, tmp_path: Path) ->
         file.truncate(2 * HelpMainView.max_upload_size)
     with _posted(page):
         picker.set_input_files(huge)
-    expect(page.locator("footer")).to_contain_text("'huge.md': the file is larger than 5 MiB.")
+    expect(page.get_by_role("alert")).to_contain_text("'huge.md': the file is larger than 5 MiB.")
     expect(markdown.get_by_role("heading", name="Notes again")).to_be_visible()
 
 

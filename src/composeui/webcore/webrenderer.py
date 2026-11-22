@@ -334,6 +334,7 @@ _ICONS: Final[dict[str, str]] = {
         '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>'
     ),
     "circle-x": Markup('<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/>'),
+    "x": Markup('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
 }
 
 #: a tree node's mark: its icon and its color, as a log's are colored

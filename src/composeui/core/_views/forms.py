@@ -14,14 +14,22 @@ from typing import (
 import attrs
 from typing_extensions import override
 
-from composeui.core._views.base import OMIT, UI_TEXT, View, define_view, emit_if_made, view_fields
+from composeui.core._views.base import (
+    OMIT,
+    UI_TEXT,
+    LogType,
+    View,
+    define_view,
+    emit_if_made,
+    view_fields,
+)
 from composeui.core._views.choices import (
     MultiComboBoxMixin,
     MultiValuesMixin,
     TValue,
     ValuesGroupMixin,
 )
-from composeui.core._views.content import LogMixin, LogType, LogView, Validator
+from composeui.core._views.content import LogMixin, LogView, Validator
 from composeui.core._views.controls import (
     CheckBoxMixin,
     FloatRangeSliderMixin,

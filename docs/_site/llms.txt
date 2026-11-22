@@ -13,7 +13,7 @@
 
 - [User guide](https://ehmoussi.github.io/composeui/user-guide.html): index of the pages below
 - [Core concepts](https://ehmoussi.github.io/composeui/user-guide/core-concepts.html): views, signals, the model, studies, and the backends, and how ComposeUI maps to MVVM
-- [Building views](https://ehmoussi.github.io/composeui/user-guide/building-views.html): define views, lay them out, forms and their checks, the main view, saving and loading state, unsaved changes, autosave
+- [Building views](https://ehmoussi.github.io/composeui/user-guide/building-views.html): define views, lay them out, forms and their checks, the main view, its status bar and notifications, saving and loading state, unsaved changes, autosave
 - [Reactive methods](https://ehmoussi.github.io/composeui/user-guide/reactive-methods.html): view methods that run again when a view field they read changes, with slow work in a task
 - [Dashboards from a dataframe](https://ehmoussi.github.io/composeui/user-guide/dashboards.html): a dashboard's main view, a tutorial of a first dashboard, filters of a frame's columns, counts for a bar chart, a frame in a table, a user's CSV or Parquet file, and a frame's download
 - [Widgets](https://ehmoussi.github.io/composeui/user-guide/widgets.html): labels, buttons, inputs, date ranges, choices of several values, uploads of one or several files, downloads, sliders, range sliders, progress bars, metrics, expanders, trees, Markdown, images, drawings, and the File menu

@@ -293,7 +293,7 @@ async def receive_upload(
         yield None, {}
         return
     directory = None
-    # no room for a folder: the body is still read, for the status bar to say so
+    # no room for a folder: the body is still read, for a notification to say so
     with contextlib.suppress(OSError):
         directory = Path(await run_in_threadpool(tempfile.mkdtemp, prefix="composeui-"))
     try:

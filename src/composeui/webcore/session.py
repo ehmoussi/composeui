@@ -30,7 +30,14 @@ from composeui.core.reactivity import batch, stop_reactions
 from composeui.core.registry import RendererType
 from composeui.core.reload import load_reloaded_state, save_reloaded_state
 from composeui.core.study import has_data, open_study, save_study
-from composeui.core.view import ConsoleView, FileUploadMixin, SourceTableView, UploadedFile, View
+from composeui.core.view import (
+    ConsoleView,
+    FileUploadMixin,
+    LogType,
+    SourceTableView,
+    UploadedFile,
+    View,
+)
 from composeui.webcore._renderers.actions import WebActionRenderer
 from composeui.webcore._renderers.charts import WebChartRenderer
 from composeui.webcore._renderers.content import WebConsoleRenderer, WebImageRenderer
@@ -61,7 +68,7 @@ MAX_STATE_SIZE = 5 * 1024 * 1024
 MAX_UNPACKED_SIZE = 20 * MAX_STATE_SIZE
 #: the longest name of an upload's copy
 _MAX_FILE_NAME_LENGTH = 200
-#: why the status bar refuses a file that the disk has no room for
+#: why a notification refuses a file that the disk has no room for
 _NO_ROOM = "the server has no room for it right now"
 _NO_ROOM_FOR_ALL = "the server has no room for them right now"
 #: the file of a saved session that names the directory of its uploads
@@ -534,7 +541,7 @@ class WebSession(RenderTarget):
         the jobs are over (see `_remove_replaced_uploads`). For a cell, until the session ends
         or a table's upload finds no cell holding its path. With an `upload_folder`, the file
         is the app's, in that folder: removed only if, once the edit is over, no cell holds
-        its path. One of a type they don't offer is refused in the status bar. Returns what
+        its path. One of a type they don't offer is refused in a notification. Returns what
         `handle_event` does.
         """
         suffix = _sent_suffix(filename)
@@ -701,7 +708,7 @@ class WebSession(RenderTarget):
     def _refuse_file(self, filename: str, error: str, count: int = 1) -> tuple[str, str | None]:
         others = {1: "", 2: " and 1 other file"}.get(count, f" and {count - 1} other files")
         message = f"Can't open {filename!r}{others}: {error}."
-        return self._respond(functools.partial(self.main_view.status_bar.show_message, message))
+        return self._respond(functools.partial(self.main_view.notify, message, LogType.ERROR))
 
     def _upload_directory(self, widget_id: str) -> Path:
         """Get a new directory for a field's upload, which `_hold_upload` makes the field's."""
@@ -805,7 +812,7 @@ class WebSession(RenderTarget):
     def load_state(self, filename: str, content: bytes) -> str | None:
         """Load an uploaded state file; None once loaded, else the fragments to show.
 
-        On failure, the status bar says why. A study with unsaved changes is loaded once the
+        On failure, a notification says why. A study with unsaved changes is loaded once the
         user agrees to discard them (`MainView.ask_discard_changes`): the fragments show the
         question, and its answer, a post of its own, loads the file. The file is uploaded
         first, as the browser's picker sends it at once; one of another type, or too large,
@@ -829,7 +836,7 @@ class WebSession(RenderTarget):
             return render_dirty(dirty)
 
     def _open_upload(self, filename: str, content: bytes) -> bool:
-        """Open an uploaded study, or say in the status bar why it can't; tell if it opened."""
+        """Open an uploaded study, or say in a notification why it can't; tell if it opened."""
         with tempfile.TemporaryDirectory(prefix="composeui-") as directory:
             path = Path(directory, "study")
             path.write_bytes(content)
@@ -843,7 +850,7 @@ class WebSession(RenderTarget):
         return True
 
     def _refuse_upload(self, filename: str, error: str) -> None:
-        self.main_view.status_bar.show_message(f"Can't open {filename!r}: {error}.")
+        self.main_view.notify(f"Can't open {filename!r}: {error}.", LogType.ERROR)
 
     def fragment(self, widget_id: str) -> str | None:
         """Render one of this session's widgets as it is now; None if it isn't one.

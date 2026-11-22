@@ -81,7 +81,7 @@ tables (`model.runs.add(...)`).
   constraint, from `refusals`, else the message of SQLite. `refusals` maps a part of the
   SQLite message to a message, for example
   `{"thin_wall": "its wall must be thinner than its radius"}`.
-  A view shows the refusal in the status bar with
+  A view shows the refusal in a [notification](building-views.md#notifications) with
   `with self.refusing(self.tr("Can't add the pipe: {error}")):`. The message is translated
   too: the catalog check finds the `refusals` of a table in the module of a view. In a
   `cell_edited` or `record_edited` callback, the edit is refused as well.
@@ -102,7 +102,7 @@ tables (`model.runs.add(...)`).
   state of the views and the database together, as a zip archive with the app's `extension`.
   The model works on a scratch copy in a temporary file. So the user's file changes only
   when the user saves it, and a failed save leaves the file whole. Opening checks everything
-  first. When a file does not fit, the study stays as it was, and the status bar says why.
+  first. When a file does not fit, the study stays as it was, and a notification says why.
 - **Versions.** Raise `schema_version` with every change to the tables. Add the step from
   the previous version to `migrations` (`{1: add_stress_column}`). When the user opens a
   study saved by an older version, the model brings it up to date. A study saved by a newer

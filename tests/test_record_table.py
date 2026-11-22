@@ -122,10 +122,10 @@ def test_a_cell_that_doesn_t_parse_refuses_the_edit_and_says_why(
 
     assert (table.records, table.rows, emitted, applied) == (records, rows, [], [])
     header = table.headers[column]
-    assert main_view.status_bar.message == f'{header}: "{text}" isn\'t a valid value'
+    assert main_view.notification.message == f'{header}: "{text}" isn\'t a valid value'
     # in the app's language too
     main_view.set_language("fr")
-    assert main_view.status_bar.message == f"{header} : « {text} » n'est pas une valeur valide"
+    assert main_view.notification.message == f"{header} : « {text} » n'est pas une valeur valide"
 
 
 @attrs.frozen
@@ -208,7 +208,7 @@ def test_a_refusal_in_record_edited_refuses_the_edit(main_view: RoomsMainView) -
     table.emit_cell_edited(0, 1, "5")
 
     assert table.records == records
-    assert main_view.status_bar.message == "Can't edit the room: too cold"
+    assert main_view.notification.message == "Can't edit the room: too cold"
 
 
 class Role(enum.Enum):
@@ -366,13 +366,13 @@ def test_a_cell_edited_to_the_text_another_shows_takes_its_value() -> None:
     @given(_SAMPLES, _SAMPLES)
     def edit(record: _Sample, other: _Sample) -> None:
         table.records = [record, other]
-        main_view.status_bar.clear_message()
+        main_view.clear_notification()
         for column, name in enumerate(attrs.fields_dict(_Sample)):
             table.emit_cell_edited(0, column, table.rows[1][column])
             # the other's value, of the field's type: an enum's member, not its value
             edited, expected = getattr(table.records[0], name), getattr(other, name)
             assert (edited, type(edited)) == (expected, type(expected)), name
-            assert main_view.status_bar.message == "", name
+            assert main_view.notification.message == "", name
 
     edit()
 
@@ -390,7 +390,7 @@ def test_a_decimal_or_an_enum_cell_that_doesn_t_parse_refuses_the_edit(
     table.emit_cell_edited(0, column, text)
 
     assert table.records == [_SAMPLE]
-    assert main_view.status_bar.message == f'{field}: "{text}" isn\'t a valid value'
+    assert main_view.notification.message == f'{field}: "{text}" isn\'t a valid value'
 
 
 def test_a_study_saves_decimals_as_they_are_and_enums_of_numbers(tmp_path: Path) -> None:
@@ -421,14 +421,14 @@ def test_a_table_not_knowing_its_records_type_says_how_to_build_it() -> None:
 
 
 def test_a_cell_that_doesn_t_parse_outside_an_app_is_refused_saying_nothing() -> None:
-    view = RoomsMainView()  # not shown by an application: no status bar to tell
+    view = RoomsMainView()  # not shown by an application: no notification to tell
     table = view.rooms
     records = table.records
 
     table.emit_cell_edited(1, 1, "warm")
 
     assert table.records == records
-    assert view.status_bar.message == ""
+    assert view.notification.message == ""
 
 
 _T = TypeVar("_T", bound=attrs.AttrsInstance)

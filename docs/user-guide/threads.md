@@ -57,7 +57,8 @@ main_view.jobs.wait()  # Only for a main view with no toolkit.
 
 Use a different destination for each export. The jobs can finish in either order.
 
-- **Errors.** Connect `failed` to show an error. See [How jobs behave](#how-jobs-behave)
+- **Errors.** Connect `failed` to show an error, for example in a
+  [notification](building-views.md#notifications). See [How jobs behave](#how-jobs-behave)
   for which exceptions it emits.
 - **Callbacks** connected to the signals of a job get the `main_view` and `model` that they
   ask for, as for any signal.

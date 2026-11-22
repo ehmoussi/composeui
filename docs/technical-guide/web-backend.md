@@ -76,18 +76,18 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   renderers share, such as `_view_html` and the icons. Each family of renderers has its module in
   `_renderers/`: `inputs.py` (text, numbers, dates), `controls.py` (check boxes, buttons, sliders),
   `choices.py` (also the tree), `content.py` (labels, images, Markdown, consoles, logs, metrics, the
-  status bar), `charts.py`, `graphics.py` (maps, drawings), `tables.py`, `files.py` (path fields,
-  uploads, the server's files), `forms.py`, `actions.py` (menus, toolbars), `dialogs.py`,
-  `containers.py` (rows, columns, panes, lists, tabs, pages) and `navigation.py` (the main view, its
-  sidebar and router). A module holds one family: split one that starts to mix two, whatever its
-  length. Such a module imports `webrenderer.py`. So `renderers.py`, not `webrenderer.py`, maps each
-  renderer key to its class, written out, not discovered. The base names no renderer at run time: it
-  asks each one, through `is_drawn_apart` (a dialog, drawn at the end of the page) and `shows` (a
-  router's or a tab's page shown). A form row's label is always a `WebFormLabelRenderer`, which the
-  base only casts to. When the base must treat a renderer apart, add such a hook with a default, not
-  an `isinstance` check, which would tie that renderer to the base's module. `changes.py` collects
-  the renderers that a request changes (`collect_dirty`), and `rendertarget.py` holds a session's
-  view tree and its lock (`RenderTarget`).
+  notification, the status bar), `charts.py`, `graphics.py` (maps, drawings), `tables.py`,
+  `files.py` (path fields, uploads, the server's files), `forms.py`, `actions.py` (menus, toolbars),
+  `dialogs.py`, `containers.py` (rows, columns, panes, lists, tabs, pages) and `navigation.py` (the
+  main view, its sidebar and router). A module holds one family: split one that starts to mix two,
+  whatever its length. Such a module imports `webrenderer.py`. So `renderers.py`, not
+  `webrenderer.py`, maps each renderer key to its class, written out, not discovered. The base names
+  no renderer at run time: it asks each one, through `is_drawn_apart` (a dialog, drawn at the end of
+  the page) and `shows` (a router's or a tab's page shown). A form row's label is always a
+  `WebFormLabelRenderer`, which the base only casts to. When the base must treat a renderer apart,
+  add such a hook with a default, not an `isinstance` check, which would tie that renderer to the
+  base's module. `changes.py` collects the renderers that a request changes (`collect_dirty`), and
+  `rendertarget.py` holds a session's view tree and its lock (`RenderTarget`).
 - **No code in the markup.** The page's `Content-Security-Policy` (`headers.py`) runs script
   files only, and htmx runs without `allowEval`: no inline handler, `hx-on`, `js:` value, or
   trigger filter. A renderer marks its element (`data-post-event`, `data-close-dialog`, ...) or
@@ -225,15 +225,15 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   `page.js` fails instead: htmx drops a held request whose element a swap has since replaced,
   and gives no promise to wait on for a trigger's request.
 - **Sessions.** A signed cookie maps to a `WebSession`, which holds its renderers by id and an
-  `RLock` (the status bar timer takes it through `call_on_main_thread`). A request whose session
-  is gone answers `HX-Refresh`. The tabs of a browser share one cookie. So a tab left open on a
-  page of an ended session sends the cookie of a newer tab's session. The session ended when
-  the server restarted, or when it expired. The newer session doesn't have the views of the
-  page. Worse, `id()` can give one of its views an id that the page shows. So each page names
-  its session's `page_tag`. `page.js` sends it with each htmx request (`X-ComposeUI-Session`),
-  and Save's form in its `session` field. `_session` in `routes.py` answers a request with
-  another tag as if its session were gone. A plain link, such as a download, sends no tag and
-  is not checked: it only reads.
+  `RLock` (the timers of the status bar and of the notification take it through
+  `call_on_main_thread`). A request whose session is gone answers `HX-Refresh`. The tabs of a
+  browser share one cookie. So a tab left open on a page of an ended session sends the cookie of a
+  newer tab's session. The session ended when the server restarted, or when it expired. The newer
+  session doesn't have the views of the page. Worse, `id()` can give one of its views an id that the
+  page shows. So each page names its session's `page_tag`. `page.js` sends it with each htmx request
+  (`X-ComposeUI-Session`), and Save's form in its `session` field. `_session` in `routes.py` answers
+  a request with another tag as if its session were gone. A plain link, such as a download, sends no
+  tag and is not checked: it only reads.
 - **Idle sessions on disk** (`session_idle`). The `SessionStore` tracks four states: in memory,
   being saved, on disk, and being restored.
 
@@ -298,6 +298,13 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   A drop-down is as wide as its longest item, the shortcut a faded hint beside it. On a phone,
   the buttons with an icon keep only their icon, and the app's title is cut short. So the header
   holds on one line. The pages' toolbar has a row of its own.
+- **Notification.** The main view's `notification` is drawn above the page's card, not in it:
+  it isn't the page's content. It is sticky below the header, so a long page doesn't scroll it
+  away. Its close button posts the number of the message it shows (`NotificationBar.number`):
+  a job's callback can replace the message before the page shows the new one, and a close of
+  the old one must not close a message that the user never saw. The same message shown again
+  keeps its number. An information fetches the bar again after its timeout, as the status bar
+  does.
 - **Icons.** An action's `icon` is a file path, as Qt reads it: `icons.py` serves the file at
   `/icon/<digest><suffix>`, an address naming its content, cached for good. Only image files
   that a view has named are served, and `icon` is never loaded from a study, so no request can

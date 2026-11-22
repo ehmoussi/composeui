@@ -44,6 +44,7 @@ from composeui.core.view import (
     InputView,
     LabelView,
     ListSource,
+    LogType,
     MainView,
     MetricView,
     MultiComboBoxView,
@@ -1543,6 +1544,7 @@ def test_unsaved_changes_are_what_save_would_write_differently() -> None:
     view.file_menu.new.text = "Fresh"
     view.replace_file.open()
     view.status_bar.show_message("Can't open 'other.study'")
+    view.notify("Can't save to 'other.study'", LogType.ERROR)
     view.state_filepath = Path("other.study")
     assert not view.has_unsaved_changes()
     view.note.text = "changed"
@@ -1692,7 +1694,7 @@ def test_the_open_action_shows_why_a_state_file_is_rejected(tmp_path: Path) -> N
 
     view.file_menu.open_file.triggered.emit()
 
-    assert view.status_bar.message == "Can't open 'bad.study': it isn't a valid .study file."
+    assert view.notification.message == "Can't open 'bad.study': it isn't a valid .study file."
 
 
 def test_a_table_selects_only_one_of_its_rows_and_keeps_it_through_new_rows() -> None:
@@ -1903,7 +1905,7 @@ def test_save_asks_before_it_replaces_a_file_changed_on_disk(
         assert json.loads(path.read_text())["views"]["note"]["text"] == "mine"
 
 
-def test_save_into_a_folder_gone_says_why_in_the_status_bar(tmp_path: Path) -> None:
+def test_save_into_a_folder_gone_says_why_in_a_notification(tmp_path: Path) -> None:
     view = _StudyMainView()
     view.status_bar.timeout = 0  # no timer left to clear its message
     _add_reference_to_signals(view, None)  # what an application does: injects `main_view`
@@ -1916,7 +1918,7 @@ def test_save_into_a_folder_gone_says_why_in_the_status_bar(tmp_path: Path) -> N
 
     view.file_menu.save.triggered.emit()
 
-    assert view.status_bar.message.startswith("Can't save to mine.study: ")
+    assert view.notification.message.startswith("Can't save to mine.study: ")
 
 
 def test_a_none_choice_is_selected_saved_and_loaded_as_any_other(tmp_path: Path) -> None:

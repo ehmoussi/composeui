@@ -11,6 +11,12 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `MainView.notify(message, kind)` shows a message above the page, with its severity, on every
+  backend: a warning or an error stays until the user closes it, an information goes after
+  `notification.timeout`. `clear_notification()` removes it, and `notification.closed` emits
+  when the user closes it. The web reads it out to screen readers and keeps it in view below
+  the header. A study never saves it.
+
 - `composeui translations` checks an app's translation catalogs, with the options of
   `python -m composeui.core.translationcheck`. It takes the main view's file, such as
   `composeui translations app.py`, or its module and class. Both commands now refuse a class
@@ -65,6 +71,11 @@ backends' modules included, can change in any release without an entry here.
 
 ### Changed
 
+- ComposeUI's own failures show in the notification, no longer in the status bar, where they
+  went after 3 seconds: a study, a file or an export that can't be opened or saved, a failed
+  autosave, a refused upload, a table's cell that doesn't parse, and a model's refusal
+  (`refusing`). The status bar keeps the successes, such as "Saved". A test that reads such a
+  failure reads `main_view.notification.message`.
 - `FileUploadView.file` is now a read-only property: the first of `files`. Set the files with
   `take_file`, `take_files`, or `clear`.
 - On the web, a `LabelView` keeps the line breaks of its text, as Qt and Textual do.

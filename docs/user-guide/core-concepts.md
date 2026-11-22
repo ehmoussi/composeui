@@ -6,7 +6,7 @@ shows:
 | Concept | Role |
 | --- | --- |
 | View (`composeui.core.view`) | A typed `attrs` class that holds the state of a part of the UI, such as `InputView`, `FormView`, or `TableView`. You compose views by nesting view fields in other views. See [Building views](building-views.md). |
-| Main view | The root view, a subclass of `MainView`: the window, with its menus, its status bar, and its content. See [The main view](building-views.md#the-main-view). |
+| Main view | The root view, a subclass of `MainView`: the window, with its menus, its status bar, its notification, and its content. See [The main view](building-views.md#the-main-view). |
 | Signal (`composeui.core.signal`) | An event of a view or a model, such as `clicked`. `signal.connect(callback)` calls the callback on each event, and gives it the `view`, `main_view`, or `model` that it asks for. |
 | Reactive method (`composeui.core.reactivity`) | A view method decorated with `@reactive`. ComposeUI runs it again each time a view field that it read changes. See [Reactive methods](reactive-methods.md). |
 | Model (`composeui.core.model`) | The app's data beside the views. It is optional. `SqliteModel` keeps the data in a [SQLite database](sqlite-model.md). |

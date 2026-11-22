@@ -329,6 +329,11 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   (`T` is in `composeui.core.view`). Join translated text with `join_text(separator, parts)`,
   not `str.join`, whose result stays in its language.
   See https://ehmoussi.github.io/composeui/user-guide/translation.html
+- **Show a failure with `main_view.notify(message, LogType.ERROR)`**, not the status bar,
+  whose message goes after a few seconds: the error stays above the page until the user
+  closes it. Keep the status bar for a passing message, such as "Saved". ComposeUI shows its
+  own failures and a model's refusals (`refusing`) this way. See
+  https://ehmoussi.github.io/composeui/user-guide/building-views.html#notifications
 - **Ask a confirmation with `dialog.ask(on_accept, on_reject=None)`**, not a field that
   keeps what the dialog is about: it opens the dialog and calls one function once the user
   answers. `dialog.forget()` closes it without calling either.

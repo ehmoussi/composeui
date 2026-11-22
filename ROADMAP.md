@@ -106,8 +106,8 @@ The SQLite model is complete otherwise: do not rebuild it.
   column's values in the filter bar, on `MultiValuesMixin`.
 - **A searchable picker** (Now). A combobox that filters its values as the user types, searched
   on the server for long lists.
-- **Switches, busy indicators and notifications** (Now). A switch look for `CheckBoxView`, a
-  progress bar without a maximum, and `notify` for a short message.
+- **Switches and busy indicators** (Now). A switch look for `CheckBoxView`, and a progress bar
+  without a maximum.
 - **Highlighted code in Markdown** (Now). Code blocks of a `MarkdownView` highlighted by
   Pygments, on the web and Qt.
 - **Context menus** (Next). On tree nodes and table rows, built from `Menu`, with keyboard

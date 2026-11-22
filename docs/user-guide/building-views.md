@@ -195,7 +195,8 @@ rows only.
   the "All" of a filter, `{"All regions": None, "North": "north"}`.
 - **A [`LabelView`](widgets.md#label)** shows read-only text, for example a result.
 - **The [status bar](#the-status-bar)** of the main view shows a short message, for
-  example the result of a form.
+  example the result of a form. A [notification](#notifications) shows an error above the
+  page until the user closes it.
 
 ## Check a form
 
@@ -253,7 +254,8 @@ A subclass of `MainView` is the app. Its class variables configure it:
   [Translating the app](translation.md)).
 
 Its view fields are the content of the window, one above the other. Its `status_bar` shows
-short messages, and its `jobs` [run work in threads](threads.md).
+short messages, its `notification` an error until the user closes it, and its `jobs`
+[run work in threads](threads.md).
 
 A dashboard's main view, `DashboardView`, is wide and has no File menu: see
 [Dashboards from a dataframe](dashboards.md#a-dashboards-main-view).
@@ -261,7 +263,7 @@ A dashboard's main view, `DashboardView`, is wide and has no File menu: see
 ### The status bar
 
 The `status_bar` of the main view, a `StatusBar`, is a line at the bottom of the window. It shows
-a short message to the user, for example "Saved", or why an edit was refused:
+a short message to the user, for example "Saved":
 
 ```python
 main_view.status_bar.show_message("Saved")
@@ -272,10 +274,45 @@ main_view.status_bar.show_message("Saved")
 - **A new message replaces the previous one,** and its timeout starts again.
 - **`message`** holds the message shown, or `""`.
 
-ComposeUI writes in the status bar too, for example when a table refuses an edit or a study
-fails to open. Qt shows a `QStatusBar`, Textual a line at the bottom of the screen, and the
-web a footer at the bottom of the page. On the web, the page clears the message itself after
-its timeout.
+ComposeUI writes in the status bar too, for example when a file is saved or a table is
+exported. It shows a failure in a [notification](#notifications). Qt shows a `QStatusBar`,
+Textual a line at the bottom of the screen, and the web a footer at the bottom of the page. On
+the web, the page clears the message itself after its timeout.
+
+### Notifications
+
+`notify` shows a message above the page, with its severity, a `LogType`, in the main view's
+`notification`, a `NotificationBar`. Use it for a message that the user must not miss, such as
+why a file can't be saved:
+
+```python
+from composeui.core.view import LogType
+
+main_view.notify("Can't save to study.pipe: the disk is full.", LogType.ERROR)
+```
+
+- **A warning or an error stays** until the user closes it, the next message replaces it, or
+  the app calls `main_view.clear_notification()`.
+- **An information goes after `timeout` seconds,** 5 by default (`notification.timeout`). Its
+  kind is `LogType.INFO`, the default of `notify`. With a `timeout` of 0, it stays too.
+- **One message at a time.** A new message replaces the previous one. The same message again
+  starts its timeout again.
+- **The user closes it** with the button at its end. Then `notification.closed` emits. It never
+  emits when the app clears the message.
+- **`notification.message` and `notification.kind`** hold the message shown, or `""`, and its
+  kind.
+- **Not study data.** A study never saves the notification. New and Open keep it, and it
+  doesn't count as an [unsaved change](#unsaved-changes). A web session saved to disk while
+  idle, and a [reload](running-the-app.md#reloading-the-app-on-a-change) after a change of the
+  code, show none.
+
+ComposeUI shows its own failures this way, for example when a study fails to open, a table refuses
+an edit, or the model refuses a change (`refusing`). Qt shows a tinted line with an icon of its kind
+above the pages, Textual a bordered line above the content, outside its scrolling, and the web an
+alert above the page's card, kept in view below the header as the page scrolls. The web reads an
+error or a warning out at once to a screen reader, and an information when the reader is idle.
+[`src/examples/markdownviewer.py`](../../src/examples/markdownviewer.py) says in a notification why
+a file can't be read.
 
 ### The app's icon
 
@@ -503,11 +540,11 @@ changes. Discard them?", with Discard and Cancel. Cancel leaves the study as it 
 are those since the study was last saved, opened, or started. An app without a File menu
 (`has_file_menu = False`) never asks, as the user can't save.
 
-A change is what Save would write differently: a field of the study, or the model's data. A
-change undone is no change. UI text, a dialog, the status bar's message, and the tab shown are
-not changes (see the list above). A model tells its changes with `Model.data_version`:
-`SqliteModel` counts its committed writes, but not those of the jobs that the study's start
-started (see below). A model of your own with data changes it as its data changes.
+A change is what Save would write differently: a field of the study, or the model's data. A change
+undone is no change. UI text, a dialog, the status bar's message, a notification, and the tab shown
+are not changes (see the list above). A model tells its changes with `Model.data_version`:
+`SqliteModel` counts its committed writes, but not those of the jobs that the study's start started
+(see below). A model of your own with data changes it as its data changes.
 
 What the app does on its own as the study starts is not a change: its setup, the callbacks of
 `loaded`, its command-line options, and the jobs they start, such as a download of the data a
@@ -596,7 +633,7 @@ class PipeMainView(MainView):
   - **Closing the question,** such as with Escape, keeps the work for the next start.
 
   Work that no longer opens, such as one of a newer version of the app, is moved aside in its
-  folder, and the status bar says why.
+  folder, and a notification says why.
 - **Where it is.** In a folder of the app's own, in a `composeui` folder of the user's data
   directory: `~/.local/share/composeui` on Linux (`$XDG_DATA_HOME`),
   `~/Library/Application Support/composeui` on macOS, and `%LOCALAPPDATA%\composeui` on
@@ -632,7 +669,7 @@ the views, that field keeps its value. So most changes need no new version:
 Raise `state_version` only for a change of the second kind. A raised version has two
 effects:
 
-- **Older versions of the app refuse the new files,** and the status bar says why. An older
+- **Older versions of the app refuse the new files,** and a notification says why. An older
   version cannot read the changed field. It would show the study without that value, and a
   Save would then lose the value for good. Open also refuses a file of a newer ComposeUI
   file format.

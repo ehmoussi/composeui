@@ -305,7 +305,7 @@ def test_a_table_s_file_path_typed_outside_its_server_roots_is_refused(
     for text in ("/etc/passwd", str(root / "beam" / ".." / ".."), "a\0b"):
         type_path(text)
         assert table.rows[0] == ["Mesh", ""], text  # the cell keeps its text
-    assert view.status_bar.message == (
+    assert view.notification.message == (
         "Impossible de prendre a\0b : il n'est pas dans les dossiers que liste cette colonne."
     )
     inside = str(root / "beam" / "beam.comm")
@@ -806,7 +806,7 @@ def test_a_table_s_file_path_is_uploaded_or_typed_its_copy_kept_while_a_cell_hol
         )
         # another type is refused
         body = upload("0", "notes.md")
-        status = _swapped(body, _widget_id(view.status_bar.renderer))
+        status = _swapped(body, _widget_id(view.notification.renderer))
         assert status.text == "Can't open 'notes.md': expected a .csv file."
         # or the path is typed
         client.post(f"/widget/{table_id}", data={"event": "start_edit", "row": "1", "column": "1"})
@@ -877,7 +877,7 @@ def test_a_table_s_upload_that_no_cell_takes_leaves_nothing_in_the_app_s_folder(
     # a folder that can't take the file: the cell keeps its text, the status bar says why
     result = _pick_cell_file(session, table_id, 0, "flows.csv", b"1,2")
     assert result is not None
-    status = _swapped(result[0], _widget_id(main_view.status_bar.renderer))
+    status = _swapped(result[0], _widget_id(main_view.notification.renderer))
     assert status.text == "Can't open 'flows.csv': no such file or directory."
     assert (table.rows[0][1], folder.exists()) == ("", False)
 
@@ -891,7 +891,7 @@ def test_a_table_s_upload_that_no_cell_takes_leaves_nothing_in_the_app_s_folder(
         patch.setattr("composeui.webcore.session._publish", fill_the_disk)
         result = _pick_cell_file(session, table_id, 0, "flows.csv", b"1,2")
     assert result is not None
-    status = _swapped(result[0], _widget_id(main_view.status_bar.renderer))
+    status = _swapped(result[0], _widget_id(main_view.notification.renderer))
     assert status.text == "Can't open 'flows.csv': no space left on device."
     assert (table.rows[0][1], list(folder.iterdir())) == ("", [])
 

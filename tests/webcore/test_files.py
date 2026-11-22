@@ -383,7 +383,7 @@ def test_files_given_together_are_refused_together_and_the_last_ones_stay(
             + [(field_name, (None, value)) for field_name, value in page_fields.items()],
         )
 
-        status = _swapped(response.text, _widget_id(main_view.status_bar.renderer))
+        status = _swapped(response.text, _widget_id(main_view.notification.renderer))
         assert status.text == message
         assert (shapes.files, kept[0].path.read_bytes()) == (kept, b"0")
         assert list(uploads.iterdir()) == [kept[0].path.parent]
@@ -508,7 +508,7 @@ def test_an_upload_that_fails_to_arrive_keeps_the_file_the_view_holds(
     session.poll_jobs()  # the next request, which removes what was replaced
 
     assert result is not None
-    status = _swapped(result[0], _widget_id(main_view.status_bar.renderer))
+    status = _swapped(result[0], _widget_id(main_view.notification.renderer))
     assert "no room" in status.text
     assert dataset.file == first
     assert first.path.read_bytes() == b"first"
@@ -565,7 +565,7 @@ def test_a_file_path_is_typed_or_uploaded_its_copy_kept_until_the_session_ends()
     assert (picked[-1][0].name, first.exists()) == ("levels.txt", False)
     result = _pick_file(session, field.widget_id, "notes.md", b"#")
     assert result is not None
-    status = _swapped(result[0], _widget_id(main_view.status_bar.renderer))
+    status = _swapped(result[0], _widget_id(main_view.notification.renderer))
     assert status.text == "Can't open 'notes.md': expected a .csv or .txt or .text file."
     assert len(picked) == 2
 

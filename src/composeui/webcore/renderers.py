@@ -36,6 +36,7 @@ from composeui.webcore._renderers.content import (
     WebLogRenderer,
     WebMarkdownRenderer,
     WebMetricRenderer,
+    WebNotificationBarRenderer,
     WebStatusBarRenderer,
 )
 from composeui.webcore._renderers.controls import (
@@ -132,6 +133,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "separator": WebSeparatorRenderer,
     "sidebar": WebSidebarRenderer,
     "splitter": WebSplitterRenderer,
+    "notification_bar": WebNotificationBarRenderer,
     "status_bar": WebStatusBarRenderer,
     "table": WebTableRenderer,
     "text_area": WebTextAreaRenderer,

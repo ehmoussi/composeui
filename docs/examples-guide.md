@@ -47,7 +47,7 @@ options, such as `--language` and `-f FILE`.
 | Example | Default backend | Shows |
 | --- | --- | --- |
 | [`pipeform.py`](../src/examples/pipeform.py) | web | Forms and their checks, pages, a menu, a confirm dialog, Markdown help, a French translation |
-| [`markdownviewer.py`](../src/examples/markdownviewer.py) | web | A Markdown view, a file path input, an option of the app's own, no File menu |
+| [`markdownviewer.py`](../src/examples/markdownviewer.py) | web | A Markdown view, a file path input, a notification, an option of the app's own, no File menu |
 | [`studyinputs.py`](../src/examples/studyinputs.py) | web | A table of a study's files: paths picked by each row's kind, relative to the study's folder; a summary saved after asking before replacing a file |
 | [`taskview.py`](../src/examples/taskview.py) | web | Jobs in threads, metrics, a progress bar, a step chart, an expander, a button and a link in a table's cells, a French translation |
 | [`pipechart.py`](../src/examples/pipechart.py) | qt | Line and scatter charts, a reference line, tabs, a table, check boxes and comboboxes in a table's cells, colored, marked, and disabled cells, cells spanning rows, a header group, row headers |
@@ -159,6 +159,7 @@ It shows:
 - a [file path input](user-guide/widgets.md#file-path-input) at the top: the user types the path of
   a file, or picks the file with the "…" button. On the web, the browser uploads it. The
   reload button reads the file again, for example after the user edits it.
+- a [notification](user-guide/building-views.md#notifications) that says why a file can't be read.
 - an app without studies: `has_file_menu = False` leaves out the File menu.
 
 ## Study inputs
@@ -197,7 +198,8 @@ It shows:
 - "Save summary" writes the table's rows to the text file of the
   [save path input](user-guide/widgets.md#save-path-input) beside it. Over a file that
   exists, [`write_file`](user-guide/organizing-the-window.md#replacing-a-file) asks first,
-  unless the user already agreed in the field's "…" picker.
+  unless the user already agreed in the field's "…" picker. A
+  [notification](user-guide/building-views.md#notifications) says why the file can't be written.
 
 ## Task view
 

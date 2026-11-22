@@ -42,7 +42,7 @@ def test_opening_a_file_shows_it_and_a_missing_one_says_why(
 
     main_view.open_markdown(tmp_path / "missing.md")
     assert main_view.document.text == "# Notes\n\n- été\n"  # still the last file
-    assert main_view.status_bar.message.startswith("Can't open 'missing.md': ")
+    assert main_view.notification.message.startswith("Can't open 'missing.md': ")
 
 
 def test_the_picked_file_fills_the_window_and_is_read_again_on_reload(
