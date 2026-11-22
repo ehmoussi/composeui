@@ -462,11 +462,17 @@ def _type_name(client: TestClient, main_view: HelloMainView, name: str) -> None:
 class _Clock:
     """The store's `time`, whose `monotonic` is `now`: moved by the test, not waited for."""
 
+    #: the clock time (`time`) when `now` is 0
+    START = 1_800_000_000.0
+
     def __init__(self) -> None:
         self.now = 0.0
 
     def monotonic(self) -> float:
         return self.now
+
+    def time(self) -> float:
+        return self.START + self.now
 
 
 def _action_id(action: Any) -> str:

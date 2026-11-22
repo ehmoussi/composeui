@@ -11,6 +11,14 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `WebSettings(session_folder=...)` keeps the web sessions across a restart of the server. The
+  server saves every session there as it stops, and keeps there the key that signs the cookies,
+  and the files uploaded to path fields and table cells. With `session_idle`, the idle sessions
+  wait there, and survive a crash too. A session that holds what a study doesn't keep, such as
+  a running job or a file in an upload view, is lost at a restart. A session idle for
+  `session_ttl` while no server ran ends. One server at a time uses a folder, which must be the
+  sessions' own.
+
 - `MainView.build_initial_view()` lets apps with required main-view constructor arguments
   load studies, start new studies, and restore state after a reload or web session hibernation.
 
