@@ -894,6 +894,15 @@ def test_a_session_on_disk_keeps_its_uploads_until_the_server_stops() -> None:
 _IDLE = WebSettings(session_idle=0.05)
 
 
+@define_view
+class _OwnedHelloMainView(HelloMainView):
+    owner: str = attrs.field()
+
+    @override
+    def build_initial_view(self) -> _OwnedHelloMainView:
+        return _OwnedHelloMainView(owner=self.owner)
+
+
 class _IdleGuestbookApp(WebModelApplication[HelloMainView, _ReleasedModel]):
     """The hello app with a model, its sessions saved to disk once idle on the test's clock."""
 
@@ -901,8 +910,12 @@ class _IdleGuestbookApp(WebModelApplication[HelloMainView, _ReleasedModel]):
         self,
         build_model: Callable[[], _ReleasedModel] = _ReleasedModel,
         settings: WebSettings = _IDLE,
+        *,
+        build_main_view: Callable[[], HelloMainView] = HelloMainView,
     ) -> None:
-        super().__init__(build_main_view=HelloMainView, build_model=build_model, settings=settings)
+        super().__init__(
+            build_main_view=build_main_view, build_model=build_model, settings=settings
+        )
         self.session_views: list[HelloMainView] = []
         self.models: list[_ReleasedModel] = []
 
@@ -925,12 +938,16 @@ def _wait_until_saved(app: _IdleGuestbookApp) -> None:
     _wait_until_released(app.models[0])
 
 
-def test_an_idle_session_goes_to_disk_and_its_page_reloads_into_it_as_it_was() -> None:
-    app = _IdleGuestbookApp()
+@pytest.mark.parametrize("persistent", [False, True])
+def test_an_idle_session_goes_to_disk_and_its_page_reloads_into_it_as_it_was(
+    tmp_path: Path, persistent: bool
+) -> None:
+    app = _IdleGuestbookApp(build_main_view=lambda: _OwnedHelloMainView(owner="Ann"))
+    server = app.create_starlette_app(saved_sessions=tmp_path if persistent else None)
     clock = _Clock()
     with (
         mock.patch.object(session_module, "time", clock),
-        _Browser(app.create_starlette_app()) as browser,
+        _Browser(server) as browser,
     ):
         page = browser.get("/").text
         tag = re.search(rf'name="{SESSION_TAG_FIELD}" value="([0-9a-f]+)"', page)
@@ -938,6 +955,7 @@ def test_an_idle_session_goes_to_disk_and_its_page_reloads_into_it_as_it_was() -
         _type_name(browser, app.session_views[0], "Bob")
         clock.now += 1.0
         _wait_until_saved(app)
+        assert app.models[0].is_released
         # the page that the saved session served, as it posts its next event
         response = browser.post(
             f"/widget/{_field_id(app.session_views[0].form.name)}",

@@ -619,17 +619,29 @@ class MainView(View):
         self.jobs._set_enabled()  # noqa: SLF001
         _show_checked(self)
 
-    def check_state_data(self, data: Any) -> None:
-        """Raise `InvalidStateError` if `load_state_data` can't load `data`.
+    def build_initial_view(self) -> MainView:
+        """Build a new, unrendered main view of the same class in its initial state.
 
-        The data is applied to a newly built main view. Applying sets the fields one by one,
-        so data that fails halfway would otherwise leave this view half loaded.
+        By default, this calls the class without arguments. Override it if the constructor
+        needs arguments. Do not share child views with the running app or start jobs here.
+        ComposeUI uses the new view to check saved state, start a new study, and compare
+        initial values across a reload.
+        """
+        return type(self)()
+
+    def check_state_data(self, data: Any) -> None:
+        """Raise `InvalidStateError` if the data does not fit the view.
+
+        Apply the data to a new view from `build_initial_view`. If a field fails to load
+        after other fields have loaded, this view stays unchanged. Errors from building
+        the new view propagate as they are.
         """
         if not isinstance(data, dict):
             msg = f"it isn't a valid {self.extension} file"
             raise InvalidStateError(msg)
+        initial = self.build_initial_view()
         try:
-            _apply_state(type(self)(), data)
+            _apply_state(initial, data)
         except _BAD_STATE_ERRORS as error:
             msg = "it doesn't match this application"
             raise InvalidStateError(msg) from error
@@ -639,13 +651,15 @@ class MainView(View):
         return CONVERTER.unstructure(self)
 
     def reset_state(self) -> None:
-        """Set every view back to the state of a newly built main view (a new study).
+        """Set every view back to the state from `build_initial_view` (a new study).
 
         The tree is reset in place, as `load_state` loads into it, so renderers and
         connected signals keep working.
         """
+        _check_main_thread("MainView.reset_state")
+        initial = self.build_initial_view()
         self.jobs.drop()  # working for the study replaced
-        _reset_state(self, type(self)())
+        _reset_state(self, initial)
         _show_checked(self)
         # the new view's text is as written in the code
         _retranslate(self, self._tr)

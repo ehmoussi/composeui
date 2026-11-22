@@ -28,6 +28,7 @@ from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.signal import Signal
 from composeui.core.view import (
     CONVERTER,
+    OMIT,
     ActionView,
     Axis,
     BarMode,
@@ -43,6 +44,7 @@ from composeui.core.view import (
     Frame,
     ImageView,
     InputView,
+    LabelRowIntInputView,
     LabelView,
     ListSource,
     LogType,
@@ -84,6 +86,8 @@ from tests.toolbar import ToolBarMainView
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    from composeui.core.jobs import Job
 
 
 # Generic mixins must be bound to a concrete type through a subclass (like
@@ -1708,6 +1712,87 @@ def test_load_state_failing_halfway_leaves_the_view_unchanged(tmp_path: Path) ->
 
     assert view.minimum_width == 720
     assert view.state_filepath is None
+
+
+@define_view
+class _ConfiguredStudyMainView(MainView):
+    start: int = attrs.field(metadata={OMIT: True})
+    number: LabelRowIntInputView = Factory(LabelRowIntInputView)
+
+    @override
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.number.value = self.start
+
+    @override
+    def build_initial_view(self) -> _ConfiguredStudyMainView:
+        return _ConfiguredStudyMainView(start=self.start)
+
+
+def test_a_study_opens_with_required_main_view_arguments(tmp_path: Path) -> None:
+    original = _ConfiguredStudyMainView(start=3)
+    original.number.value = 5
+    path = tmp_path / "saved.json"
+    original.save_state(path)
+    view = _ConfiguredStudyMainView(start=3)
+
+    view.load_state(path)
+    assert view.number.value == 5
+
+    bad_path = tmp_path / "bad.json"
+    bad_path.write_text('{"minimum_width": 1, "number": {"value": "not a number"}}')
+    with pytest.raises(InvalidStateError, match="doesn't match this application"):
+        view.load_state(bad_path)
+
+    assert view.minimum_width == 720
+    assert view.number.value == 5
+    assert view.state_filepath == path
+
+
+@define_view
+class _BrokenInitialView(MainView):
+    @override
+    def build_initial_view(self) -> MainView:
+        msg = "the app can't build its initial view"
+        raise TypeError(msg)
+
+
+def test_an_initial_view_build_error_is_not_reported_as_invalid_state(tmp_path: Path) -> None:
+    path = tmp_path / "saved.json"
+    _BrokenInitialView(minimum_width=960).save_state(path)
+    view = _BrokenInitialView()
+
+    with pytest.raises(TypeError, match="the app can't build its initial view"):
+        view.load_state(path)
+
+    assert view.minimum_width == 720
+    assert view.state_filepath is None
+
+
+def test_new_uses_the_initial_state_of_a_main_view_with_required_arguments() -> None:
+    view = _ConfiguredStudyMainView(start=3)
+    view.number.value = 5
+
+    view.reset_state()
+
+    assert view.number.value == 3
+
+
+def test_new_keeps_task_results_if_the_initial_view_cannot_be_built() -> None:
+    view = _BrokenInitialView()
+
+    def calculate(_job: Job[int]) -> int:
+        return 42
+
+    task = view.jobs.task(calculate)
+    task.start()
+    view.jobs.wait()
+    assert task.result == 42
+
+    with pytest.raises(TypeError, match="the app can't build its initial view"):
+        view.reset_state()
+
+    assert task.result == 42
 
 
 def test_the_open_action_shows_why_a_state_file_is_rejected(tmp_path: Path) -> None:

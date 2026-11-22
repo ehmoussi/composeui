@@ -22,8 +22,10 @@ stops, and says which extra to install, for example `pip install "composeui[web]
 leaves the rest of the command line to the app (`--help` lists it). To always start one backend,
 build its application yourself, for example `QtApplication(build_main_view=HelloMainView).run()`.
 
-Every application takes a function that builds the main view, because on the web every
-browser gets its own copy of it.
+Every application takes a function it can call without arguments to build the main view.
+On the web, it calls the function for each new session. If the main view's constructor needs
+arguments, pass a function that supplies them, as in
+[Saving and loading state](building-views.md#saving-and-loading-state).
 
 - **In development,** `--reload` runs the changed code each time that you save a Python
   file. See [Reloading the app on a change](#reloading-the-app-on-a-change).
