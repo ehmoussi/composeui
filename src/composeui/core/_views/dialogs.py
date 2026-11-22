@@ -18,8 +18,8 @@ import attrs
 from typing_extensions import override
 
 from composeui.core import reactivity
-from composeui.core._views.base import OMIT, UI_TEXT, View, catching_context, define_view
-from composeui.core._views.content import LogType, LogView, Validator
+from composeui.core._views.base import OMIT, UI_TEXT, LogType, View, catching_context, define_view
+from composeui.core._views.content import LogView, Validator
 from composeui.core._views.controls import DialogButtonView
 from composeui.core._views.forms import FormT, FormView
 from composeui.core.model import RefusedError

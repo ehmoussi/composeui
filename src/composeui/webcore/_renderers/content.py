@@ -1,4 +1,7 @@
-"""The web renderers of what a page shows: metrics, labels, images, Markdown, consoles, logs."""
+"""The web renderers of what a page shows: metrics, labels, images, Markdown, consoles, logs.
+
+And the messages around it: the notification above the page and the status bar.
+"""
 
 from __future__ import annotations
 
@@ -8,7 +11,7 @@ from markupsafe import Markup
 from typing_extensions import override
 
 from composeui.core.renderer import ViewLike
-from composeui.core.view import FormRowView, StatusBar
+from composeui.core.view import FormRowView, NotificationBar, StatusBar
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -21,10 +24,10 @@ from typing_extensions import Protocol
 
 from composeui.core._views.content import image_content, line_styles_after, lines_after
 from composeui.core.view import ConsoleView, LogType, MetricView, TextRole, TextStyle
-from composeui.webcore.webrenderer import WebRenderer
+from composeui.webcore.webrenderer import WebRenderer, _icon
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
     from pathlib import Path
 
 
@@ -428,6 +431,77 @@ class WebLogRenderer(WebRenderer[LogViewLike]):
 _AUTO_CLEAR_MARGIN = 0.25
 
 
+def _fetch_after(widget_id: str, timeout: float) -> Markup:
+    """Get the attributes that fetch the fragment `widget_id` again once `timeout` has passed."""
+    # margin: the browser's delay starts after the server's timer did, but not by much
+    delay_ms = round((timeout + _AUTO_CLEAR_MARGIN) * 1000)
+    return Markup(' hx-get="/widget/{}" hx-trigger="load delay:{}ms" hx-swap="outerHTML"').format(
+        widget_id, delay_ms
+    )
+
+
+_NOTIFICATION_CLASSES: Final[dict[LogType, str]] = {
+    LogType.ERROR: "alert-error",
+    LogType.WARNING: "alert-warning",
+    LogType.INFO: "alert-info",
+}
+
+
+class WebNotificationBarRenderer(WebRenderer[NotificationBar]):
+    """A message above the page's card, kept in view below the header, with a close button."""
+
+    _role = "notification_bar"
+
+    def __init__(self, view: NotificationBar) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            dict.fromkeys(("message", "kind", "timeout", "close_text"), self._mark_dirty)
+        )
+
+    @override
+    def to_html(self, *, oob: bool = False) -> Markup:
+        attributes = self._root_attributes(oob=oob)
+        if self._view.is_visible and self._view.message == "":
+            attributes += " hidden"  # as on Qt and Textual: an empty bar takes no room
+        # an alert is read out as it comes, a status when the reader is idle
+        role = "status" if self._view.kind == LogType.INFO else "alert"
+        # `number`: a close of a message replaced since comes too late (`dismiss`)
+        return Markup(
+            '<div {attributes} role="{role}"{auto_clear}'
+            ' class="alert alert-soft {kind} sticky top-16 z-10 mb-4 flex justify-between text-sm">'
+            '<span class="whitespace-pre-line">{message}</span>'
+            '<button id="{widget_id}-close" type="button" class="btn btn-ghost btn-xs btn-circle"'
+            ' aria-label="{close}" title="{close}" hx-post="/widget/{widget_id}"'
+            """ hx-vals='{{"event": "close", "number": "{number}"}}' hx-swap="none"{disabled}>"""
+            "{icon}</button></div>"
+        ).format(
+            attributes=attributes,
+            role=role,
+            auto_clear=self._auto_clear_attributes(),
+            kind=_NOTIFICATION_CLASSES[self._view.kind],
+            message=self._view.message,
+            close=self._view.close_text,
+            widget_id=self.widget_id,
+            number=self._view.number,
+            # the server refuses a close then (`takes_events`): the page says so
+            disabled="" if self.is_enabled else Markup(" disabled"),
+            icon=_icon("x"),
+        )
+
+    def _auto_clear_attributes(self) -> Markup:
+        """Fetch the bar again once an information has timed out, as the status bar does."""
+        if self._view.message == "" or self._view.kind != LogType.INFO or self._view.timeout <= 0:
+            return Markup()
+        return _fetch_after(self.widget_id, self._view.timeout)
+
+    @override
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        number = form.get("number", "")
+        if event != "close" or not (number.isascii() and number.isdigit()):
+            super().dispatch(event, form)
+        self._view.dismiss(int(number))
+
+
 class WebStatusBarRenderer(WebRenderer[StatusBar]):
     _role = "status_bar"
 
@@ -467,8 +541,4 @@ class WebStatusBarRenderer(WebRenderer[StatusBar]):
         """
         if self._view.message == "" or self._view.timeout <= 0:
             return Markup()
-        # margin: the browser's delay starts after the server's timer did, but not by much
-        delay_ms = round((self._view.timeout + _AUTO_CLEAR_MARGIN) * 1000)
-        return Markup(
-            ' hx-get="/widget/{}" hx-trigger="load delay:{}ms" hx-swap="outerHTML"'
-        ).format(self.widget_id, delay_ms)
+        return _fetch_after(self.widget_id, self._view.timeout)

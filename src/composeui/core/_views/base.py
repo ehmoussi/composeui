@@ -7,6 +7,7 @@ import contextvars
 import copy
 import datetime
 import decimal
+import enum
 import logging
 import re
 import sys
@@ -97,6 +98,14 @@ _BAD_STATE_ERRORS = (
     cattrs.BaseValidationError,
     cattrs.StructureHandlerNotFoundError,
 )
+
+
+class LogType(enum.Enum):
+    """How a log message reads: an error, a warning or information."""
+
+    ERROR = enum.auto()
+    WARNING = enum.auto()
+    INFO = enum.auto()
 
 
 def notify_renderer(instance: View, attribute: Any, value: Any) -> Any:
@@ -595,7 +604,7 @@ class View:
 
     @catching_context
     def refusing(self, message: str) -> Iterator[None]:
-        """Show the model's refusal of the block's change in the main view's status bar.
+        """Show the model's refusal of the block's change as an error above the page (`notify`).
 
         `message` shows the `RefusedError`'s message, translated (unless `tr` gave it), as
         ``{error}``, e.g. ``self.tr("Can't add a room: {error}")``. In a `cell_edited`
@@ -607,7 +616,7 @@ class View:
             main_view = None if self._main_view is None else self._main_view()
             if main_view is None:  # not shown by an application: nowhere to show it
                 raise
-            main_view.status_bar.show_message(self._refusal(message, error))
+            main_view.notify(self._refusal(message, error), LogType.ERROR)
             if _editing_cell.get():
                 raise EditRefusedError from error
 

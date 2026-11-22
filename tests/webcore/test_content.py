@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import sys
 from pathlib import Path
@@ -30,6 +31,7 @@ from composeui.webcore._renderers.content import (
     WebImageRenderer,
     WebLogRenderer,
     WebMarkdownRenderer,
+    WebNotificationBarRenderer,
     WebStatusBarRenderer,
 )
 from composeui.webcore.changes import collect_dirty
@@ -140,6 +142,74 @@ def test_a_timed_message_makes_the_status_bar_fetch_itself_after_the_timeout(
 
     status_bar.timeout = 0  # a message that never times out needs no fetch
     assert "hx-get" not in attributes()
+
+
+def test_a_notification_shows_above_the_card_and_a_close_closes_only_the_message_shown(
+    client: TestClient, main_view: HelloMainView
+) -> None:
+    renderer = main_view.notification.renderer
+    assert isinstance(renderer, WebNotificationBarRenderer)
+    bar_id = renderer.widget_id
+    closes: list[str] = []
+    main_view.notification.closed.connect(lambda: closes.append(main_view.notification.message))
+    main_view.notify("Can't save to a.txt: the disk is full.", LogType.ERROR)
+
+    page = client.get("/").text
+    shown = _element(page, bar_id)
+    assert "hidden" not in shown.attributes
+    assert shown.attributes["role"] == "alert"
+    assert shown.text == "Can't save to a.txt: the disk is full."
+    assert page.index(bar_id) < page.index('class="card ')  # above the page's content
+    replaced = json.loads(_element(page, f"{bar_id}-close").attributes["hx-vals"] or "")
+    # meanwhile, a job's callback shows another message, which this page hasn't shown yet
+    main_view.notify("Can't open b.txt.", LogType.ERROR)
+
+    url = f"/widget/{bar_id}"
+    assert client.post(url, data=replaced).status_code == 200
+    assert main_view.notification.message == "Can't open b.txt."
+    assert closes == []
+    assert client.post(url, data={"event": "close", "number": "x"}).status_code == 400
+
+    page = client.get("/").text
+    current = json.loads(_element(page, f"{bar_id}-close").attributes["hx-vals"] or "")
+    response = client.post(url, data=current)
+
+    assert "hidden" in _swapped(response.text, bar_id).attributes
+    assert closes == [""]  # once, after the message is gone
+    assert main_view.notification.message == ""
+
+
+def test_an_information_makes_the_notification_fetch_itself_after_its_timeout(
+    main_view: HelloMainView,
+) -> None:
+    renderer = main_view.notification.renderer
+    assert isinstance(renderer, WebNotificationBarRenderer)
+    main_view.notification.timeout = 0  # no timer left running past the test
+
+    def attributes() -> dict[str, str | None]:
+        return _element(renderer.to_html(), renderer.widget_id).attributes
+
+    main_view.notify("Imported 3 rows.", LogType.WARNING)
+    assert attributes()["role"] == "alert"
+    assert "hx-get" not in attributes()  # stays until closed
+
+    main_view.notification.timeout = 3.0
+    main_view.notify("Imported 3 rows.")
+
+    assert attributes()["role"] == "status"
+    assert attributes()["hx-get"] == f"/widget/{renderer.widget_id}"
+    assert attributes()["hx-trigger"] == "load delay:3250ms"
+    main_view.clear_notification()
+
+
+def test_a_disabled_notification_shows_its_close_button_disabled(main_view: HelloMainView) -> None:
+    renderer = main_view.notification.renderer
+    assert isinstance(renderer, WebNotificationBarRenderer)
+    main_view.notify("Can't save", LogType.ERROR)
+
+    main_view.notification.is_enabled = False  # the server then refuses a close
+
+    assert "disabled" in _element(renderer.to_html(), f"{renderer.widget_id}-close").attributes
 
 
 def test_a_console_sends_only_its_new_lines_then_the_line_being_written() -> None:

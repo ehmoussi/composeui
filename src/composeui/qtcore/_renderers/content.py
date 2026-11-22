@@ -1,17 +1,35 @@
-"""Qt renderers for labels, images, Markdown, console, metrics, log and status bar."""
+"""Qt renderers for labels, images, Markdown, console, metrics, log, notification, status bar."""
 
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
 
+from qtpy.QtCore import Qt
 from qtpy.QtGui import QTextDocument
-from qtpy.QtWidgets import QApplication, QFileDialog, QLabel, QStatusBar, QTextBrowser
+from qtpy.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QStatusBar,
+    QStyle,
+    QTextBrowser,
+    QToolButton,
+)
 from typing_extensions import Protocol, override
 
 from composeui.core._views.content import image_content, line_styles_after, lines_after
 from composeui.core.renderer import ViewLike
-from composeui.core.view import ConsoleView, LogType, MetricView, StatusBar, TextRole
+from composeui.core.view import (
+    ConsoleView,
+    LogType,
+    MetricView,
+    NotificationBar,
+    StatusBar,
+    TextRole,
+)
 from composeui.qtcore.qtrenderer import _QWIDGETSIZE_MAX, QtWidgetRenderer
 from composeui.qtcore.widgets.qconsole import QConsoleBox
 from composeui.qtcore.widgets.qimagelabel import QImageLabel
@@ -326,6 +344,105 @@ class QtLogRenderer(QtWidgetRenderer[LogViewLike, QLabel]):
             rendered_object.setStyleSheet("QLabel { color : orange; }")
         else:
             rendered_object.setStyleSheet("")
+
+
+#: a notification's accent, by its kind: its border and its tint behind, translucent, so it
+#: reads on a light and a dark palette alike (as a metric's badge), as the web's alert does
+_NOTIFICATION_ACCENTS = {
+    LogType.ERROR: (220, 38, 38),
+    LogType.WARNING: (217, 119, 6),
+    LogType.INFO: (37, 99, 235),
+}
+_NOTIFICATION_ICONS = {
+    LogType.ERROR: QStyle.StandardPixmap.SP_MessageBoxCritical,
+    LogType.WARNING: QStyle.StandardPixmap.SP_MessageBoxWarning,
+    LogType.INFO: QStyle.StandardPixmap.SP_MessageBoxInformation,
+}
+#: the close button: a cross without a frame, a round tint under the pointer
+_NOTIFICATION_CLOSE_STYLE = (
+    "QToolButton { border: none; border-radius: 11px; padding: 2px 6px; }"
+    " QToolButton:hover { background: rgba(128, 128, 128, 0.25); }"
+)
+
+
+class QtNotificationBarRenderer(QtWidgetRenderer[NotificationBar, QFrame]):
+    """A tinted line above the pages: an icon of its kind, the message, a button to close it."""
+
+    def __init__(self, view: NotificationBar) -> None:
+        super().__init__(view)
+        self._label: QLabel | None = None
+        self._icon: QLabel | None = None
+        self._close: QToolButton | None = None
+        self._refresh_dispatcher.update(
+            {
+                "is_visible": self._refresh_shown,
+                "message": self._refresh_message,
+                "kind": self._refresh_kind,
+                "timeout": self._noop,
+                "close_text": self._refresh_close_text,
+            }
+        )
+
+    @override
+    def render(self) -> None:
+        if self._rendered_object is None:
+            frame = QFrame()
+            frame.setObjectName("notification")
+            layout = QHBoxLayout(frame)
+            layout.setContentsMargins(12, 8, 8, 8)
+            layout.setSpacing(10)
+            label = plain_label()
+            label.setWordWrap(True)
+            icon = QLabel()
+            icon.setAlignment(Qt.AlignmentFlag.AlignTop)
+            layout.addWidget(label, 1)
+            layout.insertWidget(0, icon)  # shown first, but the message stays the first QLabel
+            close = QToolButton()
+            close.setText("\u2715")
+            close.setStyleSheet(_NOTIFICATION_CLOSE_STYLE)
+            close.setCursor(Qt.CursorShape.PointingHandCursor)
+            layout.addWidget(close, alignment=Qt.AlignmentFlag.AlignTop)
+            self._label, self._icon, self._close = label, icon, close
+            self._rendered_object = frame
+            self._connect(close.clicked, self._dismiss)
+            self.refresh()
+
+    def _dismiss(self) -> None:
+        self._view.dismiss(self._view.number)
+
+    @staticmethod
+    def _refresh_shown(view: NotificationBar, rendered_object: QFrame, _value: bool) -> None:
+        # an empty bar takes no room
+        rendered_object.setVisible(view.is_visible and view.message != "")
+
+    def _refresh_message(self, view: NotificationBar, rendered_object: QFrame, value: str) -> None:
+        assert self._label is not None  # made with the frame
+        self._label.setText(value)
+        rendered_object.setVisible(view.is_visible and value != "")
+
+    def _refresh_kind(
+        self, _view: NotificationBar, rendered_object: QFrame, value: LogType
+    ) -> None:
+        assert self._icon is not None  # made with the frame
+        red, green, blue = _NOTIFICATION_ACCENTS[value]
+        rendered_object.setStyleSheet(
+            "QFrame#notification {{ background: rgba({0}, 0.12);"
+            " border: 1px solid rgba({0}, 0.45); border-radius: 6px; }}".format(
+                f"{red}, {green}, {blue}"
+            )
+        )
+        size = rendered_object.style().pixelMetric(QStyle.PixelMetric.PM_SmallIconSize) + 2
+        icon = rendered_object.style().standardIcon(_NOTIFICATION_ICONS[value])
+        self._icon.setPixmap(icon.pixmap(size, size))
+
+    def _refresh_close_text(self, _view: NotificationBar, _frame: QFrame, value: str) -> None:
+        assert self._close is not None  # made with the frame
+        self._close.setToolTip(value)
+        self._close.setAccessibleName(value)
+
+    @staticmethod
+    def _noop(_view: NotificationBar, _frame: QFrame, _value: Any) -> None:
+        pass
 
 
 class QtStatusBarRenderer(QtWidgetRenderer[StatusBar, QStatusBar]):

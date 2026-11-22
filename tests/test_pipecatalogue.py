@@ -269,7 +269,7 @@ def test_a_pipe_the_database_refuses_is_not_added_and_says_why(
 
     _add(app, name, dimensions=(radius, thickness, 6.0))
 
-    assert app.main_view.status_bar.message == f"Can't add the pipe: {reason}."
+    assert app.main_view.notification.message == f"Can't add the pipe: {reason}."
     assert _names(app) == ["Main line"]
 
 

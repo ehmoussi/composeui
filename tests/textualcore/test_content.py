@@ -1,4 +1,4 @@
-"""Tests of the Textual labels, images, Markdown, consoles, metrics, logs and status bar."""
+"""Tests of the Textual labels, images, Markdown, consoles, metrics, logs, notification, status."""
 
 from __future__ import annotations
 
@@ -18,8 +18,10 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 from attrs import Factory
 from PIL import Image as PILImage
+from textual.containers import VerticalScroll
 from textual.geometry import Region
 from textual.widgets import (
+    Button,
     Label,
     Markdown,
     Static,
@@ -31,6 +33,7 @@ from composeui.core.registry import RendererType
 from composeui.core.view import (
     ImageView,
     LabelView,
+    LogType,
     MainView,
     TextRole,
     define_view,
@@ -92,6 +95,39 @@ async def test_long_log_message_wraps_instead_of_being_clipped() -> None:
         assert widget is not None
         assert widget.size.width <= 80  # wrapped within the screen, not clipped
         assert widget.size.height > 1  # actually wrapped onto more than one line
+
+
+@pytest.mark.asyncio
+async def test_a_notification_stays_above_the_scrolling_content_until_the_user_closes_it() -> None:
+    view = PipeMainView()
+    app = _app_of(view)
+    closes: list[str] = []
+    view.notification.closed.connect(lambda: closes.append(view.notification.message))
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        bar = _widget(view.notification)
+        assert not bar.display  # an empty bar takes no room
+
+        view.notify("Can't save to a.pipe: the disk is full.", LogType.ERROR)
+        await pilot.pause()
+
+        assert bar.display
+        assert "the disk is full" in str(bar.query_one(Static).render())
+        content = app.screen.query_one(VerticalScroll)
+        assert bar.region.bottom <= content.region.y
+        shown_at = bar.region
+        content.scroll_end(animate=False)
+        await pilot.pause()
+        assert content.scroll_y > 0
+        assert bar.region == shown_at  # the content scrolls beneath it
+
+        assert await pilot.click(bar.query_one(Button))
+        await pilot.pause()
+
+        assert not bar.display
+        assert view.notification.message == ""
+        assert closes == [""]
 
 
 @pytest.mark.asyncio

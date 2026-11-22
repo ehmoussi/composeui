@@ -20,7 +20,7 @@ from typing import (
 import attrs
 from typing_extensions import override
 
-from composeui.core._views.base import OMIT, UI_TEXT, View, define_view, emit_if_made
+from composeui.core._views.base import OMIT, UI_TEXT, LogType, View, define_view, emit_if_made
 from composeui.core._views.inputs import InputMixin
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.translation import (
@@ -524,7 +524,7 @@ def _publish(partial: Path, path: Path) -> None:
 def save_download(
     main_view: MainView, path: Path, content: Union[bytes, Path, StreamContent]
 ) -> None:
-    """Write a download's `content` to `path`, which the user chose; the status bar says how.
+    """Write a download's `content` to `path`, which the user chose, and say how it went.
 
     For a backend that asks where to save a `MainView.download`. A failure leaves `path` as
     it was. A `StreamContent` writes in a job, the app staying responsive; New, Open and
@@ -543,7 +543,7 @@ def save_download(
         _publish(partial, target)
     except OSError as error:
         failed = main_view.tr("Can't save to {name}: {error}.")
-        main_view.status_bar.show_message(failed.format(name=path.name, error=error))
+        main_view.notify(failed.format(name=path.name, error=error), LogType.ERROR)
         return
     finally:
         partial.unlink(missing_ok=True)
@@ -551,19 +551,21 @@ def save_download(
 
 
 def _save_stream(main_view: MainView, path: Path, content: StreamContent) -> None:
-    """Write a `StreamContent` to `path` in a job; the status bar says how it went."""
+    """Write a `StreamContent` to `path` in a job, and say how it went."""
     job = main_view.jobs.start(_write_stream, content, path)
     # the texts of `save_download`, so that a translation says both
     saved = main_view.tr("Saved {name}.")
     failed = main_view.tr("Can't save to {name}: {error}.")
-    show = main_view.status_bar.show_message
 
     def report(is_written: bool) -> None:
         if is_written:
-            show(saved.format(name=path.name))
+            main_view.status_bar.show_message(saved.format(name=path.name))
+
+    def report_failure(error: Exception) -> None:
+        main_view.notify(failed.format(name=path.name, error=error), LogType.ERROR)
 
     job.finished.connect(report)
-    job.failed.connect(lambda error: show(failed.format(name=path.name, error=error)))
+    job.failed.connect(report_failure)
 
 
 def _write_stream(job: Job[bool], content: StreamContent, path: Path) -> bool:

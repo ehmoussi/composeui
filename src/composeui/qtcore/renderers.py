@@ -36,6 +36,7 @@ from composeui.qtcore._renderers.content import (
     QtLogRenderer,
     QtMarkdownRenderer,
     QtMetricRenderer,
+    QtNotificationBarRenderer,
     QtStatusBarRenderer,
 )
 from composeui.qtcore._renderers.controls import (
@@ -124,6 +125,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "menu": QtMenuRenderer,
     "metric": QtMetricRenderer,
     "multi_combobox": QtMultiComboBoxRenderer,
+    "notification_bar": QtNotificationBarRenderer,
     "page": QtPageRenderer,
     "progress_bar": QtProgressBarRenderer,
     "slider": QtSliderRenderer,

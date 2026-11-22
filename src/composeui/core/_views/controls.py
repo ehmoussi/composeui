@@ -19,7 +19,14 @@ from typing import (
 import attrs
 from typing_extensions import override
 
-from composeui.core._views.base import OMIT, UI_TEXT, View, define_view, notify_renderer
+from composeui.core._views.base import (
+    OMIT,
+    UI_TEXT,
+    LogType,
+    View,
+    define_view,
+    notify_renderer,
+)
 from composeui.core._views.files import DownloadedFile, StreamContent
 from composeui.core._views.inputs import _RANGE_ENDS
 from composeui.core.jobs import Task
@@ -450,7 +457,7 @@ class DownloadView(ButtonView):
     instead, whose name and type replace `filename` and `media_type`. Then the main view
     gives the file (`MainView.download`): the web downloads it, and Qt and Textual ask where
     to save it. With `in_job`, `content` runs in a job, and the button is disabled until the
-    file is made; the status bar says why it failed.
+    file is made; a notification says why it failed.
     """
 
     _renderer_key = "download"
@@ -500,7 +507,7 @@ class DownloadView(ButtonView):
 
     def _failed(self, error: Exception, main_view: MainView) -> None:
         failed = self.tr("Can't make {name}: {error}.")
-        main_view.status_bar.show_message(failed.format(name=self.filename, error=error))
+        main_view.notify(failed.format(name=self.filename, error=error), LogType.ERROR)
 
 
 def _make(_job: Job[_Download, Any], content: Callable[[], _Download]) -> _Download:

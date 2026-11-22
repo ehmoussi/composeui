@@ -30,6 +30,7 @@ not in the package: run them from a clone of the repository (see
   - [Compose views from mixins](user-guide/building-views.md#compose-views-from-mixins)
   - [The main view](user-guide/building-views.md#the-main-view)
     - [The status bar](user-guide/building-views.md#the-status-bar)
+    - [Notifications](user-guide/building-views.md#notifications)
     - [The app's icon](user-guide/building-views.md#the-apps-icon)
     - [Command-line options of your own](user-guide/building-views.md#command-line-options-of-your-own)
   - [Structure an app](user-guide/building-views.md#structure-an-app)

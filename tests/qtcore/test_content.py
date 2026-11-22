@@ -1,4 +1,4 @@
-"""Tests of the Qt labels, images, Markdown, consoles, metrics and status bar."""
+"""Tests of the Qt labels, images, Markdown, consoles, metrics, notification and status bar."""
 
 from __future__ import annotations
 
@@ -22,6 +22,7 @@ from qtpy.QtWidgets import (
     QMainWindow,
     QStatusBar,
     QTextBrowser,
+    QToolButton,
     QWidget,
 )
 
@@ -29,6 +30,7 @@ from composeui.core.registry import RendererType
 from composeui.core.view import (
     ImageView,
     LabelView,
+    LogType,
     TextRole,
 )
 from composeui.qtcore.qtrenderer import QtWidgetRenderer
@@ -300,6 +302,38 @@ def test_status_bar_renderer_shows_a_message_on_the_widget(qtbot: QtBot) -> None
 
     view.status_bar.show_message("hi there")
     assert widget.currentMessage() == "hi there"
+
+
+def test_a_notification_shows_above_the_pages_until_the_user_closes_it(qtbot: QtBot) -> None:
+    view = PipeMainView()
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    bar = _widget(view.notification)
+    closes: list[str] = []
+    view.notification.closed.connect(lambda: closes.append(view.notification.message))
+    assert not bar.isVisible()  # an empty bar takes no room
+
+    view.notify("Can't save to a.pipe: the disk is full.", LogType.ERROR)
+
+    assert bar.isVisible()
+    label = bar.findChild(QLabel)
+    assert label is not None
+    assert label.text() == "Can't save to a.pipe: the disk is full."
+    pages = _widget(view.pages)
+    bottom = bar.mapTo(window, bar.rect().bottomLeft()).y()
+    assert bottom < pages.mapTo(window, pages.rect().topLeft()).y()  # above, not on a page
+    close = bar.findChild(QToolButton)
+    assert close is not None
+    assert close.accessibleName() == "Close"
+
+    qtbot.mouseClick(close, Qt.MouseButton.LeftButton)
+
+    assert not bar.isVisible()
+    assert view.notification.message == ""
+    assert closes == [""]
 
 
 def test_a_metric_shows_its_value_large_and_its_change_as_a_badge_colored_by_sign(

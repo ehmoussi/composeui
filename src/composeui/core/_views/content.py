@@ -23,6 +23,7 @@ import attrs
 from composeui.core._views.base import (
     OMIT,
     UI_TEXT,
+    LogType,
     View,
     _check_height,
     define_view,
@@ -40,6 +41,47 @@ if TYPE_CHECKING:
     from typing_extensions import Unpack
 
 
+class _MessageTimer:
+    """Clears a message once its timeout passes, on its view's renderer's thread."""
+
+    def __init__(self) -> None:
+        self._timer: Optional[threading.Timer] = None
+
+    def start(self, view: View, timeout: float, clear: Callable[[], None]) -> None:
+        """Call `clear` in `timeout` seconds, instead of any call started before; never at 0."""
+        self.cancel()
+        if timeout > 0:
+            timer = threading.Timer(timeout, lambda: self._dispatch(view, timer, clear))
+            self._timer = timer
+            timer.start()
+
+    def cancel(self) -> None:
+        """Take back the call started last, unless it's already on its way."""
+        if self._timer is not None:
+            self._timer.cancel()
+            self._timer = None
+
+    def _dispatch(self, view: View, timer: threading.Timer, clear: Callable[[], None]) -> None:
+        """Run `clear` on the renderer's thread, not the timer's own thread.
+
+        `threading.Timer` calls its target on a dedicated background thread; a bound
+        renderer (e.g. Qt) may only be touched from its GUI thread, so the actual
+        mutation has to be marshaled through `Renderer.call_on_main_thread` instead
+        of calling `clear` here directly.
+        """
+        clear_if_current = functools.partial(self._clear_if_current, timer, clear)
+        if view.renderer is not None:
+            view.renderer.call_on_main_thread(clear_if_current)
+        else:
+            clear_if_current()
+
+    def _clear_if_current(self, timer: threading.Timer, clear: Callable[[], None]) -> None:
+        # canceling a timer can't take back a clear already on its way
+        if self._timer is timer:
+            self._timer = None
+            clear()
+
+
 @define_view
 class StatusBar(View):
     """A line at the bottom of the window that shows a short message to the user.
@@ -52,7 +94,9 @@ class StatusBar(View):
     message: str = attrs.field(default="")
     message_changed: Signal[str] = attrs.Factory(Signal[str])
     timeout: float = attrs.field(default=3.0)
-    _timer: Optional[threading.Timer] = attrs.field(default=None)
+    _timer: _MessageTimer = attrs.field(
+        factory=_MessageTimer, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
 
     def show_message(self, message: str) -> None:
         """Show `message` for `timeout` seconds.
@@ -60,37 +104,12 @@ class StatusBar(View):
         With a `timeout` of 0, the message is not dismissed automatically.
         """
         self.message = message
-        if self._timer is not None:
-            self._timer.cancel()
-            self._timer = None
-        if self.timeout > 0:
-            timer = threading.Timer(self.timeout, lambda: self._dispatch_clear_message(timer))
-            self._timer = timer
-            timer.start()
-
-    def _dispatch_clear_message(self, timer: threading.Timer) -> None:
-        """Run `clear_message` on the renderer's thread, not the timer's own thread.
-
-        `threading.Timer` calls its target on a dedicated background thread; a bound
-        renderer (e.g. Qt) may only be touched from its GUI thread, so the actual
-        mutation has to be marshaled through `Renderer.call_on_main_thread` instead
-        of calling `clear_message` here directly.
-        """
-        clear = functools.partial(self._clear_message_of, timer)
-        if self.renderer is not None:
-            self.renderer.call_on_main_thread(clear)
-        else:
-            clear()
-
-    def _clear_message_of(self, timer: threading.Timer) -> None:
-        # canceling a timer can't take back a clear already on its way
-        if self._timer is timer:
-            self.clear_message()
+        self._timer.start(self, self.timeout, self.clear_message)
 
     def clear_message(self) -> None:
         """Remove the message from the status bar."""
+        self._timer.cancel()
         self.message = ""
-        self._timer = None
 
 
 # class FileType(enum.Enum):
@@ -98,12 +117,64 @@ class StatusBar(View):
 #     SaveFile = enum.auto()
 
 
-class LogType(enum.Enum):
-    """How a log message reads: an error, a warning or information."""
+@define_view
+class NotificationBar(View):
+    """A message above the page, with its severity, such as an error that stays until closed.
 
-    ERROR = enum.auto()
-    WARNING = enum.auto()
-    INFO = enum.auto()
+    `MainView.notify` shows one, e.g. why a file can't be saved, and `clear` removes it.
+    A message replaces the one shown. An information goes after `timeout` seconds; a
+    warning or an error stays until the user closes it (`closed`), or the app clears it.
+    Not saved with a study: a New or an Open keeps it.
+    """
+
+    _renderer_key = "notification_bar"
+
+    message: str = attrs.field(default="")
+    kind: LogType = attrs.field(default=LogType.INFO)
+    #: the seconds an information stays; 0 keeps it until closed
+    timeout: float = attrs.field(default=5.0)
+    #: the name of the close button, which screen readers say
+    close_text: str = attrs.field(default=T("Close"), metadata={UI_TEXT: True})
+    #: the user closed the message, never emitted when the app clears it
+    closed: SignalNoArgs = attrs.Factory(SignalNoArgs)
+    #: counts the messages shown: a close of an earlier one comes too late (see `dismiss`)
+    _number: int = attrs.field(default=0, init=False, repr=False, eq=False, metadata={OMIT: True})
+    _timer: _MessageTimer = attrs.field(
+        factory=_MessageTimer, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
+
+    @property
+    def number(self) -> int:
+        """The number of the message shown, which a close button gives back to `dismiss`."""
+        return self._number
+
+    def show(self, message: str, kind: LogType = LogType.INFO) -> None:
+        """Show `message` as `kind`, instead of the message shown.
+
+        The same message again is the same one: only its timeout starts again.
+        """
+        if (message, kind) != (self.message, self.kind):
+            self._number += 1
+        self.kind = kind
+        self.message = message
+        timeout = self.timeout if kind == LogType.INFO else 0
+        self._timer.start(self, timeout, self.clear)
+
+    def clear(self) -> None:
+        """Remove the message, without `closed`: the user didn't close it."""
+        self._timer.cancel()
+        self.message = ""
+
+    def dismiss(self, number: int) -> None:
+        """Remove the message `number` as the user closes it, and emit `closed`.
+
+        A close of a message already gone or replaced does nothing: on the web, the
+        page can show an earlier message for a moment.
+        """
+        if number != self._number or self.message == "":
+            return
+        self.clear()
+        emit_if_made(self, "closed")
 
 
 #: A zero-argument check: reads whatever state it needs itself (e.g. `self.text`
@@ -507,7 +578,7 @@ class ConsoleView(View):
         self.text = ""
 
     def export_text(self, path: Path) -> None:
-        """Write the text to the file `path`, in UTF-8; the status bar says how it went.
+        """Write the text to the file `path`, in UTF-8, and say how it went.
 
         Outside a main view, a failure raises `OSError` instead.
         """
@@ -518,7 +589,7 @@ class ConsoleView(View):
             if main_view is None:
                 raise
             failed = self.tr("Can't save to {name}: {error}.")
-            main_view.status_bar.show_message(failed.format(name=path.name, error=error))
+            main_view.notify(failed.format(name=path.name, error=error), LogType.ERROR)
             return
         if main_view is not None:
             done = self.tr("Saved the output to {name}.")

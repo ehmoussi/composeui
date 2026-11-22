@@ -25,6 +25,7 @@ import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, NamedTuple
 
+from composeui.core._views.base import LogType
 from composeui.core.jobs import starting_study
 from composeui.core.model import InvalidStateError, Model
 from composeui.core.study import has_data
@@ -435,7 +436,7 @@ class Autosave:
     def _restore(self) -> None:
         """Open the work left: the study is marked unsaved, and keeps the name of its file.
 
-        Work that doesn't open is moved aside, and the status bar says why.
+        Work that doesn't open is moved aside, and a notification says why.
         """
         main_view, model = self._main_view, self._model
         path = self._folder.path
@@ -452,7 +453,7 @@ class Autosave:
         except (InvalidStateError, OSError, ValueError) as error:
             LOGGER.warning("The unsaved work of %s can't open: %s", path, error)
             message = main_view.tr("Can't restore the unsaved work: {error}.")
-            main_view.status_bar.show_message(message.format(error=error))
+            main_view.notify(message.format(error=error), LogType.ERROR)
             self._leave(aside=True)
             return
         main_view.load_state_data(data)
@@ -508,7 +509,7 @@ class Autosave:
         failure = self._folder.take_failure()
         if failure is not None:
             message = main_view.tr("Can't autosave the unsaved work: {error}.")
-            main_view.status_bar.show_message(message.format(error=failure))
+            main_view.notify(message.format(error=failure), LogType.ERROR)
         file_data = main_view.file_data()
         study_mark = main_view._study_mark(file_data["views"])  # noqa: SLF001 (Save's own)
         # and every change of the data, the start's jobs' included, which a snapshot copies

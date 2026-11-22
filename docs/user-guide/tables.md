@@ -27,8 +27,8 @@ runs: RecordTableView[Run] = child(
   converter of the views. In an enum's cell, the user types a member's value as the cell
   shows it, such as `1` or `red`, not the member's name. `record_edited` emits the old and
   the new record.
-- **Refused edits.** When a cell does not parse, the table refuses the edit and says why in the
-  status bar.
+- **Refused edits.** When a cell does not parse, the table refuses the edit and says why in a
+  [notification](building-views.md#notifications).
 - **After an edit.** `record_edited`, and `cell_edited` on any table, emit before the table
   holds the edit, so that a callback can refuse it or assign other rows. To read the new
   records, connect `cell_edit_applied`: it emits the row, the column, and the cell's text once
@@ -141,7 +141,7 @@ Otherwise it only shows the cell, and the "…" button picks nothing. The change
 when the user types in a cell: `cell_edited` emits it, and on a `RecordTableView`,
 `record_edited` too. The user also types in a path cell, but not in the other cells with a
 widget. On the web, the server resolves `..` and symbolic links in a typed path, and refuses a path
-outside the column's `server_roots`: the cell keeps its text, and the status bar says why.
+outside the column's `server_roots`: the cell keeps its text, and a notification says why.
 `file_texts` holds the texts of the list of the server's files and of that message, by what they're
 for.
 

@@ -1,16 +1,19 @@
-"""Textual labels, images, Markdown, console, metrics and status."""
+"""Textual labels, images, Markdown, console, metrics, notification and status."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from textual.containers import Horizontal
+from textual.content import Content
 from textual.widgets import Label, Static
 from typing_extensions import Protocol, override
 
 from composeui.core._views.content import image_content, line_styles_after, lines_after
 from composeui.core.renderer import ViewLike
-from composeui.core.view import ConsoleView, LogType, MetricView, StatusBar
+from composeui.core.view import ConsoleView, LogType, MetricView, NotificationBar, StatusBar
 from composeui.textualcore.textualrenderer import TextualWidgetRenderer
+from composeui.textualcore.widgets.composebutton import ComposeButton
 from composeui.textualcore.widgets.composeconsole import ComposeConsoleBox
 from composeui.textualcore.widgets.composeimage import ComposeImage
 from composeui.textualcore.widgets.composelabel import ComposeLabel
@@ -314,6 +317,69 @@ class TextualLogRenderer(TextualWidgetRenderer[LogViewLike, Label]):
             rendered_object.styles.color = "orange"
         else:
             rendered_object.styles.color = None
+
+
+#: the colour of a notification's border and text, by its kind: as a log's, for an error
+_NOTIFICATION_COLORS = {LogType.ERROR: "red", LogType.WARNING: "orange", LogType.INFO: None}
+
+
+class TextualNotificationBarRenderer(TextualWidgetRenderer[NotificationBar, Horizontal]):
+    """A bordered line above the content, outside its scrolling: the message and a close button."""
+
+    def __init__(self, view: NotificationBar) -> None:
+        super().__init__(view)
+        self._label = Static(markup=False)
+        self._close = ComposeButton()
+        self._refresh_dispatcher.update(
+            {
+                "is_visible": self._refresh_shown,
+                "message": self._refresh_message,
+                "kind": self._refresh_kind,
+                "timeout": self._noop,
+                "close_text": self._refresh_close_text,
+            }
+        )
+
+    @override
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._label.styles.width = "1fr"
+            self._close.label = Content("✕")
+            self._close.compact = True
+            self._close.styles.min_width = 3  # a button's default fits a word, not a cross
+            self._close.styles.width = "auto"
+            self._close.clicked.connect(self._dismiss)
+            bar = Horizontal(self._label, self._close)
+            bar.styles.height = "auto"
+            self._rendered_object = bar
+
+    def _dismiss(self) -> None:
+        self._view.dismiss(self._view.number)
+
+    @staticmethod
+    def _refresh_shown(view: NotificationBar, rendered_object: Horizontal, _value: bool) -> None:
+        # an empty bar takes no room
+        rendered_object.display = view.is_visible and view.message != ""
+
+    def _refresh_message(
+        self, view: NotificationBar, rendered_object: Horizontal, value: str
+    ) -> None:
+        self._label.update(value)
+        rendered_object.display = view.is_visible and value != ""
+
+    def _refresh_kind(
+        self, _view: NotificationBar, rendered_object: Horizontal, value: LogType
+    ) -> None:
+        color = _NOTIFICATION_COLORS[value]
+        rendered_object.styles.border = ("round", color or "gray")
+        self._label.styles.color = color
+
+    def _refresh_close_text(self, _view: NotificationBar, _bar: Horizontal, value: str) -> None:
+        self._close.tooltip = value
+
+    @staticmethod
+    def _noop(_view: NotificationBar, _bar: Horizontal, _value: Any) -> None:
+        pass
 
 
 class TextualStatusBarRenderer(TextualWidgetRenderer[StatusBar, Static]):

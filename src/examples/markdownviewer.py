@@ -3,7 +3,7 @@
 `--markdown` is the app's own command-line option, beside the backend's (`--backend
 textual`, `--language`, ...). The field at the top takes the file's path: typed, or
 picked with its "…" button, on the web too (the browser uploads it). Its reload button
-reads the file again, e.g. once edited.
+reads the file again, e.g. once edited. A notification says why a file can't be read.
 """
 
 from __future__ import annotations
@@ -19,6 +19,7 @@ from composeui.core.application import run
 from composeui.core.view import (
     OMIT,
     FilePathInputView,
+    LogType,
     MainView,
     MarkdownView,
     T,
@@ -64,12 +65,12 @@ class MarkdownViewerMainView(MainView):
             self.open_markdown(args.markdown)
 
     def open_markdown(self, path: Path) -> None:
-        """Show the Markdown file at `path`, or say in the status bar why it can't."""
+        """Show the Markdown file at `path`, or say in a notification why it can't."""
         try:
             text = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError) as error:
             message = self.tr("Can't open {name}: {error}")
-            self.status_bar.show_message(message.format(name=repr(path.name), error=error))
+            self.notify(message.format(name=repr(path.name), error=error), LogType.ERROR)
             return
         self.document.text = text
         self._shown = path

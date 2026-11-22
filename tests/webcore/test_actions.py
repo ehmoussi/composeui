@@ -97,7 +97,7 @@ def test_a_pick_file_action_uploads_the_file_and_hands_it_over(
     response = help_client.post(
         f"/widget/{action_id}/file", files={"file": ("notes.txt", b"plain", "text/plain")}
     )
-    status = _swapped(response.text, _widget_id(main_view.status_bar.renderer))
+    status = _swapped(response.text, _widget_id(main_view.notification.renderer))
     assert status.text == "Can't open 'notes.txt': expected a .md or .markdown file."
     assert main_view.help.text == "# Notes"
     assert help_client.post(f"/widget/{action_id}/file").status_code == 400
@@ -200,8 +200,8 @@ def test_a_rejected_state_file_changes_nothing_and_says_why(
     response = client.post("/state", files={"file": (filename, content)})
 
     assert "hx-refresh" not in response.headers
-    status_bar_id = _widget_id(main_view.status_bar.renderer)
-    assert f'<footer id="{status_bar_id}" hx-swap-oob="true"' in response.text
+    notification_id = _widget_id(main_view.notification.renderer)
+    assert f'<div id="{notification_id}" hx-swap-oob="true"' in response.text
     assert reason in response.text
     assert main_view.form.name.text == "Bob"
     assert main_view.state_filepath is None

@@ -16,7 +16,15 @@ from typing_extensions import override
 
 from composeui.core._views.files import save_download
 from composeui.core.renderer import MainRenderer
-from composeui.core.view import MainView, Router, SidebarView, StatusBar, ToolBar, View
+from composeui.core.view import (
+    MainView,
+    NotificationBar,
+    Router,
+    SidebarView,
+    StatusBar,
+    ToolBar,
+    View,
+)
 from composeui.textualcore._renderers.actions import TextualActionRenderer, _ComposeUIApp
 from composeui.textualcore._renderers.containers import TextualPageRenderer
 from composeui.textualcore._renderers.dialogs import TextualDialogRenderer
@@ -186,8 +194,10 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         `StatusBar` is docked to the real bottom of the terminal (see
         `TextualStatusBarRenderer`) and the toolbars to the top. Everything else goes in
         a `VerticalScroll` so content taller than the screen stays reachable instead of
-        clipped, beside the sidebar, if any, scrolling on its own.
+        clipped, beside the sidebar, if any, scrolling on its own. The notification goes
+        above it: shown however far the content scrolls.
         """
+        notifications: list[Widget] = []
         scrollable: list[Widget] = []
         toolbars: list[Widget] = []
         docked: list[Widget] = []
@@ -201,6 +211,8 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         for child_view, widget in shown:
             if isinstance(child_view, StatusBar):
                 docked.append(widget)
+            elif isinstance(child_view, NotificationBar):
+                notifications.append(widget)
             elif isinstance(child_view, ToolBar):
                 toolbars.append(widget)
             elif isinstance(child_view, SidebarView):
@@ -213,7 +225,7 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
                 scrollable.append(widget)
         if len(toolbars) > 0:
             docked.append(ComposeToolbars(*toolbars))
-        content: Widget = VerticalScroll(*scrollable)
+        content: Widget = Vertical(*notifications, VerticalScroll(*scrollable))
         if len(sidebars) > 0:
             # beside the content, scrolling on its own: shown whatever the page
             content = Horizontal(*sidebars, content)

@@ -359,8 +359,8 @@ class WebMainRenderer(MainRenderer[MainView, str]):
                 continue
             if not isinstance(child_view.renderer, WebRenderer):
                 continue
-            if isinstance(child_view, DialogView):
-                continue  # see `_dialogs_html`
+            if isinstance(child_view, DialogView) or child_view is self._view.notification:
+                continue  # see `_dialogs_html`, and `notification` below
             if isinstance(child_view, StatusBar):
                 status_bar = child_view.renderer.to_html()
             elif isinstance(child_view, Menu):
@@ -375,9 +375,13 @@ class WebMainRenderer(MainRenderer[MainView, str]):
                 content.append(child_view.renderer.to_html())
         # the pages' toolbar wraps to a row of its own on a narrow screen
         wrap = " flex-wrap" if toolbar else ""
-        # bottom padding keeps the last row clear of the fixed status bar
+        bar = self._view.notification.renderer
+        notification = bar.to_html() if isinstance(bar, WebRenderer) else Markup()
+        # bottom padding keeps the last row clear of the fixed status bar; the notification
+        # goes above the card, outside it: it isn't the page's content
         main = Markup(
             '<main class="mx-auto {} px-4 pt-8 pb-20">'
+            "{}"
             '<div class="card border border-base-300 bg-base-100 shadow-md">'
             '<div class="card-body gap-6 p-6">'
             "{}"
@@ -389,6 +393,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
                 PageWidth.FULL: "max-w-none",
             }[self._view.width]
             + _MAIN_WIDTHS,
+            notification,
             Markup("").join(content),
         )
         return get_page(

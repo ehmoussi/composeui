@@ -8,7 +8,8 @@ the study's folder, whatever folder the app started in, and the line under the t
 where the selected row's path leads. On the web, the "…" button lists the study's folder.
 
 "Save summary" writes the table's rows to the text file of the field beside it. Over a file
-that exists, it asks first, unless the user already agreed in the field's "…" picker.
+that exists, it asks first, unless the user already agreed in the field's "…" picker. A
+notification says why the file can't be written.
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from composeui.core.view import (
     CellWidget,
     HorizontalView,
     LabelView,
+    LogType,
     MainView,
     SavePathInputView,
     T,
@@ -140,7 +142,7 @@ class StudyInputsMainView(MainView):
             write_summary(path, rows)
         except OSError as error:
             message = self.tr("Can't save {name}: {error}")
-            self.status_bar.show_message(message.format(name=repr(path.name), error=error))
+            self.notify(message.format(name=repr(path.name), error=error), LogType.ERROR)
             return
         self.status_bar.show_message(self.tr("Saved {name}").format(name=path.name))
 
