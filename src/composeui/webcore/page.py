@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 from string import Template
+from typing import Final
 
 from markupsafe import Markup, escape
 
@@ -37,7 +38,7 @@ $icon_link
 <script src="$htmx_url"></script>
 <!-- built from css/app.css by `make css`: no CDN, so the page works offline -->
 <link href="$css_url" rel="stylesheet" type="text/css" />
-<script src="$page_url" data-uplot="$uplot_url" data-cally="$cally_url"
+$style_links<script src="$page_url" data-uplot="$uplot_url" data-cally="$cally_url"
   data-deckgl="$deckgl_url" data-charts="$charts_url" data-maps="$maps_url"></script>
 <script src="$tables_url"></script>
 </head>
@@ -81,6 +82,10 @@ _STATIC_URLS = {
     # deck.gl 9.2.6 (https://github.com/visgl/deck.gl), its license in deckgl.LICENSE
     "deckgl_url": _static_url("deckgl.min.js"),
 }
+
+
+#: a page without stylesheets of the app's
+NO_LINKS: Final = Markup()
 
 
 def page_marker(language: str, title: str, *, oob: bool = False) -> Markup:
@@ -154,6 +159,7 @@ def get_page(  # noqa: PLR0913 (each is a part of the page)
     session_tag: str = "",
     icon: str | None = None,
     downloads: str = "",
+    style_links: Markup = NO_LINKS,
 ) -> str:
     """Get the app's page showing `content`, with the browser tab's `icon` at its address.
 
@@ -161,7 +167,8 @@ def get_page(  # noqa: PLR0913 (each is a part of the page)
     `reload_poller`'s. The page's script sends no files larger than `max_upload_size`
     together, nor more than `MAX_UPLOAD_FILES` at once, and `session_tag` with its requests
     (`SESSION_TAG_HEADER`, or Save's `SESSION_TAG_FIELD`).
-    `downloads` names the files the page fetches (`downloads.downloads_marker`).
+    `downloads` names the files the page fetches (`downloads.downloads_marker`), and
+    `style_links` the app's stylesheets, after ComposeUI's (`style.StyleFiles`).
     """
     return _PAGE.substitute(
         {
@@ -172,6 +179,7 @@ def get_page(  # noqa: PLR0913 (each is a part of the page)
             "page_marker": page_marker(language, title),
             "pollers": pollers,
             "downloads": downloads,
+            "style_links": style_links,
             "max_upload_size": max_upload_size,
             "max_upload_files": MAX_UPLOAD_FILES,
             "session_tag": escape(session_tag),

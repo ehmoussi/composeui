@@ -42,6 +42,7 @@ from composeui.core.view import (
     MapView,
     define_view,
 )
+from composeui.core.webstyle import Theme, WebStyle
 
 if TYPE_CHECKING:
     import argparse
@@ -130,7 +131,7 @@ def test_run_starts_the_backend_the_command_line_names(
 
 @pytest.mark.parametrize("has_model", [False, True])
 @pytest.mark.parametrize("backend", list(RendererType))
-def test_run_gives_the_web_settings_to_the_web_backend_only(
+def test_run_gives_the_web_settings_and_style_to_the_web_backend_only(
     backend: RendererType, monkeypatch: pytest.MonkeyPatch, *, has_model: bool
 ) -> None:
     # Any: only the web's app has the `settings` that the test reads
@@ -145,18 +146,21 @@ def test_run_gives_the_web_settings_to_the_web_backend_only(
     monkeypatch.setattr("sys.argv", ["count", "--backend", backend.name.lower()])
     monkeypatch.delenv(BACKEND_VARIABLE, raising=False)
     settings = WebSettings(session_ttl=60.0)
+    style = WebStyle(theme=Theme(radius_box="0"))
 
     run(
         _CountMainView,
         build_model=Model if has_model else None,
         web_settings=settings,
+        web_style=style,
     )
 
-    # Qt and Textual take no settings: passing them would fail to build the app
+    # Qt and Textual take no settings nor style: passing them would fail to build the app
     (app,) = started
     assert type(app) is application
     if backend is RendererType.WEB:
         assert app.settings is settings
+        assert app.style is style
 
 
 @pytest.mark.parametrize("kind", ["APPLICATION", "MODEL_APPLICATION"])

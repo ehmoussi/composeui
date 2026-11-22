@@ -27,9 +27,11 @@ from composeui.webcore.webrenderer import UnsupportedEventError
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from markupsafe import Markup
     from starlette.requests import Request
 
     from composeui.webcore.session import SessionStore, WebSession
+    from composeui.webcore.style import StyleFiles
 
 #: Every page and fragment reflects live server state: a browser reusing a cached copy
 #: (or restoring the fields of one) would show values the server no longer has, e.g.
@@ -102,6 +104,12 @@ def _reload_instance(request: Request) -> str | None:
     return instance
 
 
+def _style_links(request: Request) -> Markup:
+    """Get the page's links to the app's stylesheets."""
+    files: StyleFiles = request.app.state.style_files
+    return files.links
+
+
 def _too_many_sessions() -> Response:
     return PlainTextResponse(
         "Too many sessions are open: try again later.", status_code=503, headers=_NO_STORE
@@ -116,7 +124,8 @@ def homepage(request: Request) -> Response:
     path = session.home_path()
     if path is not None:
         return RedirectResponse(path, status_code=303, headers=_NO_STORE)
-    return HTMLResponse(session.page_html(_reload_instance(request)), headers=_NO_STORE)
+    html = session.page_html(_reload_instance(request), _style_links(request))
+    return HTMLResponse(html, headers=_NO_STORE)
 
 
 def page(request: Request) -> Response:
@@ -130,7 +139,8 @@ def page(request: Request) -> Response:
         return _too_many_sessions()
     if not session.open_route(request.path_params["route"]):
         return PlainTextResponse("Not Found", status_code=404, headers=_NO_STORE)
-    return HTMLResponse(session.page_html(_reload_instance(request)), headers=_NO_STORE)
+    html = session.page_html(_reload_instance(request), _style_links(request))
+    return HTMLResponse(html, headers=_NO_STORE)
 
 
 def reload_poll(request: Request) -> Response:

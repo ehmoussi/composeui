@@ -132,6 +132,8 @@ def test_every_response_carries_the_security_headers(app: _HelloApp, tmp_path: P
             browser.get("/widget/any/picture"),  # with a policy of its own once found
             browser.get("/reload?instance=any"),  # only a `--reload` server's
             browser.get("/download/any"),  # no such file
+            browser.get("/style/theme.css"),  # no theme
+            browser.get("/style/files/studio.css"),  # no style folder
             browser.post("/state", headers={"Sec-Fetch-Site": "cross-site"}),  # refused
         ]
 

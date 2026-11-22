@@ -168,6 +168,7 @@ not in the package: run them from a clone of the repository (see
     - [How the web differs from a window](user-guide/running-the-app.md#how-the-web-differs-from-a-window)
     - [Serve the app to other users](user-guide/running-the-app.md#serve-the-app-to-other-users)
     - [Change the server's limits](user-guide/running-the-app.md#change-the-servers-limits)
+    - [Change the look of the web app](user-guide/running-the-app.md#change-the-look-of-the-web-app)
     - [Deploy behind nginx](user-guide/running-the-app.md#deploy-behind-nginx)
 - [Testing your app](user-guide/testing.md)
   - [Test the views](user-guide/testing.md#test-the-views)

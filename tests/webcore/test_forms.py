@@ -132,7 +132,9 @@ def test_disabling_a_group_disables_its_whole_fieldset(pipe_main_view: PipeMainV
     assert isinstance(group, WebRenderer)
     assert list(dirty.values()) == [group]
     # a disabled fieldset disables every control inside it, like a disabled Qt container
-    assert re.match(r'<fieldset id="[^"]+" class="[^"]+" disabled>', group.to_html())
+    assert re.match(
+        r'<fieldset id="[^"]+" data-cui="group_form" class="[^"]+" disabled>', group.to_html()
+    )
 
 
 def test_form_fields_are_linked_to_their_label_and_message(

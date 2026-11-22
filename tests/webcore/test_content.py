@@ -441,7 +441,7 @@ def test_what_is_no_image_shows_its_description_and_serves_nothing(
         widget_id = main_view.picture.renderer.widget_id
         answer = browser.get(f"/widget/{widget_id}/picture?version=any")
 
-    assert f'<span id="{widget_id}">A curve</span>' in page.text
+    assert f'<span id="{widget_id}" data-cui="image">A curve</span>' in page.text
     assert answer.status_code == 404
 
 

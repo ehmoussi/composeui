@@ -49,6 +49,7 @@ from composeui.core.view import (
     child,
     define_view,
 )
+from composeui.core.webstyle import Palette, Theme, WebStyle
 from composeui.webcore.webapplication import WebApplication
 from examples.batman import BatmanMainView
 from examples.pipechart import PipeChartMainView
@@ -3422,6 +3423,66 @@ def test_without_matplotlib_the_page_draws_a_light_png(
     # the off-screen chart is gone
     expect(chart_page.locator("[data-chart-stage]")).to_have_count(0)
     expect(chart_page.locator(".uplot")).to_have_count(1)
+
+
+#: a theme far from ComposeUI's, so each of its colors shows it took
+_STUDIO_THEME = Theme(
+    light=Palette(base_100="#fff8e7", base_content="#1a1a1a"),
+    dark=Palette(base_100="#101820", base_content="#e8e8e8"),
+    radius_box="0",
+    font='"Studio Sans", sans-serif',
+)
+
+
+@pytest.fixture(scope="module")
+def styled_base_url(tmp_path_factory: pytest.TempPathFactory) -> Iterator[str]:
+    """Serve the hello app in a theme and a stylesheet of its own, with its font."""
+    matplotlib = pytest.importorskip("matplotlib")
+    folder = tmp_path_factory.mktemp("style")
+    (folder / "fonts").mkdir()
+    font = Path(matplotlib.get_data_path()) / "fonts" / "ttf" / "DejaVuSans.ttf"
+    (folder / "fonts" / "studio.ttf").write_bytes(font.read_bytes())
+    (folder / "studio.css").write_text(
+        '@font-face { font-family: "Studio Sans"; src: url("fonts/studio.ttf"); }\n'
+        '[data-cui="header"] { border-bottom-width: 4px; }\n'
+    )
+    style = WebStyle(theme=_STUDIO_THEME, folder=folder, stylesheets=("studio.css",))
+    app = WebApplication(build_main_view=HelloMainView, style=style)
+    with _serve(app.create_starlette_app()) as url:
+        yield url
+
+
+def test_an_app_s_theme_font_and_stylesheet_restyle_the_page(
+    browser: Browser, styled_base_url: str
+) -> None:
+    context = browser.new_context(base_url=styled_base_url)
+    page = context.new_page()
+    card = page.locator('[data-cui="card"]')
+
+    def style(locator: Locator, name: str) -> object:
+        return locator.evaluate(f"element => getComputedStyle(element).{name}")
+
+    page.emulate_media(color_scheme="light")
+    page.goto("/")
+    assert style(card, "backgroundColor") == "rgb(255, 248, 231)"
+    assert style(card, "color") == "rgb(26, 26, 26)"
+    assert style(card, "borderRadius") == "0px"
+    assert style(page.locator('[data-cui="header"]'), "borderBottomWidth") == "4px"
+    # the font of the app's folder, loaded under the page's policy
+    assert page.evaluate("document.fonts.load('16px \"Studio Sans\"').then(fonts => fonts.length)")
+    assert str(style(page.locator("body"), "fontFamily")).startswith('"Studio Sans"')
+
+    # its dark colors, picked by the Theme menu, then by the browser's preference
+    page.get_by_role("button", name="Theme").click()
+    page.get_by_role("button", name="Dark").click()
+    assert style(card, "backgroundColor") == "rgb(16, 24, 32)"
+    assert style(card, "borderRadius") == "0px"
+    page.get_by_role("button", name="Theme").click()
+    page.get_by_role("button", name="System").click()
+    assert style(card, "backgroundColor") == "rgb(255, 248, 231)"
+    page.emulate_media(color_scheme="dark")
+    assert style(card, "color") == "rgb(232, 232, 232)"
+    context.close()
 
 
 @pytest.fixture(scope="module")

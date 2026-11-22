@@ -304,6 +304,7 @@ def test_clicking_the_button_changes_a_page_not_shown_once_it_shows(
         inputs.submit.variant = ButtonVariant.DANGER
         swapped = _swapped(render_dirty(dirty), button_id)
     assert "btn-error" in (swapped.attributes["class"] or "").split()
+    assert swapped.attributes["data-variant"] == "danger"  # what an app's stylesheet selects
 
     inputs.submit.is_enabled = False
     refused = pages_client.post(f"/widget/{button_id}", data={"event": "click"})

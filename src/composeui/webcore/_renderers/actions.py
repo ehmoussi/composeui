@@ -142,11 +142,12 @@ class WebMenuRenderer(WebRenderer[Menu]):
             else ""
         )
         return Markup(
-            '<div id="{widget_id}"{oob_attribute} class="flex items-center'
+            '<div id="{widget_id}"{oob_attribute} data-cui="{role}" class="flex items-center'
             ' gap-1">{join}{dropdown}</div>'
         ).format(
             widget_id=self.widget_id,
             oob_attribute=oob_attribute,
+            role=self._role,
             join=Markup("").join(buttons),
             dropdown=dropdown,
         )
