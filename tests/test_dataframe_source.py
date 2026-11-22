@@ -32,9 +32,11 @@ from composeui.core.dataframesource import (
 from composeui.core.model import RefusedError
 from composeui.core.sqlitemodel import (
     CSVSqliteTable,
-    SqliteModel,
+    DatabaseModel,
+    SqliteDatabase,
     csv_field,
     define_csv_row,
+    per_session,
     table,
 )
 from composeui.core.view import (
@@ -829,8 +831,12 @@ class _Measures(CSVSqliteTable, row_type=_Measure, name="measures"):
     pass
 
 
-class _MeasuresModel(SqliteModel):
+class _MeasuresDatabase(SqliteDatabase):
     measures = table(_Measures)
+
+
+class _MeasuresModel(DatabaseModel):
+    study = per_session(_MeasuresDatabase)
 
 
 _DAY = datetime.date(2026, 1, 2)
@@ -862,7 +868,7 @@ def measures_model() -> Iterator[_MeasuresModel]:
 
 
 def _stored(model: _MeasuresModel) -> list[tuple[Any, ...]]:
-    with model.measures.connection() as db:
+    with model.study.measures.connection() as db:
         return [tuple(row) for row in db.execute("SELECT * FROM measures ORDER BY name")]
 
 
@@ -879,7 +885,7 @@ def test_a_frame_fills_a_table_with_its_typed_values_and_its_nulls(
 ) -> None:
     frame = _MEASURE_FRAMES[library]()
 
-    counts = list(fill_from_frame(measures_model.measures, frame, batch_size=batch_size))
+    counts = list(fill_from_frame(measures_model.study.measures, frame, batch_size=batch_size))
 
     assert counts[-1] == 2
     assert _stored(measures_model) == _STORED
@@ -891,7 +897,7 @@ def test_a_parquet_file_fills_a_table_through_the_app_s_own_reader(
     path = tmp_path / "measures.parquet"
     pl.DataFrame(_MEASURES).write_parquet(path)
 
-    for _ in fill_from_frame(measures_model.measures, pl.scan_parquet(path)):
+    for _ in fill_from_frame(measures_model.study.measures, pl.scan_parquet(path)):
         pass
 
     assert _stored(measures_model) == _STORED
@@ -902,7 +908,7 @@ def test_an_import_of_a_frame_stopped_or_refused_keeps_no_row(
 ) -> None:
     frame = pl.DataFrame(_MEASURES)
     with contextlib.closing(
-        fill_from_frame(measures_model.measures, frame, batch_size=1)
+        fill_from_frame(measures_model.study.measures, frame, batch_size=1)
     ) as batches:
         assert next(batches) == 1  # as a canceled job stops reading
     assert _stored(measures_model) == []
@@ -911,7 +917,7 @@ def test_an_import_of_a_frame_stopped_or_refused_keeps_no_row(
     for column in ("count", "name"):
         refused = pl.DataFrame({**_MEASURES, column: [_MEASURES[column][0], None]})
         with pytest.raises(RefusedError, match=f"no value for {column}"):
-            list(fill_from_frame(measures_model.measures, refused, batch_size=1))
+            list(fill_from_frame(measures_model.study.measures, refused, batch_size=1))
         assert _stored(measures_model) == []
 
 
@@ -921,7 +927,7 @@ def test_a_number_is_refused_in_a_date_field_with_a_format(
     frame = pl.DataFrame({**_MEASURES, "taken at": [1, 2]})
 
     with pytest.raises(RefusedError):
-        list(fill_from_frame(measures_model.measures, frame))
+        list(fill_from_frame(measures_model.study.measures, frame))
 
     assert _stored(measures_model) == []
 
@@ -940,7 +946,7 @@ def test_a_frame_s_value_that_would_lose_something_is_refused(
     frame = pd.DataFrame({**_MEASURES, column: values})
 
     with pytest.raises(RefusedError, match=column):
-        list(fill_from_frame(measures_model.measures, frame))
+        list(fill_from_frame(measures_model.study.measures, frame))
 
     assert _stored(measures_model) == []
 
@@ -950,7 +956,7 @@ def test_a_nan_of_polars_is_a_missing_value(measures_model: _MeasuresModel) -> N
     frame = pl.DataFrame({**_MEASURES, "level": [float("nan"), 1.5]})
 
     with pytest.raises(RefusedError, match="no value for level"):
-        list(fill_from_frame(measures_model.measures, frame))
+        list(fill_from_frame(measures_model.study.measures, frame))
 
     assert _stored(measures_model) == []
 
@@ -960,7 +966,7 @@ def test_a_frame_without_an_optional_column_gives_its_field_s_default(
 ) -> None:
     columns = {name: values for name, values in _MEASURES.items() if name != "extra"}
 
-    list(fill_from_frame(measures_model.measures, pl.DataFrame(columns)))
+    list(fill_from_frame(measures_model.study.measures, pl.DataFrame(columns)))
 
     assert [row[-1] for row in _stored(measures_model)] == [None, None]
 
@@ -974,7 +980,7 @@ def test_a_frame_s_value_converts_when_nothing_is_lost(
         {**_MEASURES, "count": [1.0, 2.0], "day": pd.to_datetime([midnight, midnight])}
     )
 
-    list(fill_from_frame(measures_model.measures, frame))
+    list(fill_from_frame(measures_model.study.measures, frame))
 
     assert _stored(measures_model) == _STORED
 
@@ -985,7 +991,7 @@ def test_a_date_of_a_frame_fits_a_date_field_with_a_format(
     """A date column in a field of date and time: no text to parse with the format."""
     frame = pl.DataFrame({**_MEASURES, "taken at": [_DAY, _DAY]})
 
-    list(fill_from_frame(measures_model.measures, frame))
+    list(fill_from_frame(measures_model.study.measures, frame))
 
     assert _stored(measures_model)[0][4] == "2026-01-02T00:00:00"
 
@@ -1071,7 +1077,7 @@ class _TenfoldTable(CSVSqliteTable, row_type=_Count, name="tenfold"):
         return (count * 10,)
 
 
-class _OwnCodeModel(SqliteModel):
+class _OwnCodeDatabase(SqliteDatabase):
     even = table(_EvenTable)
     even_and_positive = table(_EvenAndPositiveTable)
     even_if_given = table(_EvenIfGivenTable)
@@ -1079,6 +1085,10 @@ class _OwnCodeModel(SqliteModel):
     even_on_init = table(_EvenOnInitTable)
     absolute = table(_AbsoluteTable)
     tenfold = table(_TenfoldTable)
+
+
+class _OwnCodeModel(DatabaseModel):
+    study = per_session(_OwnCodeDatabase)
 
 
 @pytest.fixture
@@ -1095,7 +1105,7 @@ def test_the_row_class_s_own_checks_refuse_a_frame_s_row(
     own_code_model: _OwnCodeModel, name: str
 ) -> None:
     """The frame's library can't run them: each row goes through the row class."""
-    csv_table: CSVSqliteTable = getattr(own_code_model, name)
+    csv_table: CSVSqliteTable = getattr(own_code_model.study, name)
 
     with pytest.raises(RefusedError, match="count must be even"):
         list(fill_from_frame(csv_table, pl.DataFrame({"count": [2, 3]})))
@@ -1109,7 +1119,7 @@ def test_the_app_s_own_conversions_change_a_frame_s_values(
     own_code_model: _OwnCodeModel, name: str, stored: list[int]
 ) -> None:
     """A field's converter, or a table's own `row_parameters`, runs on each row."""
-    csv_table: CSVSqliteTable = getattr(own_code_model, name)
+    csv_table: CSVSqliteTable = getattr(own_code_model.study, name)
 
     list(fill_from_frame(csv_table, pl.DataFrame({"count": [-2, 3]})))
 
@@ -1138,8 +1148,12 @@ class _Samples(CSVSqliteTable, row_type=_Sample, name="samples"):
     pass
 
 
-class _SamplesModel(SqliteModel):
+class _SamplesDatabase(SqliteDatabase):
     samples = table(_Samples)
+
+
+class _SamplesModel(DatabaseModel):
+    study = per_session(_SamplesDatabase)
 
 
 _MIDNIGHT = datetime.datetime.combine(_DAY, datetime.time())
@@ -1213,7 +1227,7 @@ def _outcome(
         refused: Optional[str] = f"{type(error).__name__}: {error}"
     else:
         refused = None
-    with model.samples.connection() as db:
+    with model.study.samples.connection() as db:
         names = [field.name for field in attrs.fields(_Sample)]
         cells = ", ".join(f"{name}, typeof({name})" for name in names)
         rows = [tuple(row) for row in db.execute(f"SELECT {cells} FROM samples ORDER BY rowid")]  # noqa: S608
@@ -1286,10 +1300,12 @@ def test_a_frame_s_rows_are_stored_and_refused_as_its_rows_one_by_one() -> None:
     def check(sample: _SampleFrame) -> None:
         rows = _frame_rows(nw.from_native(sample.native(), eager_only=True), 2)
         expected = _outcome(
-            reference, reference.samples.fill_rows(rows, batch_size=2, limit=sample.limit)
+            reference, reference.study.samples.fill_rows(rows, batch_size=2, limit=sample.limit)
         )
 
-        batches = fill_from_frame(model.samples, sample.native(), batch_size=2, limit=sample.limit)
+        batches = fill_from_frame(
+            model.study.samples, sample.native(), batch_size=2, limit=sample.limit
+        )
 
         assert _outcome(model, batches) == expected
 
@@ -1305,9 +1321,9 @@ def test_validators_turned_off_refuse_no_row_of_a_frame() -> None:
     model = _SamplesModel()
     try:
         with attrs.validators.disabled():
-            list(fill_from_frame(model.samples, _with_whole([-1.0]).native()))
+            list(fill_from_frame(model.study.samples, _with_whole([-1.0]).native()))
 
-        with model.samples.connection() as db:
+        with model.study.samples.connection() as db:
             assert [whole for (whole,) in db.execute("SELECT whole FROM samples")] == [-1]
     finally:
         model.close()

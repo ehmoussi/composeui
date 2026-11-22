@@ -222,7 +222,9 @@ async def test_a_form_dialog_s_form_gets_its_state_once_its_screen_shows() -> No
         build_model=PipeCatalogueModel,
         setup_model=PipeCatalogueMainView.connect_model,
     )
-    app_views.model.pipes.add(CataloguePipe("Main line", CatalogueMaterial.COPPER, 50.0, 5.0, 6.0))
+    app_views.model.study.pipes.add(
+        CataloguePipe("Main line", CatalogueMaterial.COPPER, 50.0, 5.0, 6.0)
+    )
     view = app_views.main_view
     view.render(RendererType.TEXTUAL)
     assert isinstance(view.renderer, TextualMainRenderer)

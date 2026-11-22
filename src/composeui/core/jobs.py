@@ -895,7 +895,7 @@ class Jobs:
     callbacks update the views. Like the callbacks of any signal, they get the `main_view`
     and `model` they ask for. `Job.report_progress` emits the job's `progress` signal on
     the main thread. `Job.call_on_main_thread` hands it an arbitrary callback instead.
-    A `SqliteModel` hands it the `changed` signals of the job's writes.
+    A `DatabaseModel`'s database hands it the `changed` signals of the job's writes.
 
     `task` configures a reusable worker with progress, result and error state. Its
     ``changed`` signal shows the loading state, and its ``finished`` and ``failed``

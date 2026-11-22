@@ -208,7 +208,7 @@ files, and delete `js/vendor/`.
 - Put imports that only typing needs under `if TYPE_CHECKING:`.
 - Before you change code that holds state over time, write down its states and events, and what
   each event does in each state. The `state-machines` skill gives the method. It applies to jobs,
-  threads and timers, `SqliteModel` locking, web sessions and post order, `page.js` loaders and
+  threads and timers, `SqliteDatabase` locking, web sessions and post order, `page.js` loaders and
   swaps, reload, dialogs and screens, or a file being replaced.
 - The `__all__` of each module of `composeui.core` is its public API. The API reference
   shows only these names, and `tests/test_docs.py` checks that the docs and the examples

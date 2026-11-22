@@ -175,16 +175,19 @@ _PROGRESS_IN_A_TRANSACTION = """
 import asyncio, faulthandler
 faulthandler.dump_traceback_later(30, exit=True)
 from composeui.core.registry import RendererType
-from composeui.core.sqlitemodel import SqliteModel, SqliteTable
+from composeui.core.sqlitemodel import DatabaseModel, SqliteDatabase, SqliteTable, per_session
 from composeui.core.view import MainView
 
 class Numbers(SqliteTable):
     create = "CREATE TABLE number(value INTEGER);"
 
-class NumbersModel(SqliteModel):
+class NumbersDatabase(SqliteDatabase):
     def __init__(self):
         super().__init__()
         self.numbers = self.add_table(Numbers)
+
+class NumbersModel(DatabaseModel):
+    study = per_session(NumbersDatabase)
 
 async def main():
     model, view = NumbersModel(), MainView()
@@ -192,12 +195,12 @@ async def main():
     read = []
 
     def work(job):
-        with model.numbers.connection() as db:
+        with model.study.numbers.connection() as db:
             db.execute("INSERT INTO number VALUES (1)")
             job.report_progress(1)
 
     def show_progress(_value):
-        read.append(model.numbers.fetch_column("SELECT value FROM number"))
+        read.append(model.study.numbers.fetch_column("SELECT value FROM number"))
 
     async with view.renderer.app.run_test() as pilot:
         job = view.jobs.start(work)

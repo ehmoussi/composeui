@@ -17,7 +17,14 @@ import pytest
 
 from composeui.core import sqlitemodel
 from composeui.core.model import RefusedError
-from composeui.core.sqlitemodel import AllowedUrls, CSVSqliteTable, SqliteModel, open_csv_url
+from composeui.core.sqlitemodel import (
+    AllowedUrls,
+    CSVSqliteTable,
+    DatabaseModel,
+    SqliteDatabase,
+    open_csv_url,
+    per_session,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -32,6 +39,12 @@ class DownloadRow:
 
 class DownloadRows(CSVSqliteTable, row_type=DownloadRow, name="download"):
     pass
+
+
+class _ScratchModel(DatabaseModel):
+    """A model whose database starts with no table: each test adds its own."""
+
+    study = per_session(SqliteDatabase)
 
 
 @pytest.mark.parametrize("compressed", [False, True])
@@ -106,14 +119,14 @@ def test_csv_url_reads_http_and_propagates_http_errors_and_socket_timeouts() -> 
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     url = f"http://127.0.0.1:{server.server_port}"
-    model = SqliteModel()
+    model = _ScratchModel()
     try:
         with open_csv_url(f"{url}/download?name=data", timeout=2) as text:
             assert list(csv.DictReader(text, delimiter=";")) == [
                 {"name": "Station; A", "value": "1.5"}
             ]
         # An HTTP response cannot seek back after dialect detection.
-        rows = model.add_table(DownloadRows)
+        rows = model.study.add_table(DownloadRows)
         assert list(rows.fill_from_url(f"{url}/download", sniff=True, timeout=2)) == [1]
         assert rows.source().cells([1], ["name", "value"]) == {1: ["Station; A", 1.5]}
         with ExitStack() as resources, pytest.raises(HTTPError) as caught:
@@ -214,8 +227,9 @@ def test_a_url_from_a_user_imports_only_within_its_allowed_hosts_and_redirects(
     port = int(url.rsplit(":", maxsplit=1)[1])
     local = AllowedUrls(hosts={"127.0.0.1"}, schemes={"http"}, ports={port})
     following = attrs.evolve(local, follows_redirects=True)
-    model = SqliteModel()
-    rows = model.add_table(DownloadRows)
+    model = _ScratchModel()
+    rows = model.study.add_table(DownloadRows)
+
     try:
         with pytest.raises(RefusedError, match="isn't allowed"):
             list(rows.fill_from_url(f"{url}/data", allowed=AllowedUrls(hosts={"other.org"})))

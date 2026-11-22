@@ -215,7 +215,7 @@ def _textual_demo(main_view: Any, _model: Optional[Model]) -> None:
 
 def _uberpickups_setup(main_view: Any, model: Any) -> None:
     # Generated rows avoid downloading the full CSV; street tiles still need the network.
-    with model.uber_data.connection() as db:
+    with model.study.uber_data.connection() as db:
         db.executemany(
             "INSERT INTO uber_data VALUES (?, ?, ?, ?)",
             [

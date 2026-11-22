@@ -1,6 +1,6 @@
 # Importing CSV data
 
-A table of a [SQLite model](sqlite-model.md) can import CSV data from a file or a URL. These
+A table of a [SQLite database](sqlite-model.md) can import CSV data from a file or a URL. These
 sections cover the table, its sources of CSV data, and how it finds the CSV dialect.
 
 ## A CSV table
@@ -15,7 +15,15 @@ from io import StringIO
 
 import attrs
 
-from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, csv_field, define_csv_row, table
+from composeui.core.sqlitemodel import (
+    CSVSqliteTable,
+    DatabaseModel,
+    SqliteDatabase,
+    csv_field,
+    define_csv_row,
+    per_session,
+    table,
+)
 
 
 @define_csv_row
@@ -29,16 +37,20 @@ class Readings(CSVSqliteTable, row_type=Reading, name="reading"):
     pass
 
 
-class ReadingModel(SqliteModel):
+class ReadingDatabase(SqliteDatabase):
     readings = table(Readings)
+
+
+class ReadingModel(DatabaseModel):
+    study = per_session(ReadingDatabase)
 
 
 model = ReadingModel()
 try:
     text = StringIO("Recorded;Value\n25/10/2026 17:00;12.5\n")
-    for count in model.readings.fill(text, delimiter=";", batch_size=1000):
+    for count in model.study.readings.fill(text, delimiter=";", batch_size=1000):
         print(f"Submitted {count} rows")
-    source = model.readings.source(headers={"recorded": "Recorded at", "value": "Value"})
+    source = model.study.readings.source(headers={"recorded": "Recorded at", "value": "Value"})
     print(f"Source contains {source.count()} rows")
 finally:
     model.close()
@@ -76,10 +88,10 @@ finally:
       indexes = "CREATE INDEX reading_station ON reading(station);"
   ```
 
-  A study saved without an index no longer matches the table. To open it, raise the model's
+  A study saved without an index no longer matches the table. To open it, raise the database's
   `schema_version` and add a migration that creates the index (see
   [A SQLite model](sqlite-model.md)).
-- **A source for a large table.** `model.readings.source()` gives a
+- **A source for a large table.** `model.study.readings.source()` gives a
   [`SqliteSource`](tables.md#rows-in-sqlite) of the rows, for a `SourceTableView`.
   - The types of its columns come from the row class, and their headers are the CSV
     headers.
@@ -130,7 +142,7 @@ from contextlib import closing
 model = ReadingModel()  # the model of the previous example
 try:
     with closing(
-        model.readings.fill_from_file("readings.csv.gz", sniff=True, batch_size=1000)
+        model.study.readings.fill_from_file("readings.csv.gz", sniff=True, batch_size=1000)
     ) as batches:
         for count in batches:
             print(f"Submitted {count} rows")
@@ -157,7 +169,8 @@ from pathlib import Path
 model = ReadingModel()  # the model of the first example
 url = Path("readings.csv.gz").resolve().as_uri()  # or an https:// URL
 try:
-    with closing(model.readings.fill_from_url(url, delimiter=";", batch_size=1000)) as batches:
+    batches = model.study.readings.fill_from_url(url, delimiter=";", batch_size=1000)
+    with closing(batches):
         for count in batches:
             print(f"Submitted {count} rows")
 finally:

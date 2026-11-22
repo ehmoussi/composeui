@@ -1,4 +1,4 @@
-"""Tests for `SqliteModel` and the study files saving it with the views."""
+"""Tests for `DatabaseModel`, its `per_session` database, and the study files saving it."""
 
 from __future__ import annotations
 
@@ -22,7 +22,14 @@ from typing_extensions import override
 from composeui.core.application import ModelApplication
 from composeui.core.jobs import Job
 from composeui.core.model import InvalidStateError, RefusedError
-from composeui.core.sqlitemodel import SqliteModel, SqliteTable, table, unique_name
+from composeui.core.sqlitemodel import (
+    DatabaseModel,
+    SqliteDatabase,
+    SqliteTable,
+    per_session,
+    table,
+    unique_name,
+)
 from composeui.core.study import new_study, open_study
 from composeui.core.view import ButtonView, MainView, TableView, define_view
 from examples.webhello import HelloMainView
@@ -58,10 +65,14 @@ class Runs(SqliteTable):
         return [run.radius for run in self.fetch(Run, "SELECT * FROM run ORDER BY id")]
 
 
-class RunsModel(SqliteModel):
+class RunsDatabase(SqliteDatabase):
     def __init__(self) -> None:
         super().__init__()
         self.runs = self.add_table(Runs)
+
+
+class RunsModel(DatabaseModel):
+    study = per_session(RunsDatabase)
 
 
 class MeasuredRuns(SqliteTable):
@@ -75,8 +86,8 @@ def _add_stress(db: sqlite3.Connection) -> None:
     db.execute("ALTER TABLE run ADD COLUMN stress REAL NOT NULL DEFAULT 0")
 
 
-class MeasuredRunsModel(SqliteModel):
-    """`RunsModel`'s next version: its runs gained a stress."""
+class MeasuredRunsDatabase(SqliteDatabase):
+    """`RunsDatabase`'s next version: its runs gained a stress."""
 
     schema_version = 2
     migrations = MappingProxyType({1: _add_stress})
@@ -84,6 +95,10 @@ class MeasuredRunsModel(SqliteModel):
     def __init__(self) -> None:
         super().__init__()
         self.runs = self.add_table(MeasuredRuns)
+
+
+class MeasuredRunsModel(DatabaseModel):
+    study = per_session(MeasuredRunsDatabase)
 
 
 App = ModelApplication[HelloMainView, RunsModel]
@@ -106,19 +121,19 @@ def test_a_committed_write_of_the_model_is_an_unsaved_change(app: App, tmp_path:
     main_view = app.main_view
     main_view._mark_saved()  # noqa: SLF001 (as the app's start does)
 
-    app.model.runs.radii()
-    with contextlib.suppress(ValueError), app.model.runs.connection() as db:
+    app.model.study.runs.radii()
+    with contextlib.suppress(ValueError), app.model.study.runs.connection() as db:
         db.execute("INSERT INTO run(radius) VALUES (1)")
         raise ValueError  # rolled back
     assert not main_view.has_unsaved_changes()
-    app.model.runs.add(80.0)
+    app.model.study.runs.add(80.0)
     assert main_view.has_unsaved_changes()
     _save(app, tmp_path / "a.hello")
     assert not main_view.has_unsaved_changes()
 
 
 def test_save_as_saves_the_study_where_the_user_picks(app: App, tmp_path: Path) -> None:
-    app.model.runs.add(80.0)
+    app.model.study.runs.add(80.0)
     path = tmp_path / "copy.hello"
     app.main_view.file_view.filepath = path
 
@@ -126,7 +141,7 @@ def test_save_as_saves_the_study_where_the_user_picks(app: App, tmp_path: Path) 
 
     other = App(build_main_view=HelloMainView, build_model=RunsModel)
     _open(other, path)
-    assert other.model.runs.radii() == [80.0]
+    assert other.model.study.runs.radii() == [80.0]
     other.model.close()
 
 
@@ -137,25 +152,27 @@ def _open(app: ModelApplication[HelloMainView, Any], path: Path) -> None:
 
 def test_a_saved_study_opens_with_its_views_and_its_rows(app: App, tmp_path: Path) -> None:
     app.main_view.form.name.text = "Bob"
-    app.model.runs.add(80.0)
-    app.model.runs.add(50.0)
+    app.model.study.runs.add(80.0)
+    app.model.study.runs.add(50.0)
     path = tmp_path / "study.hello"
     _save(app, path)
     other = App(build_main_view=HelloMainView, build_model=RunsModel)
     # what a view refreshing from the rows would see of the views
     names_seen: list[str] = []
-    other.model.runs.changed.connect(lambda: names_seen.append(other.main_view.form.name.text))
+    other.model.study.runs.changed.connect(
+        lambda: names_seen.append(other.main_view.form.name.text)
+    )
 
     _open(other, path)
 
-    assert other.model.runs.radii() == [80.0, 50.0]
+    assert other.model.study.runs.radii() == [80.0, 50.0]
     assert other.main_view.form.name.text == "Bob"
     assert other.main_view.state_filepath == path
     assert names_seen == ["Bob"]  # told once the study's views are in place too
     # the user's file is the study, not the scratch database the model works on
-    app.model.runs.add(20.0)
+    app.model.study.runs.add(20.0)
     _open(other, path)
-    assert other.model.runs.radii() == [80.0, 50.0]
+    assert other.model.study.runs.radii() == [80.0, 50.0]
     other.model.close()
 
 
@@ -171,7 +188,7 @@ def test_a_dropped_worker_cannot_write_into_the_study_that_replaced_its_own() ->
         started.set()
         assert release.wait(30)
         try:
-            model.runs.add(1.0)
+            model.study.runs.add(1.0)
         except RefusedError as error:
             errors.append(error)
 
@@ -184,40 +201,40 @@ def test_a_dropped_worker_cannot_write_into_the_study_that_replaced_its_own() ->
     release.set()
     threads[0].join(30)
 
-    assert model.runs.radii() == []
+    assert model.study.runs.radii() == []
     assert [type(error) for error in errors] == [RefusedError]
     model.close()
 
 
 def test_new_empties_the_tables_and_resets_the_views(app: App) -> None:
     app.main_view.form.name.text = "Bob"
-    app.model.runs.add(80.0)
+    app.model.study.runs.add(80.0)
     changes: list[None] = []
-    app.model.runs.changed.connect(lambda: changes.append(None))
+    app.model.study.runs.changed.connect(lambda: changes.append(None))
 
     app.main_view.file_menu.new.triggered.emit()
 
-    assert app.model.runs.radii() == []
+    assert app.model.study.runs.radii() == []
     assert app.main_view.form.name.text == ""
     assert changes == [None]  # the views showing the runs refresh
 
 
 def test_a_block_that_raises_writes_nothing(app: App) -> None:
     changes: list[None] = []
-    app.model.runs.changed.connect(lambda: changes.append(None))
+    app.model.study.runs.changed.connect(lambda: changes.append(None))
 
     def add_then_fail() -> None:
-        with app.model.connection():
-            app.model.runs.add(80.0)  # joins the outer block, so it's undone with it
+        with app.model.study.connection():
+            app.model.study.runs.add(80.0)  # joins the outer block, so it's undone with it
             raise RuntimeError
 
     with pytest.raises(RuntimeError):
         add_then_fail()
 
-    assert app.model.runs.radii() == []
+    assert app.model.study.runs.radii() == []
     assert changes == []
-    app.model.runs.add(50.0)
-    assert app.model.runs.radii() == [50.0]
+    app.model.study.runs.add(50.0)
+    assert app.model.study.runs.radii() == [50.0]
     assert changes == [None]
 
 
@@ -243,7 +260,7 @@ def test_batch_inserts_read_only_the_requested_rows_and_commit_together(
 ) -> None:
     consumed: list[int] = []
     changes: list[None] = []
-    app.model.runs.changed.connect(lambda: changes.append(None))
+    app.model.study.runs.changed.connect(lambda: changes.append(None))
 
     def rows() -> Iterator[Any]:
         for radius in range(5):
@@ -256,17 +273,17 @@ def test_batch_inserts_read_only_the_requested_rows_and_commit_together(
         else "INSERT INTO run(radius) VALUES (?)"
     )
     counts: list[int] = []
-    for count in app.model.runs.insert_batches(sql, rows(), batch_size=size, limit=limit):
+    for count in app.model.study.runs.insert_batches(sql, rows(), batch_size=size, limit=limit):
         counts.append(count)
         # Progress describes submitted rows, not an intermediate commit.
-        with app.model.runs.reading() as db:
+        with app.model.study.runs.reading() as db:
             assert db.execute("SELECT COUNT(*) FROM run").fetchone()[0] == 0
         assert changes == []
 
     expected_rows = 5 if limit is None else min(5, limit)
     assert counts == expected_counts
     assert consumed == list(range(expected_rows))
-    assert app.model.runs.radii() == list(range(expected_rows))
+    assert app.model.study.runs.radii() == list(range(expected_rows))
     assert changes == ([None] if expected_rows else [])
 
 
@@ -275,23 +292,23 @@ def test_invalid_batch_options_do_not_consume_rows(app: App, size: int, limit: i
     rows = iter([(1,)])
     with pytest.raises(ValueError, match=r"batch_size|limit"):
         list(
-            app.model.runs.insert_batches(
+            app.model.study.runs.insert_batches(
                 "INSERT INTO run(radius) VALUES (?)", rows, batch_size=size, limit=limit
             )
         )
     assert next(rows) == (1,)
-    assert app.model.runs.radii() == []
+    assert app.model.study.runs.radii() == []
 
 
 def test_empty_batch_input_writes_nothing(app: App) -> None:
-    assert list(app.model.runs.insert_batches("INSERT INTO run(radius) VALUES (?)", [])) == []
-    assert app.model.runs.radii() == []
+    assert list(app.model.study.runs.insert_batches("INSERT INTO run(radius) VALUES (?)", [])) == []
+    assert app.model.study.runs.radii() == []
 
 
 @pytest.mark.parametrize("stop", ["close", "constraint", "input"])
 def test_incomplete_batch_inserts_roll_back_previous_batches(app: App, stop: str) -> None:
     changes: list[None] = []
-    app.model.runs.changed.connect(lambda: changes.append(None))
+    app.model.study.runs.changed.connect(lambda: changes.append(None))
 
     def rows() -> Iterator[tuple[float | None]]:
         yield (1.0,)
@@ -301,7 +318,7 @@ def test_incomplete_batch_inserts_roll_back_previous_batches(app: App, stop: str
         yield (None,)
 
     with contextlib.closing(
-        app.model.runs.insert_batches(
+        app.model.study.runs.insert_batches(
             "INSERT INTO run(radius) VALUES (?)",
             rows(),
             batch_size=1,
@@ -315,10 +332,10 @@ def test_incomplete_batch_inserts_roll_back_previous_batches(app: App, stop: str
             with pytest.raises(RuntimeError, match="input failed"):
                 next(batches)
 
-    assert app.model.runs.radii() == []
+    assert app.model.study.runs.radii() == []
     assert changes == []
-    app.model.runs.add(2.0)
-    assert app.model.runs.radii() == [2.0]
+    app.model.study.runs.add(2.0)
+    assert app.model.study.runs.radii() == [2.0]
     assert changes == [None]
 
 
@@ -331,20 +348,20 @@ def test_batch_inserts_join_the_callers_transaction(
     supply_db: bool,
 ) -> None:
     changes: list[None] = []
-    app.model.runs.changed.connect(lambda: changes.append(None))
+    app.model.study.runs.changed.connect(lambda: changes.append(None))
 
     def insert() -> None:
-        with app.model.runs.connection() as connection:
-            app.model.runs.add(10.0)
+        with app.model.study.runs.connection() as connection:
+            app.model.study.runs.add(10.0)
             assert list(
-                app.model.runs.insert_batches(
+                app.model.study.runs.insert_batches(
                     "INSERT INTO run(radius) VALUES (?)",
                     [(20.0,), (30.0,)],
                     db=connection if supply_db else None,
                     batch_size=1,
                 )
             ) == [1, 2]
-            with app.model.runs.reading() as db:
+            with app.model.study.runs.reading() as db:
                 assert db.execute("SELECT COUNT(*) FROM run").fetchone()[0] == 0
             if rollback:
                 msg = "outer transaction failed"
@@ -355,7 +372,7 @@ def test_batch_inserts_join_the_callers_transaction(
             insert()
     else:
         insert()
-    assert app.model.runs.radii() == ([] if rollback else [10.0, 20.0, 30.0])
+    assert app.model.study.runs.radii() == ([] if rollback else [10.0, 20.0, 30.0])
     assert changes == ([] if rollback else [None])
 
 
@@ -367,7 +384,7 @@ def test_batch_inserts_leave_a_supplied_connection_under_caller_control(
         db.execute("CREATE TABLE run(radius REAL NOT NULL)")
         rows = [(1.0,), (None if stop == "constraint" else 2.0,)]
         with contextlib.closing(
-            app.model.runs.insert_batches(
+            app.model.study.runs.insert_batches(
                 "INSERT INTO run(radius) VALUES (?)",
                 rows,
                 db=db,
@@ -387,7 +404,7 @@ def test_batch_inserts_leave_a_supplied_connection_under_caller_control(
         )
         db.rollback()
         assert db.execute("SELECT radius FROM run").fetchall() == []
-    assert app.model.runs.radii() == []
+    assert app.model.study.runs.radii() == []
 
 
 class Parts(SqliteTable):
@@ -400,10 +417,14 @@ class Parts(SqliteTable):
     """
 
 
-class PartsModel(SqliteModel):
+class PartsDatabase(SqliteDatabase):
     def __init__(self) -> None:
         super().__init__()
         self.parts = self.add_table(Parts)
+
+
+class PartsModel(DatabaseModel):
+    study = per_session(PartsDatabase)
 
 
 def _started(model: PartsModel, tmp_path: Path) -> None:
@@ -440,9 +461,9 @@ def test_every_database_keeps_the_models_settings(
     model = PartsModel()
     start(model, tmp_path)
 
-    with pytest.raises(RefusedError), model.parts.connection() as db:
+    with pytest.raises(RefusedError), model.study.parts.connection() as db:
         db.execute("INSERT INTO use(part_id) VALUES (1)")  # foreign keys are enforced
-    with model.parts.connection() as db:
+    with model.study.parts.connection() as db:
         db.execute("INSERT INTO part(id, name) VALUES (1, 'bolt')")
         db.execute("INSERT OR REPLACE INTO part(id, name) VALUES (1, 'screw')")
         # the replaced row went through the delete trigger (recursive triggers are on)
@@ -450,7 +471,7 @@ def test_every_database_keeps_the_models_settings(
         # trusted again once an opened database's schema is checked: the app's own
         (trusted,) = db.execute("PRAGMA trusted_schema").fetchone()
         assert trusted == 1
-        # read apart during a write (`SqliteModel.reading`)
+        # read apart during a write (`SqliteDatabase.reading`)
         assert tuple(db.execute("PRAGMA journal_mode").fetchone()) == ("wal",)
     model.close()
 
@@ -462,7 +483,7 @@ def test_closing_a_model_waits_for_no_write_running_whose_end_closes_it() -> Non
     written: list[int] = []
 
     def write() -> None:  # as a job's long write, e.g. filling a table
-        with model.parts.connection() as db:
+        with model.study.parts.connection() as db:
             connections.append(db)
             writing.set()
             done.wait(10)
@@ -489,7 +510,7 @@ def test_a_closed_model_reads_nothing_more_apart_as_its_connection() -> None:
     model = PartsModel()
     model.close()
 
-    for connection in (model.parts.connection, model.parts.reading):
+    for connection in (model.study.parts.connection, model.study.parts.reading):
         with pytest.raises(sqlite3.ProgrammingError, match="closed database"), connection():
             pass
 
@@ -509,14 +530,14 @@ def test_a_saved_study_s_data_leaves_no_journal_beside_it(tmp_path: Path) -> Non
 
 
 def test_a_study_of_an_older_version_is_brought_up_to_date(app: App, tmp_path: Path) -> None:
-    app.model.runs.add(80.0)
+    app.model.study.runs.add(80.0)
     path = tmp_path / "study.hello"
     _save(app, path)
     newer = ModelApplication(build_main_view=HelloMainView, build_model=MeasuredRunsModel)
 
     _open(newer, path)
 
-    runs = newer.model.runs.fetch(MeasuredRun, "SELECT * FROM run")
+    runs = newer.model.study.runs.fetch(MeasuredRun, "SELECT * FROM run")
     assert runs == [MeasuredRun(id=1, radius=80.0, stress=0.0)]
     newer.model.close()
 
@@ -537,7 +558,7 @@ def _archive(
     def write(path: Path) -> None:
         with zipfile.ZipFile(path, "w", compression) as archive:
             archive.writestr("views.json", views)
-            archive.writestr("data.sqlite", data)
+            archive.writestr("study.sqlite", data)
 
     return write
 
@@ -618,14 +639,14 @@ def test_a_study_that_does_not_fit_changes_nothing_and_says_why(
     app: App, tmp_path: Path, write: Callable[[Path], None], reason: str
 ) -> None:
     app.main_view.form.name.text = "Bob"
-    app.model.runs.add(80.0)
+    app.model.study.runs.add(80.0)
     path = tmp_path / "study.hello"
     write(path)
 
     _open(app, path)
 
     assert app.main_view.notification.message == f"Can't open 'study.hello': {reason}."
-    assert app.model.runs.radii() == [80.0]
+    assert app.model.study.runs.radii() == [80.0]
     assert app.main_view.form.name.text == "Bob"
     assert app.main_view.state_filepath is None
 
@@ -669,7 +690,7 @@ def test_a_damaged_study_opens_or_is_refused_leaving_the_study_as_it_was(
     app: App, tmp_path: Path
 ) -> None:
     app.main_view.form.name.text = "Ada"
-    app.model.runs.add(80.0)
+    app.model.study.runs.add(80.0)
     _save(app, tmp_path / "saved.hello")
     saved = (tmp_path / "saved.hello").read_bytes()
     path = tmp_path / "damaged.hello"
@@ -687,11 +708,11 @@ def test_a_damaged_study_opens_or_is_refused_leaving_the_study_as_it_was(
         for index, byte in changes:
             data[index] = byte
         path.write_bytes(bytes(data[:kept]) + added)
-        views, radii = app.main_view.state_data(), app.model.runs.radii()
+        views, radii = app.main_view.state_data(), app.model.study.runs.radii()
         try:
             open_study(app.main_view, app.model, path)
         except InvalidStateError:
-            assert (app.main_view.state_data(), app.model.runs.radii()) == (views, radii)
+            assert (app.main_view.state_data(), app.model.study.runs.radii()) == (views, radii)
 
     open_damaged()
 
@@ -730,7 +751,7 @@ def _study_with(app: App, path: Path, script: str, *, version: int = 1) -> None:
     with zipfile.ZipFile(path) as archive:
         views = archive.read("views.json")
         data = path.with_suffix(".sqlite")
-        data.write_bytes(archive.read("data.sqlite"))
+        data.write_bytes(archive.read("study.sqlite"))
     db = sqlite3.connect(data)
     db.executescript(f"{script}; PRAGMA user_version = {version};")
     db.close()
@@ -749,7 +770,7 @@ def _study_with(app: App, path: Path, script: str, *, version: int = 1) -> None:
     ],
 )
 def test_a_database_not_made_as_a_new_one_is_refused(app: App, tmp_path: Path, script: str) -> None:
-    app.model.runs.add(80.0)
+    app.model.study.runs.add(80.0)
     path = tmp_path / "study.hello"
     _study_with(app, path, script)
 
@@ -757,19 +778,23 @@ def test_a_database_not_made_as_a_new_one_is_refused(app: App, tmp_path: Path, s
 
     message = "Can't open 'study.hello': its data doesn't match this application."
     assert app.main_view.notification.message == message
-    assert app.model.runs.radii() == [80.0]
+    assert app.model.study.runs.radii() == [80.0]
 
 
 def _read_forever(db: sqlite3.Connection) -> None:
     db.execute("SELECT count(*) FROM forever")
 
 
-class _SlowMigrationModel(RunsModel):
-    """A model whose migration queries a view of the file, which may never end."""
+class _SlowMigrationDatabase(RunsDatabase):
+    """A database whose migration queries a view of the file, which may never end."""
 
     schema_version = 2
     migrations = MappingProxyType({1: _read_forever})
     open_time_limit = 0.2
+
+
+class _SlowMigrationModel(DatabaseModel):
+    study = per_session(_SlowMigrationDatabase)
 
 
 def test_opening_a_database_is_cut_after_its_time_limit(app: App, tmp_path: Path) -> None:
@@ -789,16 +814,16 @@ def test_opening_a_database_is_cut_after_its_time_limit(app: App, tmp_path: Path
 
 def test_a_job_s_writes_are_told_on_the_main_thread(app: App) -> None:
     threads: list[threading.Thread] = []
-    app.model.runs.changed.connect(lambda: threads.append(threading.current_thread()))
+    app.model.study.runs.changed.connect(lambda: threads.append(threading.current_thread()))
 
     def write(_job: Job[None], model: RunsModel) -> None:
-        model.runs.add(80.0)
-        model.runs.add(50.0)
+        model.study.runs.add(80.0)
+        model.study.runs.add(50.0)
 
     app.main_view.jobs.start(write, app.model)
     app.main_view.jobs.wait()
 
-    assert app.model.runs.radii() == [80.0, 50.0]
+    assert app.model.study.runs.radii() == [80.0, 50.0]
     assert threads == [threading.current_thread()] * 2
 
 
@@ -827,16 +852,16 @@ def test_opening_a_study_drops_the_jobs_before_it_replaces_the_rows(
 def test_a_failed_save_leaves_the_previous_study_whole(
     app: App, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    app.model.runs.add(80.0)
+    app.model.study.runs.add(80.0)
     path = tmp_path / "study.hello"
     _save(app, path)
     saved = path.read_bytes()
-    app.model.runs.add(50.0)
+    app.model.study.runs.add(50.0)
 
     def full_disk(*_: object) -> None:
         raise OSError(28, "No space left on device")
 
-    monkeypatch.setattr(SqliteModel, "save_data", full_disk)
+    monkeypatch.setattr(DatabaseModel, "save_data", full_disk)
 
     _save(app, path)
 
@@ -872,8 +897,12 @@ class Tags(SqliteTable):
         return self.fetch_column("SELECT name FROM tag ORDER BY name")
 
 
-class TagsModel(SqliteModel):
+class TagsDatabase(SqliteDatabase):
     tags = table(Tags)
+
+
+class TagsModel(DatabaseModel):
+    study = per_session(TagsDatabase)
 
 
 @define_view
@@ -894,14 +923,14 @@ class TagsMainView(MainView):
 
     def _add(self, model: TagsModel) -> None:
         with self.table.refusing(self.tr("Can't add the tag: {error}")):
-            model.tags.add("")
+            model.study.tags.add("")
 
     def _rename(self, row: int, column: int, text: str, model: TagsModel) -> None:
         with self.table.refusing(self.tr("Can't rename the tag: {error}")):
-            model.tags.rename(self.table.rows[row][column], text)
+            model.study.tags.rename(self.table.rows[row][column], text)
 
     def show_tags(self, model: TagsModel) -> None:
-        self.table.rows = [[name] for name in model.tags.names()]
+        self.table.rows = [[name] for name in model.study.tags.names()]
 
 
 TagsApp = ModelApplication[TagsMainView, TagsModel]
@@ -910,8 +939,8 @@ TagsApp = ModelApplication[TagsMainView, TagsModel]
 @pytest.fixture
 def tags_app() -> Iterator[TagsApp]:
     app = TagsApp(build_main_view=TagsMainView, build_model=TagsModel)
-    app.model.tags.add("red")
-    app.model.tags.add("blue")
+    app.model.study.tags.add("red")
+    app.model.study.tags.add("blue")
     app.main_view.table.rows = [["blue"], ["red"]]
     yield app
     app.model.close()
@@ -934,7 +963,7 @@ def test_a_refusal_says_why_in_the_apps_language(
     assert main_view.notification.message == (
         "Impossible de renommer l'étiquette : une étiquette doit avoir un nom"
     )
-    assert tags_app.model.tags.names() == ["blue", "red"]
+    assert tags_app.model.study.tags.names() == ["blue", "red"]
     # the refusal's text follows the language too
     main_view.set_language("en")
     assert main_view.notification.message == "Can't rename the tag: a tag needs a name"
@@ -956,29 +985,29 @@ def test_a_refusal_outside_an_edit_only_says_why(tags_app: TagsApp) -> None:
     main_view.add.clicked.emit()
 
     assert main_view.notification.message == "Can't add the tag: a tag needs a name"
-    assert tags_app.model.tags.names() == ["blue", "red"]
+    assert tags_app.model.study.tags.names() == ["blue", "red"]
 
 
 def test_a_table_s_changed_signal_gives_a_view_s_method_the_model() -> None:
     def setup_model(main_view: TagsMainView, model: TagsModel) -> None:
-        model.tags.add("red")
+        model.study.tags.add("red")
         # no lambda to hand it the model, nor a first call of its own
-        model.tags.changed.connect(main_view.show_tags, now=True)
+        model.study.tags.changed.connect(main_view.show_tags, now=True)
 
     app = TagsApp(build_main_view=TagsMainView, build_model=TagsModel, setup_model=setup_model)
     assert app.main_view.table.rows == [["red"]]
-    app.model.tags.add("blue")
+    app.model.study.tags.add("blue")
     assert app.main_view.table.rows == [["blue"], ["red"]]
     app.model.close()
 
 
 def test_a_unique_name_numbers_the_base_past_the_names_taken_whatever_their_case() -> None:
     model = TagsModel()
-    model.tags.add("Tag")
-    model.tags.add("tag 2")
+    model.study.tags.add("Tag")
+    model.study.tags.add("tag 2")
 
-    assert [model.tags.add_unique("Tag") for _ in range(2)] == ["Tag 3", "Tag 4"]
-    assert model.tags.add_unique("Label") == "Label"
+    assert [model.study.tags.add_unique("Tag") for _ in range(2)] == ["Tag 3", "Tag 4"]
+    assert model.study.tags.add_unique("Label") == "Label"
     model.close()
 
 
@@ -986,30 +1015,38 @@ class Notes(SqliteTable):
     create = "CREATE TABLE note(text TEXT NOT NULL);"
 
 
-class NotedTagsModel(TagsModel):
+class NotedTagsDatabase(TagsDatabase):
     """Its tables declared by its class and its base's."""
 
     notes = table(Notes)
 
 
+class NotedTagsModel(DatabaseModel):
+    study = per_session(NotedTagsDatabase)
+
+
 def test_each_model_builds_the_tables_its_classes_declare() -> None:
     model, other = NotedTagsModel(), NotedTagsModel()
-    model.tags.add("red")
+    model.study.tags.add("red")
 
-    assert (type(model.tags), type(model.notes)) == (Tags, Notes)
-    assert other.tags.names() == []
+    assert (type(model.study.tags), type(model.study.notes)) == (Tags, Notes)
+    assert other.study.tags.names() == []
     # a new study creates them again
     model.new()
-    assert model.tags.names() == []
-    assert model.notes.fetch_column("SELECT count(*) FROM note") == [0]
+    assert model.study.tags.names() == []
+    assert model.study.notes.fetch_column("SELECT count(*) FROM note") == [0]
     model.close()
     other.close()
 
 
-class _ThirdVersionModel(MeasuredRunsModel):
+class _ThirdVersionDatabase(MeasuredRunsDatabase):
     """A version whose migration from the second one is missing: e.g. forgotten."""
 
     schema_version = 3
+
+
+class _ThirdVersionModel(DatabaseModel):
+    study = per_session(_ThirdVersionDatabase)
 
 
 @pytest.mark.parametrize(
@@ -1029,14 +1066,14 @@ class _ThirdVersionModel(MeasuredRunsModel):
 def test_a_database_damaged_or_of_no_version_is_refused(
     app: App, tmp_path: Path, script: str, version: int, reason: str
 ) -> None:
-    app.model.runs.add(80.0)
+    app.model.study.runs.add(80.0)
     path = tmp_path / "study.hello"
     _study_with(app, path, script, version=version)
 
     _open(app, path)
 
     assert app.main_view.notification.message == f"Can't open 'study.hello': {reason}."
-    assert app.model.runs.radii() == [80.0]
+    assert app.model.study.runs.radii() == [80.0]
 
 
 def test_a_study_a_migration_can_t_bring_up_to_date_is_refused(app: App, tmp_path: Path) -> None:
@@ -1053,26 +1090,29 @@ def test_a_study_a_migration_can_t_bring_up_to_date_is_refused(app: App, tmp_pat
 
 def test_a_block_raising_inside_another_undoes_both(app: App) -> None:
     def add_then_fail_inside() -> None:
-        with app.model.connection():
-            app.model.runs.add(80.0)
-            with app.model.connection():
-                app.model.runs.add(50.0)
+        with app.model.study.connection():
+            app.model.study.runs.add(80.0)
+            with app.model.study.connection():
+                app.model.study.runs.add(50.0)
                 raise RuntimeError
 
     with pytest.raises(RuntimeError):
         add_then_fail_inside()
 
-    assert app.model.runs.radii() == []
+    assert app.model.study.runs.radii() == []
 
 
 def test_a_model_closed_while_a_query_reads_closes_once_it_s_over() -> None:
     model = PartsModel()
-    with model.parts.reading() as db:
+    with model.study.parts.reading() as db:
         model.close()
         (count,) = db.execute("SELECT count(*) FROM part").fetchone()  # still readable
 
     assert count == 0
-    with pytest.raises(sqlite3.ProgrammingError, match="closed database"), model.parts.reading():
+    with (
+        pytest.raises(sqlite3.ProgrammingError, match="closed database"),
+        model.study.parts.reading(),
+    ):
         pass
 
 
@@ -1088,19 +1128,23 @@ def test_a_reader_that_fails_to_open_leaves_the_model_reading(
         raise sqlite3.OperationalError(msg)
 
     monkeypatch.setattr("composeui.core.sqlitemodel.sqlite3.connect", fail_once)
-    with pytest.raises(sqlite3.OperationalError), model.parts.reading():
+    with pytest.raises(sqlite3.OperationalError), model.study.parts.reading():
         pass
-    with model.parts.reading() as db:
+    with model.study.parts.reading() as db:
         (count,) = db.execute("SELECT count(*) FROM part").fetchone()
 
     assert count == 0
     model.close()
 
 
-class _DefaultJournalModel(RunsModel):
-    """A model keeping SQLite's default journal: no `journal_mode` among its pragmas."""
+class _DefaultJournalDatabase(RunsDatabase):
+    """A database keeping SQLite's default journal: no `journal_mode` among its pragmas."""
 
     pragmas = MappingProxyType({"foreign_keys": "ON"})
+
+
+class _DefaultJournalModel(DatabaseModel):
+    study = per_session(_DefaultJournalDatabase)
 
 
 def test_a_model_without_a_journal_setting_keeps_sqlite_s_default(tmp_path: Path) -> None:
@@ -1108,15 +1152,19 @@ def test_a_model_without_a_journal_setting_keeps_sqlite_s_default(tmp_path: Path
     model.save_data(tmp_path / "data.sqlite")
     model.open_data(tmp_path / "data.sqlite")
 
-    with model.runs.connection() as db:
+    with model.study.runs.connection() as db:
         (journal,) = db.execute("PRAGMA journal_mode").fetchone()
 
     assert journal == "delete"
     model.close()
 
 
-class _BadPragmaModel(RunsModel):
+class _BadPragmaDatabase(RunsDatabase):
     pragmas = MappingProxyType({"journal_mode": "WAL; DROP TABLE run"})
+
+
+class _BadPragmaModel(DatabaseModel):
+    study = per_session(_BadPragmaDatabase)
 
 
 def test_a_model_s_pragma_that_isn_t_a_setting_is_refused() -> None:
@@ -1132,3 +1180,43 @@ def test_a_study_larger_than_its_limit_is_refused_before_it_is_unpacked(
 
     with pytest.raises(InvalidStateError, match="the file is too large"):
         open_study(app.main_view, app.model, path, max_size=10)  # e.g. the web's limit
+
+
+class _OldStudyModel(DatabaseModel):
+    """A model opening the studies saved before its database had a field's name."""
+
+    study = per_session(RunsDatabase, data_name="data.sqlite")
+
+
+@pytest.mark.parametrize(
+    ("model_type", "member"), [(RunsModel, "study.sqlite"), (_OldStudyModel, "data.sqlite")]
+)
+def test_a_study_names_its_database_after_the_field_unless_told_otherwise(
+    model_type: type[DatabaseModel], member: str, tmp_path: Path
+) -> None:
+    app = ModelApplication(build_main_view=HelloMainView, build_model=model_type)
+    path = tmp_path / "study.hello"
+    try:
+        _save(app, path)
+    finally:
+        app.model.close()
+
+    with zipfile.ZipFile(path) as archive:
+        assert sorted(archive.namelist()) == [member, "views.json"]
+
+
+@pytest.mark.parametrize(
+    ("fields", "message"),
+    [
+        ({"runs": table(Runs)}, r"declares tables \(runs\): declare them in a SqliteDatabase"),
+        (
+            {"study": per_session(RunsDatabase), "other": per_session(TagsDatabase)},
+            r"several per_session databases \(study, other\): a study holds one",
+        ),
+    ],
+)
+def test_a_model_declaring_tables_or_several_study_databases_is_refused(
+    fields: dict[str, object], message: str
+) -> None:
+    with pytest.raises(TypeError, match=message):
+        type("Refused", (DatabaseModel,), fields)

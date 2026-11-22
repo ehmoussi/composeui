@@ -193,7 +193,7 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   that changes what the code does.
 - Put imports only needed for typing under `if TYPE_CHECKING:`.
 - Load the `state-machines` skill before you change code that holds state over time: jobs,
-  threads and timers, `SqliteModel` locking, web sessions and post order, `page.js` loaders and
+  threads and timers, `SqliteDatabase` locking, web sessions and post order, `page.js` loaders and
   swaps, reload, dialogs and screens, or a file being replaced.
 - The public API is the `__all__` of each `composeui.core` module: the API reference shows
   only it, and `tests/test_docs.py` checks that the docs and examples import nothing else.

@@ -31,7 +31,13 @@ from composeui.core.application import (
 from composeui.core.jobs import starting_study
 from composeui.core.model import Model
 from composeui.core.registry import RendererType
-from composeui.core.sqlitemodel import SqliteModel, SqliteTable, table
+from composeui.core.sqlitemodel import (
+    DatabaseModel,
+    SqliteDatabase,
+    SqliteTable,
+    per_session,
+    table,
+)
 from composeui.core.study import save_study
 from composeui.core.view import (
     ButtonView,
@@ -376,11 +382,15 @@ class _ImportedNotes(SqliteTable):
     create = "CREATE TABLE notes (text TEXT NOT NULL)"
 
 
-class _ImportedNotesModel(SqliteModel):
+class _ImportedNotesDatabase(SqliteDatabase):
     notes = table(_ImportedNotes)
 
+
+class _ImportedNotesModel(DatabaseModel):
+    study = per_session(_ImportedNotesDatabase)
+
     def add(self, text: str) -> None:
-        with self.connection(changing=self.notes) as db:
+        with self.study.connection(changing=self.study.notes) as db:
             db.execute("INSERT INTO notes VALUES (?)", (text,))
 
 

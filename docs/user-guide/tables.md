@@ -7,7 +7,7 @@ its rows from a source.
 
 A `TableView` shows text that the app formats itself. A `RecordTableView` shows `attrs`
 records, with a column per field, such as the records that the `fetch` of a
-[SQLite model](sqlite-model.md) returns:
+[SQLite database](sqlite-model.md) returns:
 
 ```python
 from composeui.core.view import Column, RecordTableView, T, child
@@ -18,7 +18,7 @@ runs: RecordTableView[Run] = child(
 )
 ```
 
-- **Update.** Set `records` to update the table (`table.records = model.runs.above(0.1)`).
+- **Update.** Set `records` to update the table (`table.records = model.study.runs.above(0.1)`).
 - **Selection.** Read `selected_record`, or `selected_records`.
 - **Activation.** Connect to `row_activated` to open a row: a double click, or Enter, emits the
   row's index in `rows`. A double click on a cell that edits, or on a button or a link, does not. On
@@ -497,12 +497,12 @@ What each backend shows:
 
 ### Rows in SQLite
 
-A `SqliteSource` gives a large table the rows of a query on a `SqliteModel`. SQLite sorts
+A `SqliteSource` gives a large table the rows of a query on a `SqliteDatabase`. SQLite sorts
 and filters the rows. The table reads only the ids of the rows shown, and the rows that it
 draws. So the rows never all come to Python.
 
 A [`CSVSqliteTable`](csv-import.md#a-csv-table) gives its own source:
-`model.readings.source()` takes the columns and their types from the row class. For
+`model.study.readings.source()` takes the columns and their types from the row class. For
 another table, or a query of your own, give the query and its columns:
 
 ```python
@@ -510,7 +510,7 @@ from composeui.core.sqlitemodel import SqliteSource
 from composeui.core.view import SourceColumn, T
 
 main_view.readings.source = SqliteSource(
-    model.readings,  # a SqliteTable: its connection, and its changed signal
+    model.study.readings,  # a SqliteTable: its connection, and its changed signal
     "SELECT * FROM reading",
     id_column="id",
     columns=[
@@ -530,7 +530,7 @@ main_view.readings.source = SqliteSource(
 - **Index the columns that sort.** With no search and no filter, SQLite reads the rows in
   the order of the index. This takes about 0.4 seconds for a million rows, where a sort
   takes about a second. A search or a filter sorts only the rows that pass it.
-- **The source reads on connections of its own** (`SqliteModel.reading`). The order and
+- **The source reads on connections of its own** (`SqliteDatabase.reading`). The order and
   the cells never wait for each other, or for a write, such as a job that writes rows.
   They read the committed rows. Once a write commits, the `changed` signal of the table
   reads the rows again.

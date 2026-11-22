@@ -602,8 +602,8 @@ are those since the study was last saved, opened, or started. An app without a F
 A change is what Save would write differently: a field of the study, or the model's data. A change
 undone is no change. UI text, a dialog, the status bar's message, a notification, and the tab shown
 are not changes (see the list above). A model tells its changes with `Model.data_version`:
-`SqliteModel` counts its committed writes, but not those of the jobs that the study's start started
-(see below). A model of your own with data changes it as its data changes.
+`DatabaseModel` counts its committed writes, but not those of the jobs that the study's start
+started (see below). A model of your own with data changes it as its data changes.
 
 What the app does on its own as the study starts is not a change: its setup, the callbacks of
 `loaded`, its command-line options, and the jobs they start, such as a download of the data a
@@ -674,7 +674,7 @@ class PipeMainView(MainView):
 - **When it saves.** Every `autosave_interval` seconds, 60 by default, while the study has
   [unsaved changes](#unsaved-changes) that the last autosave does not hold. An idle app writes
   nothing. The log says "Autosaved the unsaved work in" and the folder at each autosave. A
-  thread writes the views' state, and copies the data of a `SqliteModel`, so the window does
+  thread writes the views' state, and copies the data of a `DatabaseModel`, so the window does
   not wait. The data is copied only when `Model.data_version` changed. The data of a model of
   your own is copied by its `save_data`, on the main thread: at each autosave, unless the model
   changes its `data_version`.

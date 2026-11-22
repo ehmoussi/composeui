@@ -426,7 +426,9 @@ _QT_APP = textwrap.dedent(
     import os, pathlib
     import attrs
     from qtpy.QtCore import QTimer
-    from composeui.core.sqlitemodel import SqliteModel, SqliteTable, table
+    from composeui.core.sqlitemodel import (
+        DatabaseModel, SqliteDatabase, SqliteTable, per_session, table,
+    )
     from composeui.core.view import IntInputView, MainView, define_view
     from composeui.qtcore.qtapplication import QtModelApplication
 
@@ -439,8 +441,11 @@ _QT_APP = textwrap.dedent(
     class Notes(SqliteTable):
         create = "CREATE TABLE note (text TEXT NOT NULL);"
 
-    class NotesModel(SqliteModel):
+    class NotesDatabase(SqliteDatabase):
         notes = table(Notes)
+
+    class NotesModel(DatabaseModel):
+        study = per_session(NotesDatabase)
 
     class LoggingApplication(QtModelApplication):
         def render(self, renderer_type):
@@ -454,7 +459,7 @@ _QT_APP = textwrap.dedent(
                 main_view.count.value,
                 main_view.state_filepath,
                 main_view.language,
-                self.model.notes.fetch_column("SELECT text FROM note"),
+                self.model.study.notes.fetch_column("SELECT text FROM note"),
                 main_view.has_unsaved_changes(),
                 window.objectName(),
             )
@@ -464,7 +469,7 @@ _QT_APP = textwrap.dedent(
                 main_view.count.value = 7
                 main_view.state_filepath = pathlib.Path("mine.count")
                 main_view.set_language("fr")  # as from the Language menu
-                with self.model.notes.connection() as db:
+                with self.model.study.notes.connection() as db:
                     db.execute("INSERT INTO note VALUES ('kept')")
                 window.setObjectName("kept")
             else:

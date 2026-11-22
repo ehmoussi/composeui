@@ -12,7 +12,7 @@ form dialog, whose Apply saves it and stays open, and its Delete button removes 
 database checks every pipe added or changed (a name, positive dimensions, a wall thinner
 than the radius) and File saves and opens the views and the database together. A study
 saved before pipes had an installation date gets the column, empty, as it opens
-(`PipeCatalogueModel.migrations`).
+(`CatalogueDatabase.migrations`).
 """
 
 from __future__ import annotations
@@ -28,7 +28,14 @@ from attrs import Factory
 from typing_extensions import override
 
 from composeui.core.application import run
-from composeui.core.sqlitemodel import SqliteModel, SqliteTable, as_parameters, table
+from composeui.core.sqlitemodel import (
+    DatabaseModel,
+    SqliteDatabase,
+    SqliteTable,
+    as_parameters,
+    per_session,
+    table,
+)
 from composeui.core.view import (
     STRETCH,
     ButtonVariant,
@@ -231,11 +238,15 @@ def _add_installation_dates(db: sqlite3.Connection) -> None:
     db.execute(_PIPE_MASS)
 
 
-class PipeCatalogueModel(SqliteModel):
+class CatalogueDatabase(SqliteDatabase):
     pipes = table(Pipes)
     # 2: the pipes' installation dates
     schema_version = 2
     migrations = MappingProxyType({1: _add_installation_dates})
+
+
+class PipeCatalogueModel(DatabaseModel):
+    study = per_session(CatalogueDatabase, data_name="data.sqlite")
 
 
 @define_view
@@ -406,7 +417,7 @@ class PipeList(ListView[ListedPipe]):
         self, name: str, *, main_view: PipeCatalogueMainView, model: PipeCatalogueModel
     ) -> None:
         """Remove the pipe `name`: the model's `changed` takes its expander away."""
-        model.pipes.delete(name)
+        model.study.pipes.delete(name)
         main_view.status_bar.show_message(f"Deleted {name!r}")
 
 
@@ -560,22 +571,22 @@ class PipeCatalogueMainView(MainView):
         """List the pipes the filter shows, in the tree too, and their total."""
         catalogue = self.catalogue
         shown = catalogue.shown.shown()
-        pipes = model.pipes.find(shown)
+        pipes = model.study.pipes.find(shown)
         catalogue.browser.tree.show(pipes)
         catalogue.browser.pipes.items = pipes
-        total = model.pipes.total(shown)
+        total = model.study.pipes.total(shown)
         noun = "pipe" if total.count == 1 else "pipes"
         catalogue.total.text = f"{total.count} {noun}, {total.mass:.1f} kg"
 
     def _add_pipe(self, *, model: PipeCatalogueModel) -> None:
         pipe = self.add.pipe.pipe()
         with self.refusing("Can't add the pipe: {error}."):
-            model.pipes.add(pipe)
+            model.study.pipes.add(pipe)
             self.status_bar.show_message(f"Added {pipe.name!r}")
 
     def edit_pipe(self, name: str, *, model: PipeCatalogueModel) -> None:
         """Open the edit dialog on the pipe `name`, as the database has it."""
-        pipe = model.pipes.get(name)
+        pipe = model.study.pipes.get(name)
         if pipe is None:
             return
         form = self.edit_dialog.form
@@ -598,7 +609,7 @@ class PipeCatalogueMainView(MainView):
         """Save the dialog's pipe; the dialog shows why the database refuses it, if it does."""
         pipe = self.edit_dialog.form.pipe()
         with self.edit_dialog.refusing("Can't save the pipe: {error}."):
-            model.pipes.update(self.edit_dialog.edited_name, pipe)
+            model.study.pipes.update(self.edit_dialog.edited_name, pipe)
             self.edit_dialog.saved_as(pipe.name)
             return True
         return False
@@ -607,7 +618,7 @@ class PipeCatalogueMainView(MainView):
         self.status_bar.show_message(f"Saved {self.edit_dialog.edited_name!r}")
 
     def _remove_shown(self, *, model: PipeCatalogueModel) -> None:
-        count = model.pipes.remove(self.catalogue.shown.shown())
+        count = model.study.pipes.remove(self.catalogue.shown.shown())
         self.status_bar.show_message(f"Removed {count} pipe{'' if count == 1 else 's'}")
 
     def connect_model(self, model: PipeCatalogueModel) -> None:
@@ -615,7 +626,7 @@ class PipeCatalogueMainView(MainView):
 
         The edit dialog also checks the name against the database's other pipes.
         """
-        model.pipes.changed.connect(self.show_pipes, now=True)
+        model.study.pipes.changed.connect(self.show_pipes, now=True)
         dialog = self.edit_dialog
         dialog.add_check(
             functools.partial(self._name_taken, model=model), dialog.form.name.text_changed
@@ -623,7 +634,7 @@ class PipeCatalogueMainView(MainView):
 
     def _name_taken(self, *, model: PipeCatalogueModel) -> Optional[str]:
         name = self.edit_dialog.form.name.text
-        if name != self.edit_dialog.edited_name and model.pipes.get(name) is not None:
+        if name != self.edit_dialog.edited_name and model.study.pipes.get(name) is not None:
             return f"Another pipe is already named {name!r}."
         return None
 

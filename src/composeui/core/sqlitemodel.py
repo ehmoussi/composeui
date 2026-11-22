@@ -1,9 +1,9 @@
-"""A model keeping the app's data in a SQLite database of its own.
+"""A model keeping the app's data in SQLite databases (`DatabaseModel`).
 
-The app writes its schema and its queries, in `SqliteTable` classes. The model gives
-them a connection, runs each block of work as one transaction, and saves and opens the
-database with the study. It works on a scratch copy in a temporary file: the user's
-study only changes when it's saved.
+The app writes its schema and its queries, in `SqliteTable` classes, which a
+`SqliteDatabase` gathers. The database gives them a connection and runs each block of
+work as one transaction. A `per_session` database is saved and opened with the study. It
+works on a scratch copy in a temporary file: the user's study only changes when it's saved.
 """
 
 from __future__ import annotations
@@ -70,19 +70,22 @@ if TYPE_CHECKING:
 __all__ = [
     "AllowedUrls",
     "CSVSqliteTable",
-    "SqliteModel",
+    "DatabaseModel",
+    "SqliteDatabase",
     "SqliteSource",
     "SqliteTable",
     "as_parameters",
     "csv_field",
     "define_csv_row",
     "open_csv_url",
+    "per_session",
     "table",
     "unique_name",
 ]
 
 _T = TypeVar("_T")
 SqliteTableT = TypeVar("SqliteTableT", bound="SqliteTable")
+_DeclaredT = TypeVar("_DeclaredT")
 
 
 def as_parameters(row: object) -> dict[str, Any]:
@@ -112,9 +115,9 @@ def unique_name(db: sqlite3.Connection, table: str, column: str, base: str) -> s
 
 
 class SqliteTable:
-    """A table of a `SqliteModel` (or a few related ones), with the queries the app needs.
+    """A table of a `SqliteDatabase` (or a few related ones), with the queries the app needs.
 
-    `create` is the SQL script that creates it, run in every new study. Its methods read
+    `create` is the SQL script that creates it, run in every new database. Its methods read
     and write through `connection()`. `changed` is emitted once a transaction that changed
     rows through the table has committed, so the views that show them can refresh.
 
@@ -129,19 +132,19 @@ class SqliteTable:
     #: written in the code: the view showing it translates it (see `View.refusing`)
     refusals: ClassVar[Mapping[str, str]] = MappingProxyType({})
 
-    def __init__(self, model: SqliteModel) -> None:
-        # weak: the model owns its tables, and should go (with its file) once unused
-        self._model = cast("SqliteModel", weakref.proxy(model))
+    def __init__(self, database: SqliteDatabase) -> None:
+        # weak: the database owns its tables, and should go (with its file) once unused
+        self._database = cast("SqliteDatabase", weakref.proxy(database))
         self.changed = SignalNoArgs()
 
     @contextlib.contextmanager
     def connection(self) -> Generator[sqlite3.Connection]:
-        """Give the database's connection for one transaction; see `SqliteModel.connection`.
+        """Give the database's connection for one transaction; see `SqliteDatabase.connection`.
 
         Raises `RefusedError` when a constraint fails, the transaction rolled back.
         """
         try:
-            with self._model.connection(changing=self) as db:
+            with self._database.connection(changing=self) as db:
                 yield db
         except sqlite3.IntegrityError as error:
             message = str(error)
@@ -150,8 +153,8 @@ class SqliteTable:
 
     @contextlib.contextmanager
     def reading(self) -> Generator[sqlite3.Connection]:
-        """Give a connection reading the database alone; see `SqliteModel.reading`."""
-        with self._model.reading() as db:
+        """Give a connection reading the database alone; see `SqliteDatabase.reading`."""
+        with self._database.reading() as db:
             yield db
 
     def fetch(self, cls: type[_T], sql: str, parameters: Parameters = ()) -> list[_T]:
@@ -981,7 +984,7 @@ class SqliteSource:
     a ``SELECT`` of some ids' rows. So no more rows than those shown come to Python. The
     table's `changed` reads them again. Only the declared columns sort and filter, by name:
     SQLite takes no column name as a parameter, the values are. It reads on connections
-    of its own (`SqliteModel.reading`): the rows committed, never waiting for a write, nor
+    of its own (`SqliteDatabase.reading`): the rows committed, never waiting for a write, nor
     the cells for the order a job reads.
 
     A text compares ignoring its case as a `ListSource` does, but text typed in ASCII
@@ -1014,7 +1017,7 @@ class SqliteSource:
 
     def count(self) -> int:
         with self._table.reading() as db:
-            # read to the end: the connection is reused (see `SqliteModel.reading`)
+            # read to the end: the connection is reused (see `SqliteDatabase.reading`)
             ((count,),) = db.execute(f"SELECT COUNT(*) FROM ({self._query})").fetchall()  # noqa: S608 (the app's query)
         return int(count)
 
@@ -1185,33 +1188,44 @@ class SqliteSource:
 
 
 class _DeclaredTable(Generic[SqliteTableT]):
-    """A table a `SqliteModel` class declares, which each model builds (see `table`)."""
+    """A table a `SqliteDatabase` class declares, which each database builds (see `table`)."""
 
     def __init__(self, table_type: type[SqliteTableT]) -> None:
         self.table_type = table_type
 
 
 def table(table_type: type[SqliteTableT]) -> SqliteTableT:
-    """Declare a table of a `SqliteModel`, in the model's class.
+    """Declare a table of a `SqliteDatabase`, in the database's class.
 
-    E.g. ``runs = table(Runs)``. Each model builds its own table, as an attribute of the
-    same name, before it creates its database. The tables are built in the order the
-    classes declare them, a base class's first.
+    E.g. ``runs = table(Runs)``. Each database builds its own table, as an attribute of the
+    same name, before it creates its file. The tables are built in the order the classes
+    declare them, a base class's first.
     """
-    # the model's attribute is the table: typed as one, as `attrs.Factory` is
+    # the database's attribute is the table: typed as one, as `attrs.Factory` is
     return cast("SqliteTableT", _DeclaredTable(table_type))
 
 
-class SqliteModel(Model):
-    """A model whose data is a SQLite database, saved and opened with the study.
+def _declared(cls: type, kind: type[_DeclaredT]) -> dict[str, _DeclaredT]:
+    """Get the attributes of `kind` that `cls` and its bases declare, a base class's first."""
+    declared: dict[str, _DeclaredT] = {}
+    for base in reversed(cls.__mro__):
+        declared.update(
+            (name, value) for name, value in vars(base).items() if isinstance(value, kind)
+        )
+    return declared
+
+
+class SqliteDatabase:
+    """A SQLite database: its tables, their version, and the migrations between versions.
 
     Declare the tables in the class, ``runs = table(Runs)``, for the callbacks to reach
-    (``model.runs.add(...)``), or add them in `__init__` with `add_table`. A study's
+    (``model.study.runs.add(...)``), or add them in `__init__` with `add_table`. A new
     database is created from the tables' `create` scripts at `schema_version`. When a
     study saved at an older version is opened, `migrations` bring it up to date.
+
+    It isn't a model: a `DatabaseModel` declares it, e.g. ``study = per_session(Study)``.
     """
 
-    data_name: ClassVar[str | None] = "data.sqlite"
     #: the tables' version, kept in the database (``PRAGMA user_version``); raise it with
     #: every change to the tables, adding the migration from the previous one
     schema_version: ClassVar[int] = 1
@@ -1220,13 +1234,13 @@ class SqliteModel(Model):
     #: seconds opening a study's database may take, checks and migrations included: its
     #: schema comes from the file, and a view of it may never finish (e.g. a recursive one)
     open_time_limit: ClassVar[float] = 30.0
-    #: set on the connections of every study's database: SQLite keeps these per
-    #: connection, not in the file, and New and Open each start a connection of their own
+    #: set on the connections of every database file: SQLite keeps these per connection,
+    #: not in the file, and New and Open each start a connection of their own
     pragmas: ClassVar[Mapping[str, int | str]] = MappingProxyType(
         {
             # the connections `reading` read during a write, its rows uncommitted (else a
             # write spilling to the disk locks them out until it commits); the study file
-            # is saved in the default journal (`save_data`)
+            # is saved in the default journal (`_save`)
             "journal_mode": "WAL",
             "foreign_keys": "ON",
             # the database is a scratch copy nothing reopens after a crash: waiting for the
@@ -1240,46 +1254,35 @@ class SqliteModel(Model):
 
     def __init__(self) -> None:
         self._tables: list[SqliteTable] = []
-        declared: dict[str, _DeclaredTable[Any]] = {}
-        for cls in reversed(type(self).__mro__):
-            declared.update(
-                (name, value)
-                for name, value in vars(cls).items()
-                if isinstance(value, _DeclaredTable)
-            )
-        for name, declared_table in declared.items():
-            # before the database, which `_new_database` creates with them
+        for name, declared_table in _declared(type(self), _DeclaredTable).items():
+            # before the file, which `_new_database` creates with them
             built = declared_table.table_type(self)
             self._tables.append(built)
             setattr(self, name, built)
-        # one connection for the model, which threads (a worker, web requests) take in turn
+        # one connection for the database, which threads (a worker, web requests) take in turn
         self._lock = threading.RLock()
-        # which database the queries `reading` read, and how many: held for no query, so a
+        # which file the queries `reading` read, and how many: held for no query, so a
         # read never waits for the turn a write holds
         self._readers_lock = threading.Lock()
         self._closed = False
-        #: the turns held, which keep the connection open once the model is closed
+        #: the turns held, which keep the connection open once the database is closed
         self._turns = 0
         self._depth = 0
         self._changed: list[SqliteTable] = []
         #: the transactions committed that changed rows (`_data_revision`), and those of them
-        #: not made by a job started with the study (`data_version`)
+        #: not made by a job started with the study (`_data_version`)
         self._writes = 0
         self._user_writes = 0
         self._database = self._new_database()
 
     @property
-    @override
-    def signals(self) -> list[Signal[Unpack[tuple[Any, ...]]]]:
-        """Get the model's signals, its tables' (`SqliteTable.changed`) among them."""
+    def _signals(self) -> list[Signal[Unpack[tuple[Any, ...]]]]:
+        """Get its tables' signals (`SqliteTable.changed` among them)."""
         tables = [vars(table).values() for table in self._tables]
-        return [
-            *super().signals,
-            *(value for values in tables for value in values if isinstance(value, Signal)),
-        ]
+        return [value for values in tables for value in values if isinstance(value, Signal)]
 
     def add_table(self, table_type: type[SqliteTableT]) -> SqliteTableT:
-        """Add a table, created in the current database too, and return it."""
+        """Add a table, created in the current file too, and return it."""
         table = table_type(self)
         with self._turn() as db:
             db.executescript(table.create)
@@ -1288,7 +1291,7 @@ class SqliteModel(Model):
 
     @contextlib.contextmanager
     def _turn(self) -> Generator[sqlite3.Connection]:
-        """Hold the turn on the database's connection, which `close` leaves open until its end.
+        """Hold the turn on the file's connection, which `_close` leaves open until its end.
 
         Closing a connection during another thread's statement crashes the process.
         """
@@ -1310,7 +1313,7 @@ class SqliteModel(Model):
                     self._close_if_unused(self._database)
 
     def _close_if_unused(self, database: _Database) -> None:
-        """Close a replaced database, or a closed model's, once unused; hold the readers' lock."""
+        """Close a replaced file, or a closed database's, once unused; hold the readers' lock."""
         is_over = database is not self._database or (self._closed and self._turns == 0)
         if is_over and database.readers == 0:
             database.close()
@@ -1367,10 +1370,10 @@ class SqliteModel(Model):
         """Give a connection that only reads the database, for a long query.
 
         Unlike `connection()`, it waits for no other thread's turn, and holds none. The
-        model's other queries run meanwhile, e.g. a large table's cells while a job orders
-        its rows or writes some (`SqliteSource`). In the WAL journal, it reads the rows
-        committed, during a write too. A database New or Open replace meanwhile, or the
-        model's `close`, is deleted once the query is over. Once the model is closed,
+        database's other queries run meanwhile, e.g. a large table's cells while a job
+        orders its rows or writes some (`SqliteSource`). In the WAL journal, it reads the
+        rows committed, during a write too. A file New or Open replace meanwhile, or the
+        model's `close`, is deleted once the query is over. Once the database is closed,
         raises `sqlite3.ProgrammingError`, as `connection()` does: e.g. a web download
         its session's end cuts short.
 
@@ -1387,7 +1390,7 @@ class SqliteModel(Model):
             self._give_back_reader(database, db)
 
     def _take_reader(self) -> tuple[_Database, sqlite3.Connection | None]:
-        """Count a reader of the database, and take an idle connection, if any."""
+        """Count a reader of the file, and take an idle connection, if any."""
         with self._readers_lock:
             if self._closed:  # its file is gone
                 msg = "Cannot operate on a closed database."
@@ -1404,12 +1407,11 @@ class SqliteModel(Model):
                 database.idle_readers.append(db)
             self._close_if_unused(database)
 
-    @override
-    def _pin_data(self) -> _PinnedDatabase:
+    def _pin(self) -> _PinnedDatabase:
         """Pin the committed rows of now: a reader's transaction, which a copy reads later.
 
-        Another thread copies them while the model goes on writing. Counted as a reader, so
-        a database New or Open replace stays open until the copy is released.
+        Another thread copies them while the app goes on writing. Counted as a reader, so a
+        file New or Open replace stays open until the copy is released.
         """
         database, db = self._take_reader()
         try:
@@ -1418,28 +1420,17 @@ class SqliteModel(Model):
             # a read starts the transaction's snapshot in the WAL journal, not `BEGIN`
             db.execute("BEGIN")
             db.execute("SELECT count(*) FROM sqlite_master").fetchone()
-        except BaseException:  # pragma: no cover (a read of the model's own scratch file)
+        except BaseException:  # pragma: no cover (a read of the database's own scratch file)
             if db is not None and db.in_transaction:
                 db.rollback()
             self._give_back_reader(database, db)
             raise
         return _PinnedDatabase(self, database, db)
 
-    @property
-    @override
-    def data_version(self) -> int:
-        return self._user_writes
-
-    @override
-    def _data_revision(self) -> int:
-        return self._writes
-
-    @override
-    def new(self) -> None:
+    def _new(self) -> None:
         self._replace_database(self._new_database())
 
-    @override
-    def save_data(self, path: Path) -> None:
+    def _save(self, path: Path) -> None:
         target = sqlite3.connect(str(path))
         try:
             with self._turn() as db:
@@ -1449,8 +1440,7 @@ class SqliteModel(Model):
         finally:
             target.close()
 
-    @override
-    def open_data(self, path: Path) -> None:
+    def _open(self, path: Path) -> None:
         """Open a study's database, refused unless it is made as a new one is.
 
         The file may come from anyone (e.g. a web upload): its schema is the file's own,
@@ -1489,15 +1479,13 @@ class SqliteModel(Model):
             raise
         self._replace_database(database)
 
-    @override
-    def loaded(self) -> None:
+    def _loaded(self) -> None:
         # every table may have changed; emitted only now, so the views refreshing read the
         # study's views (e.g. a filter), not the ones it replaces
         for table in self._tables:
             table.changed.emit()
 
-    @override
-    def close(self) -> None:
+    def _close(self) -> None:
         # not the write's turn: closing the app doesn't wait for a job's long write, whose
         # end closes it, as the last query `reading` it does
         with self._readers_lock:
@@ -1559,11 +1547,137 @@ class SqliteModel(Model):
         db.commit()
 
 
-class _PinnedDatabase:
-    """A model's rows pinned by a reader's transaction (`SqliteModel._pin_data`)."""
+SqliteDatabaseT = TypeVar("SqliteDatabaseT", bound=SqliteDatabase)
 
-    def __init__(self, model: SqliteModel, database: _Database, db: sqlite3.Connection) -> None:
-        self._model = model
+
+class _PerSession(Generic[SqliteDatabaseT]):
+    """A database a `DatabaseModel` class declares, which each model builds (see `per_session`)."""
+
+    def __init__(self, database_type: type[SqliteDatabaseT], data_name: str | None) -> None:
+        self.database_type = database_type
+        self.data_name = data_name
+
+
+def per_session(
+    database_type: type[SqliteDatabaseT], *, data_name: str | None = None
+) -> SqliteDatabaseT:
+    """Declare a database of a `DatabaseModel` that each session has its own copy of.
+
+    E.g. ``study = per_session(Study)``. Each model builds its own database, as an attribute
+    of the same name, in a temporary file. The study saves it as its file `data_name`
+    (``<attribute>.sqlite`` by default), and New and Open replace it. A model has at most
+    one: a study holds one file of data.
+    """
+    # the model's attribute is the database: typed as one, as `table` does
+    return cast("SqliteDatabaseT", _PerSession(database_type, data_name))
+
+
+class DatabaseModel(Model):
+    """A model whose data is in databases, which its class declares.
+
+    E.g. ``study = per_session(Study)``, for the callbacks to reach
+    (``model.study.runs.add(...)``). Its fields are databases, never tables: declare the
+    tables in a `SqliteDatabase`. The `per_session` database is saved and opened with the
+    study.
+    """
+
+    @override
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        tables = _declared(cls, _DeclaredTable)
+        if len(tables) > 0:
+            msg = (
+                f"{cls.__name__} declares tables ({', '.join(tables)}): declare them in a"
+                " SqliteDatabase, and the database in the model with per_session"
+            )
+            raise TypeError(msg)
+        per_sessions = _declared(cls, _PerSession)
+        if len(per_sessions) > 1:
+            msg = (
+                f"{cls.__name__} declares several per_session databases"
+                f" ({', '.join(per_sessions)}): a study holds one, put their tables together"
+            )
+            raise TypeError(msg)
+        cls.data_name = next(
+            (
+                f"{name}.sqlite" if declared.data_name is None else declared.data_name
+                for name, declared in per_sessions.items()
+            ),
+            None,
+        )
+
+    def __init__(self) -> None:
+        #: the database saved with the study: none or one (see `__init_subclass__`)
+        self._per_session: list[SqliteDatabase] = []
+        for name, declared in _declared(type(self), _PerSession).items():
+            database = declared.database_type()
+            self._per_session.append(database)
+            setattr(self, name, database)
+
+    @property
+    @override
+    def signals(self) -> list[Signal[Unpack[tuple[Any, ...]]]]:
+        """Get the model's signals, its databases' tables' (`SqliteTable.changed`) among them."""
+        return [
+            *super().signals,
+            *(signal for database in self._per_session for signal in database._signals),  # noqa: SLF001 (its own database)
+        ]
+
+    @property
+    @override
+    def data_version(self) -> int:
+        """Get the committed writes of the `per_session` database, not of the study's jobs.
+
+        Those of the jobs started with the study (as the app starts, New, Open) aren't
+        counted: the next start makes them again.
+        """
+        return sum(database._user_writes for database in self._per_session)  # noqa: SLF001 (its own database)
+
+    @override
+    def _data_revision(self) -> int:
+        return sum(database._writes for database in self._per_session)  # noqa: SLF001 (its own database)
+
+    @override
+    def _pin_data(self) -> _PinnedDatabase | None:
+        # called only for a model with data (`data_name`), so with its database
+        return next((database._pin() for database in self._per_session), None)  # noqa: SLF001 (its own database)
+
+    @override
+    def new(self) -> None:
+        for database in self._per_session:
+            database._new()  # noqa: SLF001 (its own database)
+
+    @override
+    def save_data(self, path: Path) -> None:
+        for database in self._per_session:
+            database._save(path)  # noqa: SLF001 (its own database)
+
+    @override
+    def open_data(self, path: Path) -> None:
+        """Open a study's database, refused unless it is made as a new one is.
+
+        See `SqliteDatabase.open_time_limit`: the file may come from anyone, e.g. a web
+        upload, and its schema is checked before its views and triggers may run.
+        """
+        for database in self._per_session:
+            database._open(path)  # noqa: SLF001 (its own database)
+
+    @override
+    def loaded(self) -> None:
+        for database in self._per_session:
+            database._loaded()  # noqa: SLF001 (its own database)
+
+    @override
+    def close(self) -> None:
+        for database in self._per_session:
+            database._close()  # noqa: SLF001 (its own database)
+
+
+class _PinnedDatabase:
+    """A database's rows pinned by a reader's transaction (`SqliteDatabase._pin`)."""
+
+    def __init__(self, owner: SqliteDatabase, database: _Database, db: sqlite3.Connection) -> None:
+        self._owner = owner
         self._database = database
         self._db = db
 
@@ -1571,14 +1685,14 @@ class _PinnedDatabase:
         target = sqlite3.connect(str(path))
         try:
             self._db.backup(target)
-            # as `SqliteModel.save_data`: a file another app opens leaves no journal beside it
+            # as `SqliteDatabase._save`: a file another app opens leaves no journal beside it
             target.execute("PRAGMA journal_mode = DELETE")
         finally:
             target.close()
 
     def release(self) -> None:
         self._db.rollback()  # the read's transaction, before another query reuses the reader
-        self._model._give_back_reader(self._database, self._db)  # noqa: SLF001 (its own model)
+        self._owner._give_back_reader(self._database, self._db)  # noqa: SLF001 (its database)
 
 
 class _Database:
@@ -1594,29 +1708,29 @@ class _Database:
             for name, value in pragmas.items()
             if name != "journal_mode"
         ]
-        #: the model's `pragmas`, set on each connection: SQLite keeps them per connection
+        #: the database's `pragmas`, set on each connection: SQLite keeps them per connection
         self.pragma_statements = statements
         journal = pragmas.get("journal_mode")
         self._journal = None if journal is None else _pragma_statement("journal_mode", journal)
         fd, name = tempfile.mkstemp(prefix="composeui-", suffix=".sqlite")
         os.close(fd)
         self.path = Path(name)
-        # threads take turns through the model's lock
+        # threads take turns through the `SqliteDatabase`'s lock
         self.connection = sqlite3.connect(name, check_same_thread=False, timeout=WAIT_SECONDS)
         self.connection.row_factory = sqlite3.Row
         for statement in statements:
             self.connection.execute(statement)
         #: the read-only connections not in use, for the next queries `reading` it
         self.idle_readers: list[sqlite3.Connection] = []
-        # also when the model is dropped unclosed (e.g. an expired web session's)
+        # also when the database is dropped unclosed (e.g. an expired web session's)
         self._finalizer = weakref.finalize(
             self, _discard, self.connection, self.path, self.idle_readers
         )
-        #: the queries reading it on connections of their own (`SqliteModel.reading`)
+        #: the queries reading it on connections of their own (`SqliteDatabase.reading`)
         self.readers = 0
 
     def open_reader(self) -> sqlite3.Connection:
-        """Open a read-only connection, with the model's `pragmas`: any thread uses it."""
+        """Open a read-only connection, with the database's `pragmas`: any thread uses it."""
         uri = f"{self.path.as_uri()}?mode=ro"
         reader = sqlite3.connect(uri, uri=True, timeout=WAIT_SECONDS, check_same_thread=False)
         for statement in self.pragma_statements:
@@ -1624,7 +1738,7 @@ class _Database:
         return reader
 
     def start_journal(self) -> None:
-        """Set the journal of the model's `pragmas`, which the file keeps."""
+        """Set the journal of the database's `pragmas`, which the file keeps."""
         if self._journal is not None:
             self.connection.execute(self._journal)
 

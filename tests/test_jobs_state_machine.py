@@ -13,7 +13,7 @@ from hypothesis.stateful import Bundle, RuleBasedStateMachine, invariant, rule
 from typing_extensions import override
 
 from composeui.core.model import RefusedError
-from composeui.core.sqlitemodel import SqliteModel, SqliteTable
+from composeui.core.sqlitemodel import DatabaseModel, SqliteDatabase, SqliteTable, per_session
 from composeui.core.view import MainView
 
 if TYPE_CHECKING:
@@ -33,10 +33,14 @@ class _Numbers(SqliteTable):
         return int(self.fetch_column("SELECT COUNT(*) FROM number")[0])
 
 
-class _NumbersModel(SqliteModel):
+class _NumbersDatabase(SqliteDatabase):
     def __init__(self) -> None:
         super().__init__()
         self.numbers = self.add_table(_Numbers)
+
+
+class _NumbersModel(DatabaseModel):
+    study = per_session(_NumbersDatabase)
 
 
 @attrs.define(eq=False)
@@ -85,7 +89,7 @@ class _JobsMachine(RuleBasedStateMachine):
             assert run.may_end.wait(_TIMEOUT)
             if writes:
                 with contextlib.suppress(RefusedError):  # the machine's dropped jobs
-                    self.model.numbers.add()
+                    self.model.study.numbers.add()
             if fails:
                 msg = "the job's own failure"
                 raise ValueError(msg)
@@ -172,7 +176,7 @@ class _JobsMachine(RuleBasedStateMachine):
 
     @invariant()
     def a_dropped_job_writes_nothing(self) -> None:
-        assert self.model.numbers.count() == self.written
+        assert self.model.study.numbers.count() == self.written
 
     @invariant()
     def callbacks_wait_for_every_thread_and_run_once(self) -> None:

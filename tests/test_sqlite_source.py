@@ -21,7 +21,14 @@ from typing_extensions import override
 
 from composeui.core import sqlitemodel
 from composeui.core._views.tables import parse_filter
-from composeui.core.sqlitemodel import SqliteModel, SqliteSource, SqliteTable, as_parameters
+from composeui.core.sqlitemodel import (
+    DatabaseModel,
+    SqliteDatabase,
+    SqliteSource,
+    SqliteTable,
+    as_parameters,
+    per_session,
+)
 from composeui.core.view import Filter, FilterError, ListSource, Sort, SourceColumn, SourceTableView
 
 if TYPE_CHECKING:
@@ -72,17 +79,21 @@ class Places(SqliteTable):
             )
 
 
-class PlacesModel(SqliteModel):
+class PlacesDatabase(SqliteDatabase):
     def __init__(self) -> None:
         super().__init__()
         self.places = self.add_table(Places)
+
+
+class PlacesModel(DatabaseModel):
+    study = per_session(PlacesDatabase)
 
 
 @pytest.fixture
 def model() -> Iterator[PlacesModel]:
     model = PlacesModel()
     for place in PLACES:
-        model.places.add(place)
+        model.study.places.add(place)
     yield model
     model.close()
 
@@ -91,7 +102,7 @@ def model() -> Iterator[PlacesModel]:
 def sql(model: PlacesModel) -> SqliteSource:
     listed = ListSource(Place, HEADERS)
     return SqliteSource(
-        model.places,
+        model.study.places,
         "SELECT * FROM place",
         id_column="id",
         columns=[
@@ -178,7 +189,9 @@ def test_a_search_finds_its_text_as_typed_in_the_text_columns(
     assert list(sql.ordered_ids(None, "12.5", {})) == []  # no text column holds it
     # a source without text columns: no row holds any text
     columns = [SourceColumn("depth", "Depth", Optional[float])]
-    numbers = SqliteSource(model.places, "SELECT * FROM place", id_column="id", columns=columns)
+    numbers = SqliteSource(
+        model.study.places, "SELECT * FROM place", id_column="id", columns=columns
+    )
     numbered = ListSource(Place, {"depth": "Depth"}, PLACES, id_field="id")
     assert list(numbers.ordered_ids(None, "5", {})) == numbered.ordered_ids(None, "5", {}) == []
 
@@ -214,7 +227,7 @@ def test_the_ids_are_read_in_batches_into_an_array_until_one_is_not_an_integer(
         # keys of mixed types, as SQLite stores a column without one: integers first, then
         # text, which starts within the second batch, after one integer of it
         keyed = SqliteSource(
-            model.places,
+            model.study.places,
             "SELECT CASE WHEN id > 4 THEN 'k' || id ELSE id END AS key, * FROM place",
             id_column="key",
             columns=sql.columns,
@@ -227,7 +240,7 @@ def test_ids_that_json_would_change_keep_their_exact_values(
 ) -> None:
     # JSON drops a real's last digits, and SQLite takes a blob for JSON of its own
     keyed = SqliteSource(
-        model.places,
+        model.study.places,
         "SELECT CASE id WHEN 1 THEN 0.1 + 0.2 WHEN 2 THEN x'00ff' ELSE id END AS key, * FROM place",
         id_column="key",
         columns=sql.columns,
@@ -309,13 +322,15 @@ def _sources(
     model = PlacesModel()
     try:
         for place in places:
-            model.places.add(place)
+            model.study.places.add(place)
         listed = ListSource(Place, HEADERS, places, id_field="id")
         columns = [
             SourceColumn(column.name, column.header, column.type) for column in listed.columns
         ]
         yield (
-            SqliteSource(model.places, "SELECT * FROM place", id_column="id", columns=columns),
+            SqliteSource(
+                model.study.places, "SELECT * FROM place", id_column="id", columns=columns
+            ),
             listed,
         )
     finally:
@@ -372,7 +387,7 @@ def test_a_large_table_reads_the_rows_again_once_its_table_changes(
     table = SourceTableView(source=sql, sort_column="depth", sort_descending=True)
     assert table.rows(0, 1) == [(1, ["Lake", "12.5", "2024-01-31", "lake"])]
 
-    model.places.add(Place(7, "Deep", 40.0, None, Kind.LAKE))
+    model.study.places.add(Place(7, "Deep", 40.0, None, Kind.LAKE))
 
     assert table.row_count == len(PLACES) + 1
     assert table.rows(0, 1) == [(7, ["Deep", "40.0", "", "lake"])]
@@ -389,13 +404,13 @@ def test_the_rows_stay_in_sqlite_python_reading_only_the_ids_and_the_window(
             reads.append(f"{len(ids)} rows")
             return super().cells(ids, columns)
 
-    with model.places.connection() as db:
+    with model.study.places.connection() as db:
         db.executemany(
             "INSERT INTO place(name, depth, kind) VALUES (?, ?, 'lake')",
             ((f"p{i}", i / 10) for i in range(20_000)),
         )
     source = Counted(
-        model.places,
+        model.study.places,
         "SELECT * FROM place",
         id_column="id",
         columns=[SourceColumn("name", "Name"), SourceColumn("depth", "Depth", float)],
@@ -451,7 +466,7 @@ def test_a_table_s_rows_are_read_while_a_write_is_uncommitted(
         read.append((sql.count(), sql.cells([4], ["name"]), deepest))
 
     # as a job writing many rows in one transaction: it holds the model's connection
-    with model.places.connection() as db:
+    with model.study.places.connection() as db:
         db.execute("PRAGMA cache_size = 10")  # the write spills to the disk
         db.executemany(
             "INSERT INTO place(name, depth, kind) VALUES (?, 99, 'lake')",
@@ -484,7 +499,7 @@ def test_reads_reuse_a_connection_and_see_each_write_committed(
         table.source = sql
     assert len(opened) <= 1
 
-    model.places.add(Place(7, "Deep", 40.0, None, Kind.LAKE))  # committed: seen at once
+    model.study.places.add(Place(7, "Deep", 40.0, None, Kind.LAKE))  # committed: seen at once
     assert sql.count() == len(PLACES) + 1
     assert sql.cells([7], ["name"]) == {7: ["Deep"]}
 
@@ -500,10 +515,10 @@ def _plans(model: PlacesModel, order: Callable[[], object]) -> list[str]:
     text: ``ONE_TEXT_IDS`` set to 0 makes any result with rows a large one.
     """
     queries: list[str] = []
-    with model.places.reading() as db:  # the pool gives it back to the next read
+    with model.study.places.reading() as db:  # the pool gives it back to the next read
         db.set_trace_callback(queries.append)
     order()
-    with model.places.reading() as db:
+    with model.study.places.reading() as db:
         db.set_trace_callback(None)
         reads = [
             query.removeprefix(_NUMBERING)
@@ -534,7 +549,7 @@ def test_a_sort_reads_its_column_s_index_unless_something_filters_the_rows(
     assert "place_depth" in plans[0]
     assert "TEMP B-TREE FOR ORDER BY" not in plans[0]
     # no empty depth: one query in the index's order, without a scan for the empty ones
-    with model.places.connection() as db:
+    with model.study.places.connection() as db:
         db.execute("UPDATE place SET depth = 0 WHERE depth IS NULL")
     _check, *plans = sort_plans()
     assert len(plans) == 1
@@ -554,7 +569,7 @@ def test_a_check_of_empty_cells_over_its_budget_sorts_the_rows_as_without_it(
     # a GROUP BY that the check computes again: no empty count, but finding it out costs
     query = "SELECT MIN(id) AS id, name, COUNT(*) AS places FROM place GROUP BY name"
     columns = [SourceColumn("name", "Name"), SourceColumn("places", "Places", int)]
-    grouped = SqliteSource(model.places, query, id_column="id", columns=columns)
+    grouped = SqliteSource(model.study.places, query, id_column="id", columns=columns)
 
     def sort_plans() -> list[str]:
         return _plans(model, lambda: grouped.ordered_ids(Sort("places"), "", {}))
@@ -562,13 +577,13 @@ def test_a_check_of_empty_cells_over_its_budget_sorts_the_rows_as_without_it(
     # few rows: the check is cheap, then one query
     assert len(sort_plans()) == 2
     # many rows: the check stops at its budget, then the counts and the empty ones apart
-    with model.places.connection() as db:
+    with model.study.places.connection() as db:
         db.executemany(
             "INSERT INTO place(name, kind) VALUES (?, 'lake')", [(f"p{i}",) for i in range(5000)]
         )
     assert len(sort_plans()) == 3
     # each name once: one place each, in the order of their ids
-    with model.places.connection() as db:
+    with model.study.places.connection() as db:
         ids = [row_id for (row_id,) in db.execute("SELECT id FROM place")]
     assert list(grouped.ordered_ids(Sort("places"), "", {})) == sorted(ids)
 

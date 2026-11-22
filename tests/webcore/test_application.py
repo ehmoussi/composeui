@@ -15,7 +15,7 @@ pytest.importorskip("starlette")
 pytest.importorskip("httpx2" if sys.version_info >= (3, 11) else "httpx")
 
 from composeui.core.application import ModelApplication, WebSettings
-from composeui.core.sqlitemodel import SqliteModel, SqliteTable
+from composeui.core.sqlitemodel import DatabaseModel, SqliteDatabase, SqliteTable, per_session
 from composeui.core.study import save_study
 from composeui.core.view import (
     MainView,
@@ -119,10 +119,14 @@ class _Signatures(SqliteTable):
             return [row["name"] for row in db.execute("SELECT name FROM signature ORDER BY id")]
 
 
-class _SignedGuestbook(SqliteModel):
+class _GuestbookDatabase(SqliteDatabase):
     def __init__(self) -> None:
         super().__init__()
         self.signatures = self.add_table(_Signatures)
+
+
+class _SignedGuestbook(DatabaseModel):
+    study = per_session(_GuestbookDatabase)
 
 
 def test_a_saved_study_brings_its_database_to_another_browser() -> None:
@@ -135,9 +139,9 @@ def test_a_saved_study_brings_its_database_to_another_browser() -> None:
     def show_signatures(main_view: HelloMainView, model: _SignedGuestbook) -> None:
         # whatever changes the signatures, an upload included, the summary follows
         def show() -> None:
-            main_view.summary.text = ", ".join(model.signatures.names())
+            main_view.summary.text = ", ".join(model.study.signatures.names())
 
-        model.signatures.changed.connect(show)
+        model.study.signatures.changed.connect(show)
 
     views: list[HelloMainView] = []
     # nothing but its session keeps a model
@@ -148,7 +152,7 @@ def test_a_saved_study_brings_its_database_to_another_browser() -> None:
 
     @app.connect(view=name, signals=[name.editing_finished])
     def sign(*, view: NameRowView, model: _SignedGuestbook) -> None:
-        model.signatures.sign(view.text)
+        model.study.signatures.sign(view.text)
 
     def sign_as(client: TestClient, view: HelloMainView, text: str) -> None:
         field_id = _field_id(view.form.name)
@@ -250,7 +254,7 @@ def test_a_study_with_the_model_s_data_opens_in_every_new_session(
         build_model=PipeCatalogueModel,
         setup_model=PipeCatalogueMainView.connect_model,
     )
-    study.model.pipes.add(Pipe("Main line", Material.STEEL, 50.0, 5.0, 6.0))
+    study.model.study.pipes.add(Pipe("Main line", Material.STEEL, 50.0, 5.0, 6.0))
     study_file = tmp_path / "plant.pipes"
     save_study(study.main_view, study.model, study_file)
     study.model.close()

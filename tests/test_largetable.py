@@ -186,7 +186,7 @@ def test_a_click_on_a_header_in_qt_sorts_the_rendered_table(qtbot: QtBot) -> Non
     main_view, model = LargeTableMainView(), ReadingsModel()
     main_view.render(RendererType.QT)
     main_view.connect_model(model)
-    model.readings.fill(ROWS)  # in the test's thread: no job to wait for
+    model.study.readings.fill(ROWS)  # in the test's thread: no job to wait for
     renderer = main_view.renderer
     assert isinstance(renderer, renderer_type)
     window = cast("QtWidgetRenderer[Any, Any]", renderer).qt_object
