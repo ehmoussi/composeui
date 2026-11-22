@@ -611,6 +611,26 @@
       after: after === null ? 0 : paneLength(border, after),
     };
   }
+  /** @param {HTMLElement} border @param {PointerEvent} event */
+  function placeSplitterGrip(border, event) {
+    if (event.pointerType === "touch") {
+      border.style.removeProperty("--splitter-grip-position");
+      return;
+    }
+    var box = border.getBoundingClientRect();
+    var offset = isAcross(border) ? event.clientX - box.left : event.clientY - box.top;
+    border.style.setProperty("--splitter-grip-position", offset + "px");
+  }
+  /** @param {PointerEvent} event */
+  function trackSplitterGrip(event) {
+    var border = event.target;
+    if (border instanceof HTMLElement &&
+        border.matches('.cui-splitter-border:not([aria-disabled="true"])')) {
+      placeSplitterGrip(border, event);
+    }
+  }
+  document.addEventListener("pointerover", trackSplitterGrip);
+  document.addEventListener("pointermove", trackSplitterGrip);
   document.addEventListener("pointerdown", function (event) {
     var target = /** @type {Element} */ (event.target);
     var border = /** @type {HTMLElement | null} */ (target.closest(".cui-splitter-border"));
@@ -620,6 +640,7 @@
     event.preventDefault();  // no text selected while dragging
     border.focus();
     border.setPointerCapture(event.pointerId);
+    placeSplitterGrip(border, event);
     border.setAttribute("data-dragging", "");
     var across = isAcross(border);
     var from = across ? event.clientY : event.clientX;

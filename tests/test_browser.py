@@ -2143,6 +2143,71 @@ def test_a_vertical_splitter_border_dragged_or_moved_by_keys_shares_the_height(
     context.close()
 
 
+@pytest.mark.parametrize(
+    ("across", "touch"),
+    [(False, False), (True, False), (True, True)],
+    ids=["vertical-border", "horizontal-border", "touch"],
+)
+def test_a_splitter_grip_tracks_the_pointer_and_centers_without_one(
+    browser: Browser,
+    site_plan_base_url: str,
+    vertical_splitter_base_url: str,
+    *,
+    across: bool,
+    touch: bool,
+) -> None:
+    url = vertical_splitter_base_url if across else site_plan_base_url
+    with browser.new_context(
+        base_url=url,
+        has_touch=touch,
+        reduced_motion="reduce",
+        viewport={"width": 1200, "height": 900},
+    ) as context:
+        page = context.new_page()
+        page.goto("/")
+        border = page.get_by_role("separator", name="Resize the panes")
+        box = _box(border)
+        length = box["width"] if across else box["height"]
+        middle = (box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+
+        def grip() -> tuple[float, float]:
+            opacity, offset = border.evaluate(
+                """(border, axis) => {
+                    const style = getComputedStyle(border, "::after");
+                    return [parseFloat(style.opacity), parseFloat(style[axis])];
+                }""",
+                "left" if across else "top",
+            )
+            return float(opacity), float(offset)
+
+        if touch:
+            assert grip() == (1, pytest.approx(length / 2, abs=1))
+            return
+
+        offset = length / 4
+        start = (box["x"] + offset, middle[1]) if across else (middle[0], box["y"] + offset)
+        page.mouse.move(*start)
+        assert grip() == (1, pytest.approx(offset, abs=1))
+
+        # Move both along the border and beyond its original hit area while holding it.
+        page.mouse.down()
+        end = (
+            (box["x"] + 3 * offset, middle[1] + 24)
+            if across
+            else (middle[0] + 24, box["y"] + 3 * offset)
+        )
+        page.mouse.move(*end)
+        assert grip() == (1, pytest.approx(3 * offset, abs=1))
+        with _posted(page):
+            page.mouse.up()
+        page.get_by_text("Table" if across else "Plan", exact=True).click()
+        assert grip()[0] == 0
+
+        with _posted(page):
+            border.press("ArrowDown" if across else "ArrowRight")
+        assert grip() == (1, pytest.approx(length / 2, abs=1))
+
+
 def test_a_slider_shows_its_value_beside_the_track_as_tall_as_a_text_field(
     browser: Browser, workers_base_url: str
 ) -> None:

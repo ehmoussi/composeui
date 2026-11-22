@@ -89,6 +89,8 @@ backends' modules included, can change in any release without an entry here.
 
 ### Changed
 
+- On the web, a `SplitterView` shows a grip where the pointer meets the divider. The grip
+  stays in the center on touch screens and when the divider has keyboard focus.
 - On the web, the underline slides to the tab you click without delaying selection. It moves
   without animation when you use the keyboard or your browser requests reduced motion.
 - The web backend uses the address `/style/`: a page of a router can no longer have the route

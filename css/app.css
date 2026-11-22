@@ -350,13 +350,11 @@ body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {
   border-color: #0000;
 }
 
-/* a splitter's borders (`WebSplitterRenderer`): a line the width of a row's gap, which
-   thickens under the pointer, while dragged or focused; only between panes shown: not
-   before the first pane shown, nor before a hidden one, nor once a splitter of panes
-   side by side is narrow enough to stack them (42rem, a row's `@2xl`). A vertical
-   splitter's are horizontal lines, across it. */
+/* A splitter's borders (`WebSplitterRenderer`): a thin line with a grip inside the
+   hit area. Side-by-side panes stack without a border below 42rem (a row's `@2xl`). */
 .cui-splitter-border {
   display: none;
+  position: relative;
   flex: none;
   justify-content: center;
   align-items: center;
@@ -375,24 +373,79 @@ body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {
   align-self: stretch;
   width: 1px;
   background: var(--color-base-300);
-  transition: width 0.1s, height 0.1s, background-color 0.1s;
 }
 .cui-splitter-border[aria-orientation="horizontal"]::before {
   align-self: center;
   width: 100%;
   height: 1px;
 }
-.cui-splitter-border:not([aria-disabled="true"]):hover::before,
-.cui-splitter-border:focus-visible::before,
-.cui-splitter-border[data-dragging]::before {
-  width: 3px;
+.cui-splitter-border::after {
+  --grip-length: min(2.25rem, 100%);
+  --grip-inset: calc(var(--grip-length) / 2);
+  --grip-offset: clamp(
+    var(--grip-inset),
+    var(--splitter-grip-position, 50%),
+    calc(100% - var(--grip-inset))
+  );
+  content: "";
+  position: absolute;
+  top: var(--grip-offset);
+  left: 50%;
+  width: 4px;
+  height: var(--grip-length);
+  translate: -50% -50%;
+  border-radius: 999px;
   background: var(--color-primary);
+  pointer-events: none;
+  opacity: 0;
 }
-.cui-splitter-border[aria-orientation="horizontal"]:not([aria-disabled="true"]):hover::before,
-.cui-splitter-border[aria-orientation="horizontal"]:focus-visible::before,
-.cui-splitter-border[aria-orientation="horizontal"][data-dragging]::before {
-  width: 100%;
-  height: 3px;
+.cui-splitter-border[aria-orientation="horizontal"]::after {
+  top: 50%;
+  left: var(--grip-offset);
+  width: var(--grip-length);
+  height: 4px;
+}
+.cui-splitter-border:not([aria-disabled="true"]):is(:focus-visible, [data-dragging])::after {
+  opacity: 1;
+}
+.cui-splitter-border:focus-visible:not([data-dragging])::after {
+  --splitter-grip-position: 50%;
+}
+.cui-splitter-border[data-dragging]::after {
+  width: 6px;
+}
+.cui-splitter-border[aria-orientation="horizontal"][data-dragging]::after {
+  width: var(--grip-length);
+  height: 6px;
+}
+@media (hover: hover) {
+  .cui-splitter-border:not([aria-disabled="true"]):hover::after {
+    opacity: 1;
+  }
+}
+@media (hover: none), (pointer: coarse) {
+  .cui-splitter-border:not([aria-disabled="true"])::after {
+    --splitter-grip-position: 50%;
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cui-splitter-border::after {
+    transition: opacity 100ms, width 100ms, height 100ms;
+  }
+  /* A pointer crossing the border should not flash the grip. Its position never lags. */
+  .cui-splitter-border:hover:not(:focus-visible, [data-dragging])::after {
+    transition: opacity 120ms ease-out 60ms;
+  }
+  .cui-splitter-border:focus-visible:not([data-dragging])::after {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .cui-splitter-border::after {
+    background: Highlight;
+    forced-color-adjust: none;
+  }
 }
 .cui-splitter-border:focus-visible {
   outline: 2px solid var(--color-primary);
