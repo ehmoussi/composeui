@@ -1001,7 +1001,7 @@ async def test_textual_doesn_t_tick_while_a_file_action_may_be_replacing_the_stu
 #: Restore, logs the note restored and closes cleanly
 _APP = textwrap.dedent(
     """
-    import os, pathlib
+    import os, pathlib, sys
     import attrs
     from composeui.core.view import InputView, MainView, define_view
 
@@ -1019,9 +1019,21 @@ _APP = textwrap.dedent(
         with pathlib.Path(os.environ["RUNS_LOG"]).open("a") as file:
             file.write(f"{text}\\n")
 
+    def crash():
+        if sys.platform == "win32":
+            # as a crash ends: os._exit still unloads the DLLs, and Qt's crashes alongside
+            # the QApplication left alive
+            import ctypes
+            from ctypes import wintypes
+            kernel32 = ctypes.windll.kernel32
+            kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+            kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+            kernel32.TerminateProcess(kernel32.GetCurrentProcess(), 3)
+        os._exit(3)
+
     def crash_once_written():
         if any(autosaves.glob("*/*/record.json")):
-            os._exit(3)
+            crash()
 
     if os.environ["BACKEND"] == "qt":
         from qtpy.QtCore import QTimer
