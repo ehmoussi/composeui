@@ -22,7 +22,14 @@ from typing_extensions import override
 
 from composeui.core import application
 from composeui.core.registry import RendererType
-from composeui.core.sqlitemodel import SqliteModel, SqliteSource, SqliteTable, table
+from composeui.core.sqlitemodel import (
+    DatabaseModel,
+    SqliteDatabase,
+    SqliteSource,
+    SqliteTable,
+    per_session,
+    table,
+)
 from composeui.core.view import (
     OMIT,
     LabelView,
@@ -129,8 +136,12 @@ def fill(_job: Job[int], readings: Readings, count: int) -> int:
     return readings.fill(count)
 
 
-class ReadingsModel(SqliteModel):
+class ReadingsDatabase(SqliteDatabase):
     readings = table(Readings)
+
+
+class ReadingsModel(DatabaseModel):
+    study = per_session(ReadingsDatabase, data_name="data.sqlite")
 
 
 class TimedSource(SqliteSource):
@@ -185,7 +196,7 @@ class LargeTableMainView(MainView):
 
     def connect_model(self, model: ReadingsModel) -> None:
         """Show the model's readings, read again whenever they change."""
-        self._source = TimedSource(model.readings)
+        self._source = TimedSource(model.study.readings)
         self.table.source = self._source
 
     @override

@@ -44,14 +44,14 @@ def test_a_sweep_s_runs_are_shown_on_the_main_thread_as_the_worker_writes_them(
 ) -> None:
     main_view = app.main_view
     threads: list[threading.Thread] = []
-    app.model.runs.changed.connect(lambda: threads.append(threading.current_thread()))
+    app.model.study.runs.changed.connect(lambda: threads.append(threading.current_thread()))
 
     main_view.buttons.run.clicked.emit()
     assert not main_view.buttons.run.is_enabled
     assert main_view.buttons.cancel.is_enabled
     main_view.jobs.wait()
 
-    assert app.model.runs.all() == [SweepRun(20, 6), SweepRun(30, 10), SweepRun(40, 14)]
+    assert app.model.study.runs.all() == [SweepRun(20, 6), SweepRun(30, 10), SweepRun(40, 14)]
     assert main_view.runs.rows == [["20", "6"], ["30", "10"], ["40", "14"]]
     assert [(series.x, series.y) for series in main_view.chart.series] == [
         ([20, 30, 40], [6, 10, 14])
@@ -138,7 +138,7 @@ def test_a_sweep_canceled_while_solving_writes_none_of_its_run(
     resumed.set()
     app.main_view.jobs.wait(timeout=5)
 
-    assert app.model.runs.all() == []
+    assert app.model.study.runs.all() == []
 
 
 def test_a_saved_sweep_opens_with_its_runs(app: App, tmp_path: Path) -> None:
@@ -164,7 +164,7 @@ def test_a_sweep_shows_its_runs_in_the_qt_widgets(app: App, qtbot: QtBot) -> Non
     main_view = app.main_view
     main_view.render(RendererType.QT)
     threads: list[threading.Thread] = []
-    app.model.runs.changed.connect(lambda: threads.append(threading.current_thread()))
+    app.model.study.runs.changed.connect(lambda: threads.append(threading.current_thread()))
 
     main_view.buttons.run.clicked.emit()
     qtbot.waitUntil(lambda: not main_view.jobs.is_running)

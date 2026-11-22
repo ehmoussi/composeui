@@ -31,7 +31,13 @@ from composeui.core.autosave import (
 )
 from composeui.core.model import Model
 from composeui.core.reload import RELOADED_VARIABLE
-from composeui.core.sqlitemodel import SqliteModel, SqliteTable, table
+from composeui.core.sqlitemodel import (
+    DatabaseModel,
+    SqliteDatabase,
+    SqliteTable,
+    per_session,
+    table,
+)
 from composeui.core.study import save_study
 from composeui.core.view import InputView, MainView, define_view
 
@@ -48,15 +54,19 @@ class Notes(SqliteTable):
     create = "CREATE TABLE notes (text TEXT NOT NULL)"
 
 
-class NotesModel(SqliteModel):
+class NotesDatabase(SqliteDatabase):
     notes = table(Notes)
 
+
+class NotesModel(DatabaseModel):
+    study = per_session(NotesDatabase)
+
     def add(self, text: str) -> None:
-        with self.connection(changing=self.notes) as db:
+        with self.study.connection(changing=self.study.notes) as db:
             db.execute("INSERT INTO notes VALUES (?)", (text,))
 
     def texts(self) -> list[str]:
-        with self.reading() as db:
+        with self.study.reading() as db:
             return [text for (text,) in db.execute("SELECT text FROM notes ORDER BY rowid")]
 
 

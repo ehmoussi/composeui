@@ -97,6 +97,30 @@ backends' modules included, can change in any release without an entry here.
 
 ### Changed
 
+- **Breaking:** `DatabaseModel` replaces `SqliteModel`. A `SqliteDatabase` declares the tables,
+  `schema_version`, `migrations`, `open_time_limit` and `pragmas`. The model declares the
+  database with `per_session`, which the study saves and opens, and declares no table of its
+  own. A model declares at most one `per_session` database. To update an app:
+
+  ```python
+  # before
+  class PipeModel(SqliteModel):
+      runs = table(Runs)
+
+  # after
+  class PipeDatabase(SqliteDatabase):
+      runs = table(Runs)
+
+
+  class PipeModel(DatabaseModel):
+      study = per_session(PipeDatabase, data_name="data.sqlite")
+  ```
+
+  The callbacks reach the tables through the database: `model.study.runs`, not `model.runs`.
+  A model's methods use `self.study.connection()` and `self.study.reading()`. `data_name`
+  keeps the file name of the studies saved before. Without it, the study names the file
+  after the model's attribute (`study.sqlite`).
+
 - The web backend uses the address `/style/`: a page of a router can no longer have the route
   `style`. The app stops before it serves, as for the backend's other addresses.
 - A `DownloadView` whose file can't be made says "Can't make the file", without the name of a

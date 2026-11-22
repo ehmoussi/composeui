@@ -25,10 +25,12 @@ from composeui.core._views.tables import parse_filter
 from composeui.core.model import RefusedError
 from composeui.core.sqlitemodel import (
     CSVSqliteTable,
-    SqliteModel,
+    DatabaseModel,
+    SqliteDatabase,
     _dict_rows,
     csv_field,
     define_csv_row,
+    per_session,
     table,
 )
 from composeui.core.view import MainView, Sort, SourceColumn
@@ -58,8 +60,18 @@ class InheritedReadings(Readings):
     pass
 
 
-class ReadingsModel(SqliteModel):
+class ReadingsDatabase(SqliteDatabase):
     readings = table(InheritedReadings)
+
+
+class ReadingsModel(DatabaseModel):
+    study = per_session(ReadingsDatabase)
+
+
+class _ScratchModel(DatabaseModel):
+    """A model whose database starts with no table: each test adds its own."""
+
+    study = per_session(SqliteDatabase)
 
 
 @pytest.fixture
@@ -76,18 +88,18 @@ _SECOND = '"Two\nlines";2.5;26/10/2026;26/10/2026 18:00+0200\n'
 
 def test_csv_import_converts_validates_and_commits_batches_together(model: ReadingsModel) -> None:
     changes: list[None] = []
-    model.readings.changed.connect(lambda: changes.append(None))
+    model.study.readings.changed.connect(lambda: changes.append(None))
     text = io.StringIO(_HEADER + _FIRST + _SECOND + "unread\n")
     counts = []
-    for count in model.readings.fill(text, delimiter=";", batch_size=1, limit=2):
+    for count in model.study.readings.fill(text, delimiter=";", batch_size=1, limit=2):
         counts.append(count)
-        with model.readings.reading() as db:
+        with model.study.readings.reading() as db:
             assert db.execute('SELECT COUNT(*) FROM "reading ""values"""').fetchone()[0] == 0
         assert changes == []
     assert counts == [1, 2]
     assert text.readline() == "unread\n"
     assert not text.closed
-    with model.readings.reading() as db:
+    with model.study.readings.reading() as db:
         assert [tuple(row) for row in db.execute('SELECT * FROM "reading ""values"""')] == [
             (
                 "First; reading",
@@ -116,7 +128,7 @@ def test_invalid_csv_rows_refuse_the_whole_import(
     model: ReadingsModel, text: str, message: str
 ) -> None:
     changes: list[None] = []
-    model.readings.changed.connect(lambda: changes.append(None))
+    model.study.readings.changed.connect(lambda: changes.append(None))
     # A previously submitted batch must also roll back when the later row fails.
     lines = (
         io.StringIO(_HEADER + _FIRST + text.removeprefix(_HEADER))
@@ -124,8 +136,8 @@ def test_invalid_csv_rows_refuse_the_whole_import(
         else io.StringIO(text)
     )
     with pytest.raises(RefusedError, match=message):
-        list(model.readings.fill(lines, delimiter=";", batch_size=1))
-    with model.readings.reading() as db:
+        list(model.study.readings.fill(lines, delimiter=";", batch_size=1))
+    with model.study.readings.reading() as db:
         assert db.execute('SELECT COUNT(*) FROM "reading ""values"""').fetchone()[0] == 0
     assert changes == []
 
@@ -137,20 +149,24 @@ def test_a_batch_of_more_rows_than_one_statement_takes_keeps_them_all_in_order(
     names = [f"reading {number}" for number in range(2_500)]
     rows = "".join(f"{name};1;25/10/2026;25/10/2026 17:00+0200\n" for name in names)
 
-    counts = list(model.readings.fill(io.StringIO(_HEADER + rows), delimiter=";", batch_size=1_100))
+    counts = list(
+        model.study.readings.fill(io.StringIO(_HEADER + rows), delimiter=";", batch_size=1_100)
+    )
 
     assert counts == [1_100, 2_200, 2_500]
-    with model.readings.reading() as db:
+    with model.study.readings.reading() as db:
         stored = db.execute('SELECT name FROM "reading ""values""" ORDER BY rowid')
         assert [name for (name,) in stored] == names
 
 
 def test_closing_csv_progress_rolls_back_and_leaves_the_input_open(model: ReadingsModel) -> None:
     text = io.StringIO(_HEADER + _FIRST + _SECOND)
-    with contextlib.closing(model.readings.fill(text, delimiter=";", batch_size=1)) as batches:
+    with contextlib.closing(
+        model.study.readings.fill(text, delimiter=";", batch_size=1)
+    ) as batches:
         assert next(batches) == 1
     assert not text.closed
-    with model.readings.reading() as db:
+    with model.study.readings.reading() as db:
         assert db.execute('SELECT COUNT(*) FROM "reading ""values"""').fetchone()[0] == 0
 
 
@@ -168,12 +184,12 @@ def test_csv_file_and_url_import_forward_csv_options_encoding_batches_and_limit(
     path.write_bytes(gzip.compress(payload) if compressed else payload)
     monkeypatch.chdir(tmp_path)
     if input_kind == "url":
-        batches = model.readings.fill_from_url(
+        batches = model.study.readings.fill_from_url(
             path.as_uri(), encoding="latin-1", delimiter=";", batch_size=1, limit=1
         )
     else:
         relative = path.relative_to(tmp_path)
-        batches = model.readings.fill_from_file(
+        batches = model.study.readings.fill_from_file(
             str(relative) if input_kind == "string" else relative,
             encoding="latin-1",
             delimiter=";",
@@ -181,7 +197,7 @@ def test_csv_file_and_url_import_forward_csv_options_encoding_batches_and_limit(
             limit=1,
         )
     assert list(batches) == [1]
-    source = model.readings.source()
+    source = model.study.readings.source()
     assert source.count() == 1
     assert source.cells([1], ["name", "value"]) == {1: ["Café; reading", 1.5]}
 
@@ -196,24 +212,24 @@ def test_csv_file_and_url_import_roll_back_all_batches_on_early_close_or_failure
     payload = gzip.compress((_HEADER + _FIRST + second).encode())
     path.write_bytes(payload[:-8] if outcome == "truncated" else payload)
     changes: list[None] = []
-    model.readings.changed.connect(lambda: changes.append(None))
+    model.study.readings.changed.connect(lambda: changes.append(None))
     batches = (
-        model.readings.fill_from_url(path.as_uri(), delimiter=";", batch_size=1)
+        model.study.readings.fill_from_url(path.as_uri(), delimiter=";", batch_size=1)
         if input_kind == "url"
-        else model.readings.fill_from_file(path, delimiter=";", batch_size=1)
+        else model.study.readings.fill_from_file(path, delimiter=";", batch_size=1)
     )
     with contextlib.closing(batches):
         assert next(batches) == 1
         if outcome != "closed":
             with pytest.raises(RefusedError if outcome == "invalid" else EOFError):
                 list(batches)
-    assert model.readings.source().count() == 0
+    assert model.study.readings.source().count() == 0
     assert changes == []
 
 
 def test_csv_file_import_propagates_a_missing_file(model: ReadingsModel, tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError):
-        list(model.readings.fill_from_file(tmp_path / "missing.csv"))
+        list(model.study.readings.fill_from_file(tmp_path / "missing.csv"))
 
 
 @pytest.mark.parametrize("delimiter", [";", "\t", "|"])
@@ -227,14 +243,14 @@ def test_sniffing_replays_headers_and_quoted_rows_without_losing_data(
     payload = text.encode("latin-1")
     path.write_bytes(gzip.compress(payload) if compressed else payload)
     batches = (
-        model.readings.fill_from_file(path, sniff=True, encoding="latin-1", batch_size=1)
+        model.study.readings.fill_from_file(path, sniff=True, encoding="latin-1", batch_size=1)
         if input_kind == "file"
-        else model.readings.fill_from_url(
+        else model.study.readings.fill_from_url(
             path.as_uri(), sniff=True, encoding="latin-1", batch_size=1
         )
     )
     assert list(batches) == [1, 2]
-    assert model.readings.source().cells([1, 2], ["name", "value"]) == {
+    assert model.study.readings.source().cells([1, 2], ["name", "value"]) == {
         1: [f"Café{delimiter} reading", 1.5],
         2: ["Two\nlines", 2.5],
     }
@@ -249,8 +265,8 @@ def test_sniffing_replays_a_sample_ending_inside_a_quoted_line_or_crlf(
     row = f'"{name}";1.5;25/10/2026;25/10/2026 17:00+0200;26/10/2026\r\n'
     path = tmp_path / "data.csv"
     path.write_bytes((prefix + row + _SECOND).encode())
-    assert list(model.readings.fill_from_file(path, sniff=True, batch_size=20)) == [20, 22]
-    assert model.readings.source().cells([21, 22], ["name"]) == {
+    assert list(model.study.readings.fill_from_file(path, sniff=True, batch_size=20)) == [20, 22]
+    assert model.study.readings.source().cells([21, 22], ["name"]) == {
         21: [name],
         22: ["Two\nlines"],
     }
@@ -285,7 +301,7 @@ def test_any_rows_written_as_csv_import_whole_wherever_the_sniff_sample_ends(
             path = Path(folder) / "data.csv"
             path.write_bytes(text.getvalue().encode())
             # every option explicit: the sample is read and replayed, not trusted
-            batches = model.readings.fill_from_file(
+            batches = model.study.readings.fill_from_file(
                 path, sniff=True, sniff_sample_size=sample_size, dialect="excel", delimiter=";"
             )
             try:
@@ -295,7 +311,7 @@ def test_any_rows_written_as_csv_import_whole_wherever_the_sniff_sample_ends(
                     raise
                 reject()  # the sample too short, or too odd, to detect a dialect
         ids = list(range(1, len(names) + 1))
-        cells = model.readings.source().cells(ids, ["name"])
+        cells = model.study.readings.source().cells(ids, ["name"])
         assert [cells[row][0] for row in ids] == [name.strip() for name in names]
     finally:
         model.close()
@@ -313,7 +329,7 @@ def test_sniffing_respects_explicit_options_and_headerless_input(
         _FIRST.replace('" First; reading "', f"{quote}Station{quote}"), encoding="utf-8"
     )
     assert list(
-        model.readings.fill_from_file(
+        model.study.readings.fill_from_file(
             path,
             sniff=True,
             delimiter=";",
@@ -321,25 +337,25 @@ def test_sniffing_respects_explicit_options_and_headerless_input(
             **options,
         )
     ) == [1]
-    assert model.readings.source().cells([1], ["name"]) == {1: [expected]}
+    assert model.study.readings.source().cells([1], ["name"]) == {1: [expected]}
 
 
 @pytest.mark.parametrize("input_kind", ["file", "url"])
 def test_sniffing_failure_is_a_clear_refusal_and_keeps_existing_rows(
     model: ReadingsModel, tmp_path: Path, input_kind: str
 ) -> None:
-    list(model.readings.fill(io.StringIO(_HEADER + _FIRST), delimiter=";"))
+    list(model.study.readings.fill(io.StringIO(_HEADER + _FIRST), delimiter=";"))
     path = tmp_path / "empty.csv"
     path.write_bytes(b"")
     batches = (
-        model.readings.fill_from_file(path, sniff=True)
+        model.study.readings.fill_from_file(path, sniff=True)
         if input_kind == "file"
-        else model.readings.fill_from_url(path.as_uri(), sniff=True)
+        else model.study.readings.fill_from_url(path.as_uri(), sniff=True)
     )
     with pytest.raises(RefusedError, match="Cannot detect the CSV dialect") as caught:
         list(batches)
     assert isinstance(caught.value.__cause__, csv.Error)
-    assert model.readings.source().count() == 1
+    assert model.study.readings.source().count() == 1
 
 
 @pytest.mark.parametrize("outcome", ["limit", "closed", "invalid", "truncated"])
@@ -353,7 +369,7 @@ def test_sniffing_reads_a_bounded_sample_and_preserves_streaming_rollback(
     path = tmp_path / "data.gz"
     path.write_bytes(payload[:-8] if outcome in ("limit", "truncated") else payload)
     with contextlib.closing(
-        model.readings.fill_from_file(
+        model.study.readings.fill_from_file(
             path, sniff=True, batch_size=1, limit=1 if outcome == "limit" else None
         )
     ) as batches:
@@ -363,7 +379,7 @@ def test_sniffing_reads_a_bounded_sample_and_preserves_streaming_rollback(
         elif outcome != "closed":
             with pytest.raises(RefusedError if outcome == "invalid" else EOFError):
                 list(batches)
-    assert model.readings.source().count() == (1 if outcome == "limit" else 0)
+    assert model.study.readings.source().count() == (1 if outcome == "limit" else 0)
 
 
 @pytest.mark.parametrize("input_kind", ["file", "url"])
@@ -384,7 +400,7 @@ def test_a_larger_sniff_sample_can_read_a_wide_header(
     class WideRows(CSVSqliteTable, row_type=row_type, name="wide"):
         pass
 
-    rows = model.add_table(WideRows)
+    rows = model.study.add_table(WideRows)
     data = [[f"row{row}_{index}" for index in range(200)] for row in (1, 2)]
     text = io.StringIO(newline="")
     csv.writer(text, delimiter=";").writerows([headers, *data])
@@ -412,29 +428,29 @@ def test_sniff_sample_size_must_be_positive_only_when_detection_is_enabled(
     path = tmp_path / "data.csv"
     path.write_text(_HEADER + _FIRST, encoding="utf-8")
     batches = (
-        model.readings.fill_from_file(
+        model.study.readings.fill_from_file(
             path, sniff=sniff, sniff_sample_size=sample_size, delimiter=";"
         )
         if input_kind == "file"
-        else model.readings.fill_from_url(
+        else model.study.readings.fill_from_url(
             path.as_uri(), sniff=sniff, sniff_sample_size=sample_size, delimiter=";"
         )
     )
     if sniff:
         with pytest.raises(ValueError, match="sniff_sample_size must be positive"):
             list(batches)
-        assert model.readings.source().count() == 0
+        assert model.study.readings.source().count() == 0
     else:
         assert list(batches) == [1]
-        assert model.readings.source().count() == 1
+        assert model.study.readings.source().count() == 1
 
 
 def test_schema_source_infers_headers_types_and_reads_imported_rows(model: ReadingsModel) -> None:
-    source = model.readings.source()
+    source = model.study.readings.source()
     changes: list[None] = []
     source.changed.connect(lambda: changes.append(None))
     assert source.count() == 0
-    list(model.readings.fill(io.StringIO(_HEADER + _FIRST + _SECOND), delimiter=";"))
+    list(model.study.readings.fill(io.StringIO(_HEADER + _FIRST + _SECOND), delimiter=";"))
     assert changes == [None]
     assert source.count() == 2
     assert list(source.columns) == [
@@ -460,16 +476,16 @@ def test_schema_source_infers_headers_types_and_reads_imported_rows(model: Readi
 def test_schema_source_selects_and_orders_fields_and_rejects_unknown_names(
     model: ReadingsModel,
 ) -> None:
-    list(model.readings.fill(io.StringIO(_HEADER + _FIRST), delimiter=";"))
-    source = model.readings.source(headers={"value": "Measurement", "name": "Station"})
+    list(model.study.readings.fill(io.StringIO(_HEADER + _FIRST), delimiter=";"))
+    source = model.study.readings.source(headers={"value": "Measurement", "name": "Station"})
     assert list(source.columns) == [
         SourceColumn("value", "Measurement", float),
         SourceColumn("name", "Station", str),
     ]
     assert source.cells([1], ["value", "name"]) == {1: [1.5, "First; reading"]}
-    assert list(model.readings.source(headers={}).columns) == []
+    assert list(model.study.readings.source(headers={}).columns) == []
     with pytest.raises(KeyError, match="missing"):
-        model.readings.source(headers={"missing": "Missing"})
+        model.study.readings.source(headers={"missing": "Missing"})
 
 
 @pytest.mark.parametrize(
@@ -482,9 +498,9 @@ def test_schema_source_never_uses_a_shadowing_field_as_the_row_id(names: tuple[s
     class Rows(CSVSqliteTable, row_type=row_type, name="rows"):
         pass
 
-    model = SqliteModel()
+    model = _ScratchModel()
     try:
-        rows = model.add_table(Rows)
+        rows = model.study.add_table(Rows)
         if len(names) == 3:
             with pytest.raises(ValueError, match="shadow all SQLite row-id names"):
                 rows.source()
@@ -516,7 +532,7 @@ def test_a_job_canceled_partway_through_an_import_keeps_no_row(tmp_path: Path) -
     read: list[int] = []
 
     def load(job: Job[None, int]) -> None:
-        with contextlib.closing(model.texts.fill_from_file(path, batch_size=2)) as batches:
+        with contextlib.closing(model.study.texts.fill_from_file(path, batch_size=2)) as batches:
             for count in batches:
                 read.append(count)
                 first_batch.set()
@@ -531,7 +547,7 @@ def test_a_job_canceled_partway_through_an_import_keeps_no_row(tmp_path: Path) -
         canceled.set()
         main_view.jobs.wait()
         assert read == [2]
-        assert model.texts.fetch_column("SELECT COUNT(*) FROM two_texts") == [0]
+        assert model.study.texts.fetch_column("SELECT COUNT(*) FROM two_texts") == [0]
     finally:
         model.close()
 
@@ -546,15 +562,19 @@ class _TwoTextsTable(CSVSqliteTable, row_type=_TwoTexts, name="two_texts"):
     pass
 
 
-class _TwoTextsModel(SqliteModel):
+class _TwoTextsDatabase(SqliteDatabase):
     texts = table(_TwoTextsTable)
+
+
+class _TwoTextsModel(DatabaseModel):
+    study = per_session(_TwoTextsDatabase)
 
 
 def test_a_short_row_refuses_a_required_text_rather_than_storing_none() -> None:
     model = _TwoTextsModel()
     try:
         with pytest.raises(RefusedError, match="no value for second"):
-            list(model.texts.fill(["first,second\n", "only\n"]))
+            list(model.study.texts.fill(["first,second\n", "only\n"]))
     finally:
         model.close()
 
@@ -571,12 +591,20 @@ class InheritedIndexedMeasures(Measures):
     indexes = _MEASURE_INDEX
 
 
-class IndexedMeasuresModel(SqliteModel):
+class IndexedMeasuresDatabase(SqliteDatabase):
     measures = table(IndexedMeasures)
 
 
-class InheritedIndexedMeasuresModel(SqliteModel):
+class IndexedMeasuresModel(DatabaseModel):
+    study = per_session(IndexedMeasuresDatabase)
+
+
+class InheritedIndexedMeasuresDatabase(SqliteDatabase):
     measures = table(InheritedIndexedMeasures)
+
+
+class InheritedIndexedMeasuresModel(DatabaseModel):
+    study = per_session(InheritedIndexedMeasuresDatabase)
 
 
 @pytest.mark.parametrize("model_type", [IndexedMeasuresModel, InheritedIndexedMeasuresModel])
@@ -584,7 +612,7 @@ def test_indexes_serve_queries_after_an_import_and_in_a_reopened_study(
     model_type: type[IndexedMeasuresModel | InheritedIndexedMeasuresModel], tmp_path: Path
 ) -> None:
     def plan(model: IndexedMeasuresModel | InheritedIndexedMeasuresModel) -> str:
-        with model.measures.reading() as db:
+        with model.study.measures.reading() as db:
             ((*_, detail),) = db.execute(
                 "EXPLAIN QUERY PLAN SELECT value FROM measure WHERE value = 2"
             ).fetchall()
@@ -592,7 +620,7 @@ def test_indexes_serve_queries_after_an_import_and_in_a_reopened_study(
 
     model = model_type()
     try:
-        deque(model.measures.fill(io.StringIO("Value\n2\n3\n")), maxlen=0)
+        deque(model.study.measures.fill(io.StringIO("Value\n2\n3\n")), maxlen=0)
         assert "measure_value" in plan(model)
         model.save_data(tmp_path / "study.db")
     finally:
@@ -602,7 +630,9 @@ def test_indexes_serve_queries_after_an_import_and_in_a_reopened_study(
         # a study is refused unless it is made as a new one is, its indexes included
         reopened.open_data(tmp_path / "study.db")
         assert "measure_value" in plan(reopened)
-        assert reopened.measures.fetch_column("SELECT value FROM measure WHERE value = 2") == [2.0]
+        assert reopened.study.measures.fetch_column(
+            "SELECT value FROM measure WHERE value = 2"
+        ) == [2.0]
     finally:
         reopened.close()
 
@@ -637,8 +667,12 @@ class DatesTable(CSVSqliteTable, row_type=Dates, name="dates"):
     pass
 
 
-class DatesModel(SqliteModel):
+class DatesDatabase(SqliteDatabase):
     dates = table(DatesTable)
+
+
+class DatesModel(DatabaseModel):
+    study = per_session(DatesDatabase)
 
 
 def test_dates_repeated_in_a_csv_keep_their_format_type_and_offset() -> None:
@@ -650,8 +684,8 @@ def test_dates_repeated_in_a_csv_keep_their_format_type_and_offset() -> None:
     )
     model = DatesModel()
     try:
-        deque(model.dates.fill(io.StringIO(header + rows)), maxlen=0)
-        with model.dates.connection() as db:
+        deque(model.study.dates.fill(io.StringIO(header + rows)), maxlen=0)
+        with model.study.dates.connection() as db:
             stored = db.execute("SELECT * FROM dates ORDER BY rowid").fetchall()
         assert [tuple(row) for row in stored] == [
             ("2020-02-01", "2020-01-02", "2020-02-01T00:00:00", "2020-01-01T12:00:00+00:00"),
@@ -660,8 +694,8 @@ def test_dates_repeated_in_a_csv_keep_their_format_type_and_offset() -> None:
         invalid = header + "invalid,01/02/2020,01/02/2020,2020-01-01 12:00+0000\n"
         for _ in range(2):  # a date refused is refused each time
             with pytest.raises(RefusedError, match="does not match format"):
-                deque(model.dates.fill(io.StringIO(invalid)), maxlen=0)
-        assert model.dates.fetch_column("SELECT COUNT(*) FROM dates") == [2]
+                deque(model.study.dates.fill(io.StringIO(invalid)), maxlen=0)
+        assert model.study.dates.fetch_column("SELECT COUNT(*) FROM dates") == [2]
     finally:
         model.close()
 
@@ -689,9 +723,9 @@ class Scalars(CSVSqliteTable, row_type=ScalarRow, name="scalar"):
 
 
 def test_csv_options_and_attrs_metadata_defaults_and_scalar_types() -> None:
-    model = SqliteModel()
+    model = _ScratchModel()
     try:
-        scalars = model.add_table(Scalars)
+        scalars = model.study.add_table(Scalars)
         assert list(
             scalars.fill(
                 ["ok,3,yes,1.25,hello\n"],
@@ -724,9 +758,9 @@ class ISODateTable(CSVSqliteTable, row_type=ISODates, name="iso_dates"):
 
 
 def test_dates_without_a_format_use_iso_text_and_round_trip() -> None:
-    model = SqliteModel()
+    model = _ScratchModel()
     try:
-        dates = model.add_table(ISODateTable)
+        dates = model.study.add_table(ISODateTable)
         assert list(dates.fill(["day,moment\n", "2026-10-25,2026-10-25T17:00:00\n"])) == [1]
         assert dates.fetch(ISODates, "SELECT * FROM iso_dates") == [
             ISODates(

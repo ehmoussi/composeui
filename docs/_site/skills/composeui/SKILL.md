@@ -291,9 +291,11 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   the line, in the job's thread. A job canceled while waiting raises `JobCanceledError`.
   Call it only in the job's function, one slot per job.
   See https://ehmoussi.github.io/composeui/user-guide/threads.html#a-limit-on-the-jobs-that-run-at-once
-- **Keep the model out of the views.** The optional model (`Model`, `SqliteModel`) holds
+- **Keep the model out of the views.** The optional model (`Model`, `DatabaseModel`) holds
   the data and knows no view. The app gives it to `run` with `build_model=` and
-  `setup_model=`. Batch inserts and CSV imports (`insert_batches`, `CSVSqliteTable`,
+  `setup_model=`. A `DatabaseModel` declares one `per_session` database, a
+  `SqliteDatabase` that declares the tables (`model.study.runs.add(...)`), never tables
+  of its own. Batch inserts and CSV imports (`insert_batches`, `CSVSqliteTable`,
   `fill`, `fill_from_file`, `fill_from_url`) commit once their generator is read to the
   end. Pass only trusted URLs.
   See https://ehmoussi.github.io/composeui/user-guide/sqlite-model.html and

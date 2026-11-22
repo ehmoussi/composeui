@@ -20,7 +20,14 @@ from attrs import Factory
 from typing_extensions import override
 
 from composeui.core.application import run
-from composeui.core.sqlitemodel import SqliteModel, SqliteTable, as_parameters, table
+from composeui.core.sqlitemodel import (
+    DatabaseModel,
+    SqliteDatabase,
+    SqliteTable,
+    as_parameters,
+    per_session,
+    table,
+)
 from composeui.core.view import (
     Align,
     Axis,
@@ -84,8 +91,12 @@ class SweepRuns(SqliteTable):
         return self.fetch(SweepRun, "SELECT radius, stress FROM sweep_run ORDER BY radius")
 
 
-class PipeSweepModel(SqliteModel):
+class SweepDatabase(SqliteDatabase):
     runs = table(SweepRuns)
+
+
+class PipeSweepModel(DatabaseModel):
+    study = per_session(SweepDatabase, data_name="data.sqlite")
 
 
 def hoop_stress(pressure: float, radius: float, thickness: float) -> float:
@@ -105,12 +116,12 @@ def sweep(
         if not job.sleep(SOLVE_SECONDS):
             return count
         found = SweepRun(radius, round(hoop_stress(pressure, radius, thickness), 2))
-        with model.runs.connection():
+        with model.study.runs.connection():
             # checked within the transaction: New and Open drop the job before they replace
             # the database, so a run canceled meanwhile never lands in the next study
             if job.is_canceled:
                 return count
-            model.runs.add(found)
+            model.study.runs.add(found)
     return len(radii)
 
 
@@ -248,7 +259,7 @@ class PipeSweepMainView(MainView):
             self.status_bar.show_message(self.tr("Fix the sweep first"))
             return
         radii = self.form.radii()
-        model.runs.clear()
+        model.study.runs.clear()
         self.progress.maximum = len(radii)
         job = self.jobs.start(
             sweep, model, self.form.pressure.value or 0, self.form.thickness.value or 0, radii
@@ -257,7 +268,7 @@ class PipeSweepMainView(MainView):
 
     def show_runs(self, model: PipeSweepModel) -> None:
         """Show the runs written so far, on the main thread, as each is written."""
-        runs = model.runs.all()
+        runs = model.study.runs.all()
         self.runs.rows = [[f"{found.radius:g}", f"{found.stress:g}"] for found in runs]
         self.chart.series = [
             Series.line(
@@ -280,7 +291,7 @@ class PipeSweepMainView(MainView):
 
     def connect_model(self, model: PipeSweepModel) -> None:
         """Keep the views showing the database's runs, whichever thread writes them."""
-        model.runs.changed.connect(self.show_runs, now=True)
+        model.study.runs.changed.connect(self.show_runs, now=True)
 
 
 def main() -> None:

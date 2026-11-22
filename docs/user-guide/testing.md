@@ -254,7 +254,13 @@ import pytest
 from attrs import Factory
 
 from composeui.core.application import ModelApplication
-from composeui.core.sqlitemodel import SqliteModel, SqliteTable, table
+from composeui.core.sqlitemodel import (
+    DatabaseModel,
+    SqliteDatabase,
+    SqliteTable,
+    per_session,
+    table,
+)
 from composeui.core.study import open_study, save_study
 from composeui.core.view import ButtonView, MainView, TableView, child, define_view
 
@@ -276,8 +282,12 @@ class Runs(SqliteTable):
         return self.fetch(Run, "SELECT * FROM run ORDER BY id")
 
 
-class PipeModel(SqliteModel):
+class PipeDatabase(SqliteDatabase):
     runs = table(Runs)
+
+
+class PipeModel(DatabaseModel):
+    study = per_session(PipeDatabase)
 
 
 @define_view
@@ -292,13 +302,13 @@ class PipeMainView(MainView):
         self.add.clicked.connect(self._add)
 
     def _add(self, *, model: PipeModel) -> None:
-        model.runs.add(0.5)
+        model.study.runs.add(0.5)
 
     def connect_model(self, model: PipeModel) -> None:
-        model.runs.changed.connect(self._show_runs, now=True)
+        model.study.runs.changed.connect(self._show_runs, now=True)
 
     def _show_runs(self, *, model: PipeModel) -> None:
-        self.runs.rows = [[f"{run.radius:g}"] for run in model.runs.all()]
+        self.runs.rows = [[f"{run.radius:g}"] for run in model.study.runs.all()]
 
 
 App = ModelApplication[PipeMainView, PipeModel]

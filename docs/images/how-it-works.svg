@@ -55,7 +55,7 @@
   <text class="title" x="99" y="140" text-anchor="middle">Model</text>
   <text class="small muted" x="99" y="158" text-anchor="middle" font-style="italic">optional</text>
   <text class="small muted" x="99" y="180" text-anchor="middle">the app's data</text>
-  <text class="small muted mono" x="99" y="198" text-anchor="middle">SqliteModel</text>
+  <text class="small muted mono" x="99" y="198" text-anchor="middle">DatabaseModel</text>
 
   <!-- signals between the model and the views -->
   <line class="line" x1="178" y1="160" x2="246" y2="160" marker-start="url(#arrow)" marker-end="url(#arrow)"/>

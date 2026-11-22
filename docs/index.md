@@ -19,7 +19,7 @@ Signals carry the events between the views, the model, and the app.
 - **The views describe the UI.** The app is a tree of views under a `MainView`.
   `composeui.core` holds them, and imports no backend.
 - **The model is optional.** It holds the app's data beside the views, for example in
-  SQLite with `SqliteModel`. Give it to `run` with `build_model=`. A small app needs only
+  SQLite with `DatabaseModel`. Give it to `run` with `build_model=`. A small app needs only
   views.
 - **Signals connect the views and the model.** A callback asks for `view`, `main_view`, or
   `model` by parameter name, and the signal gives them.

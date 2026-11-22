@@ -2,13 +2,20 @@
 
 Views hold what is shown. Some data has many rows, relations between them, and queries over
 them, for example runs and their results, or a catalog of parts. This data belongs in a
-`SqliteModel`: a SQLite database of the app's own, with its own schema and SQL. The study
-saves and opens it.
+SQLite database of the app's own, with its own schema and SQL. A `SqliteDatabase` declares
+its tables. A `DatabaseModel` declares the database with `per_session`: each user works on
+a copy of their own, which the study saves and opens.
 
 ```python
 import attrs
 
-from composeui.core.sqlitemodel import SqliteModel, SqliteTable, table
+from composeui.core.sqlitemodel import (
+    DatabaseModel,
+    SqliteDatabase,
+    SqliteTable,
+    per_session,
+    table,
+)
 
 
 @attrs.define
@@ -28,30 +35,39 @@ class Runs(SqliteTable):
         return self.fetch(Run, "SELECT * FROM run WHERE radius > ?", (radius,))
 
 
-class PipeModel(SqliteModel):
+class PipeDatabase(SqliteDatabase):
     runs = table(Runs)
+
+
+class PipeModel(DatabaseModel):
+    study = per_session(PipeDatabase)
 ```
 
 Give the model to the app:
 `run(PipeMainView, build_model=PipeModel, setup_model=PipeMainView.connect_model)`.
 A `ModelApplication` (`QtModelApplication`, `TextualModelApplication`,
 `WebModelApplication`) takes the same arguments. Callbacks that ask for `model` reach the
-tables (`model.runs.add(...)`).
+tables through the database (`model.study.runs.add(...)`).
 
+- **One database per study.** A `DatabaseModel` declares at most one `per_session` database,
+  and no table of its own: the tables go in the `SqliteDatabase`. The study saves the
+  database as a file named after the model's attribute, `study.sqlite` here. Give
+  `data_name` to keep another name, such as the `data.sqlite` of the studies saved before
+  ComposeUI had `DatabaseModel`: `per_session(PipeDatabase, data_name="data.sqlite")`.
 - **Transactions.** `with self.connection() as db:` commits once the block ends, and rolls
   back if the block raises. A block inside another block joins it. The threads take turns
-  on the model's connection.
+  on the database's connection.
 - **Separate reads.** `with self.reading() as db:` gives a connection that only reads, and takes no
   turn: it neither waits for a write nor holds one up. It reads the rows committed, not those of a
   transaction still open. The connection is reused: read each query's rows to the end in the block,
   else the next reader sees the rows as they were when the query started. A large table's
   [`SqliteSource`](tables.md#rows-in-sqlite) reads its rows this way.
-- **Settings.** `pragmas` is set on the connection of every study, because SQLite keeps
-  these settings per connection, not in the file. Foreign keys and recursive triggers are
-  on. `synchronous` is off, because the model's database is a scratch copy and the study file
-  is written separately. The journal is `WAL`, so that `reading` reads during a write; the
+- **Settings.** The database's `pragmas` is set on the connection of every study, because
+  SQLite keeps these settings per connection, not in the file. Foreign keys and recursive
+  triggers are on. `synchronous` is off, because the database is a scratch copy and the study
+  file is written separately. The journal is `WAL`, so that `reading` reads during a write; the
   study file is saved in SQLite's default journal. Override `pragmas` to change them
-  (`pragmas = {**SqliteModel.pragmas, "cache_size": -64000}`).
+  (`pragmas = {**SqliteDatabase.pragmas, "cache_size": -64000}`).
 - **Typed rows.** `fetch` and `fetch_one` turn rows into `attrs` instances through the
   `cattrs` converter of the views. `fetch_column` gives the first column of a query, for
   example a list of names. `as_parameters(row)` gives the fields of an instance as the named
@@ -95,17 +111,19 @@ tables (`model.runs.add(...)`).
 
   ```python
   def connect_model(self, model: PipeModel) -> None:  # PipeMainView's
-      model.runs.changed.connect(self.show_runs, now=True)
+      model.study.runs.changed.connect(self.show_runs, now=True)
   ```
 
 - **Studies.** New starts an empty database. Save and Open (and `-f`) save and open the
   state of the views and the database together, as a zip archive with the app's `extension`.
-  The model works on a scratch copy in a temporary file. So the user's file changes only
+  The database is a scratch copy in a temporary file. So the user's file changes only
   when the user saves it, and a failed save leaves the file whole. Opening checks everything
   first. When a file does not fit, the study stays as it was, and a notification says why.
-- **Versions.** Raise `schema_version` with every change to the tables. Add the step from
-  the previous version to `migrations` (`{1: add_stress_column}`). When the user opens a
-  study saved by an older version, the model brings it up to date. A study saved by a newer
+- **Versions.** Raise the database's `schema_version` with every change to the tables. Add
+  the step from the previous version to its `migrations` (`{1: add_stress_column}`). When the
+  user opens a study saved by an older version, the database is brought up to date. A study
+  saved by a newer version is refused.
+
   version is refused.
 - **Opened databases are checked.** A study can come from anyone, such as a web upload or
   an email. Its database must be made as a new one is: the same tables with the same
@@ -116,7 +134,7 @@ tables (`model.runs.add(...)`).
   because `ALTER TABLE ... ADD COLUMN` cannot add all of them. Opening a database, its
   migrations included, stops after `open_time_limit` seconds (30 by default).
 - **Writing from a job.** The function of a [job](threads.md) can write to
-  the tables: the model's lock lets one thread at a time use the connection. After a commit,
+  the tables: the database's lock lets one thread at a time use the connection. After a commit,
   `job.call_on_main_thread` delivers the `changed` signal with the same
   [threading rules as other job callbacks](threads.md#how-jobs-behave). New and Open drop the
   jobs before they replace the database. Check `job.is_canceled` in the transaction that
@@ -125,10 +143,10 @@ tables (`model.runs.add(...)`).
   ```python
   def sweep(job: Job[int], model: PipeModel, radii: list[float]) -> int:  # in its thread
       for count, radius in enumerate(radii):
-          with model.runs.connection():
+          with model.study.runs.connection():
               if job.is_canceled:
                   return count
-              model.runs.add(radius)  # joins the transaction
+              model.study.runs.add(radius)  # joins the transaction
       return len(radii)
   ```
 
@@ -147,7 +165,7 @@ every backend (`uv run python -m examples.pipecatalogue --backend qt`):
   filter by. Studies saved before the date column existed get the column when they open,
   through a migration.
 
-[`src/examples/pipesweep.py`](../../src/examples/pipesweep.py) writes to its model from a job
+[`src/examples/pipesweep.py`](../../src/examples/pipesweep.py) writes to its database from a job
 (`uv run python -m examples.pipesweep --backend qt`).
 
-To import CSV data into a table of the model, see [Importing CSV data](csv-import.md).
+To import CSV data into a table of the database, see [Importing CSV data](csv-import.md).

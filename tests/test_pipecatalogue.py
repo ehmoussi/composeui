@@ -107,9 +107,9 @@ def test_the_tree_shows_the_pipes_listed_by_material_and_expands_the_one_selecte
     material.value = Material.STEEL.value
     material.value_changed.emit(material.value)
     assert [node.key for node in tree.nodes] == ["STEEL"]
-    app.model.pipes.delete("Main line")
+    app.model.study.pipes.delete("Main line")
     assert (tree.expanded, tree.selected) == ([("STEEL",)], ("STEEL", "Feed"))
-    app.model.pipes.delete("Feed")
+    app.model.study.pipes.delete("Feed")
     assert (tree.nodes, tree.expanded, tree.selected) == ([], [], None)
 
 
@@ -162,7 +162,7 @@ def test_a_pipe_s_delete_button_removes_it_from_the_database(app: App) -> None:
 
     (kept,) = _expanders(app)
     assert kept is ret
-    assert app.model.pipes.total(app.main_view.catalogue.shown.shown()).count == 1
+    assert app.model.study.pipes.total(app.main_view.catalogue.shown.shown()).count == 1
     assert app.main_view.status_bar.message == "Deleted 'Main line'"
 
 
@@ -247,7 +247,7 @@ def test_an_edit_the_database_refuses_keeps_the_dialog_open_and_says_why_there(
 
 
 def _thickness(app: App, name: str) -> float:
-    pipe = app.model.pipes.get(name)
+    pipe = app.model.study.pipes.get(name)
     assert pipe is not None
     return pipe.thickness
 

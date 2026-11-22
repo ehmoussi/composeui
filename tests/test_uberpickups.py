@@ -15,7 +15,13 @@ from composeui.core.jobs import Job
 from composeui.core.registry import RendererType
 from composeui.core.reload import load_reloaded_state, save_reloaded_state
 from composeui.core.renderer import RendererContainer
-from composeui.core.sqlitemodel import CSVSqliteTable, SqliteModel, table
+from composeui.core.sqlitemodel import (
+    CSVSqliteTable,
+    DatabaseModel,
+    SqliteDatabase,
+    per_session,
+    table,
+)
 from composeui.core.view import MapPoint
 from examples import uberpickups
 
@@ -293,7 +299,7 @@ def test_invalid_csv_is_shown_as_a_loading_failure(
         assert page.status.text.startswith("Failed to read the CSV:")
         assert not page.pickups_chart.is_visible
         assert not page.pickups_map.is_visible
-        assert app.model.uber_data.fetch_column("SELECT COUNT(*) FROM uber_data") == [0]
+        assert app.model.study.uber_data.fetch_column("SELECT COUNT(*) FROM uber_data") == [0]
     finally:
         app.model.close()
 
@@ -309,7 +315,7 @@ def test_a_canceled_csv_job_rolls_back_before_showing_any_rows(
     job.cancel()
     try:
         assert model.load_pickups(job, path.as_uri()) == []
-        assert model.uber_data.fetch_column("SELECT COUNT(*) FROM uber_data") == [0]
+        assert model.study.uber_data.fetch_column("SELECT COUNT(*) FROM uber_data") == [0]
     finally:
         model.close()
 
@@ -317,9 +323,9 @@ def test_a_canceled_csv_job_rolls_back_before_showing_any_rows(
 def test_hourly_counts_ignore_rows_without_a_valid_hour() -> None:
     model = uberpickups.UberPickupsModel()
     try:
-        with model.uber_data.connection() as db:
+        with model.study.uber_data.connection() as db:
             db.execute("INSERT INTO uber_data VALUES ('not a timestamp', 0, 0, 'B')")
-        assert model.uber_data.pickups_by_hour() == [0] * 24
+        assert model.study.uber_data.pickups_by_hour() == [0] * 24
     finally:
         model.close()
 
@@ -327,7 +333,7 @@ def test_hourly_counts_ignore_rows_without_a_valid_hour() -> None:
 def test_map_sampling_bounds_large_datasets_and_skips_polar_coordinates() -> None:
     model = uberpickups.UberPickupsModel()
     try:
-        with model.uber_data.connection() as db:
+        with model.study.uber_data.connection() as db:
             db.executemany(
                 "INSERT INTO uber_data VALUES (?, ?, ?, ?)",
                 [
@@ -338,11 +344,11 @@ def test_map_sampling_bounds_large_datasets_and_skips_polar_coordinates() -> Non
                     ),
                 ],
             )
-        points = model.uber_data.pickup_points(0)
+        points = model.study.uber_data.pickup_points(0)
         assert 0 < len(points) <= 10000
         assert len(set(points)) == len(points)
         assert all(40.7 <= point.latitude <= 40.71 for point in points)
-        assert sum(model.uber_data.pickups_by_hour()) == 10001
+        assert sum(model.study.uber_data.pickups_by_hour()) == 10001
     finally:
         model.close()
 
@@ -351,8 +357,12 @@ class _TableBeforeTheIndex(CSVSqliteTable, row_type=uberpickups.UberPickup, name
     pass
 
 
-class _ModelBeforeTheIndex(SqliteModel):
+class _DatabaseBeforeTheIndex(SqliteDatabase):
     uber_data = table(_TableBeforeTheIndex)
+
+
+class _ModelBeforeTheIndex(DatabaseModel):
+    study = per_session(_DatabaseBeforeTheIndex)
 
 
 def test_a_study_saved_before_the_index_opens_and_reads_only_the_rows_of_the_hour(
@@ -361,7 +371,7 @@ def test_a_study_saved_before_the_index_opens_and_reads_only_the_rows_of_the_hou
     other_hour = 5000
     old = _ModelBeforeTheIndex()
     try:
-        with old.uber_data.connection() as db:
+        with old.study.uber_data.connection() as db:
             db.executemany(
                 "INSERT INTO uber_data VALUES (?, ?, ?, ?)",
                 [
@@ -384,14 +394,14 @@ def test_a_study_saved_before_the_index_opens_and_reads_only_the_rows_of_the_hou
             calls += 1
             return 0
 
-        with model.uber_data.connection() as db:
+        with model.study.uber_data.connection() as db:
             db.set_progress_handler(count, steps_per_call)
-        with model.uber_data.reading() as reader:
+        with model.study.uber_data.reading() as reader:
             reader.set_progress_handler(count, steps_per_call)
-        source = model.uber_data.source_at(11)
+        source = model.study.uber_data.source_at(11)
         assert source.count() == 1
         assert list(source.ordered_ids(None, "", {})) == [other_hour + 1]
-        assert model.uber_data.pickup_points(11) == [MapPoint(latitude=40.8, longitude=-73.8)]
+        assert model.study.uber_data.pickup_points(11) == [MapPoint(latitude=40.8, longitude=-73.8)]
         assert calls * steps_per_call < other_hour
     finally:
         model.close()
