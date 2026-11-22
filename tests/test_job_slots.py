@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Callable
 
 import pytest
 
+from composeui.core import jobs
 from composeui.core.jobs import JobCanceledError, JobSlots
 from composeui.core.view import MainView
 
@@ -18,6 +19,8 @@ if TYPE_CHECKING:
 
 #: seconds a test waits for a job before it fails
 _TIMEOUT = 10
+#: seconds between a waiting job's looks at its cancel, past `_TIMEOUT`: a missed wake-up fails
+_NO_POLL = 60
 
 
 class _Runs:
@@ -116,6 +119,46 @@ def test_a_job_canceled_while_waiting_leaves_the_line_and_the_next_one_moves_up(
 
     canceled.cancel()
     line.wait_until(lambda: line.places["c"] == [2, 1])
+    line.release("a")
+    line.wait_until(lambda: line.entered == ["a", "c"])
+    line.end()
+
+    assert isinstance(line.errors.pop("b"), JobCanceledError)
+    assert line.errors == {}
+
+
+def test_a_freed_slot_goes_to_the_next_job_at_once(
+    runs: Callable[[int], _Runs], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(jobs, "_SLOT_POLL", _NO_POLL)
+    line = runs(1)
+    line.start("a")
+    line.wait_until(lambda: line.entered == ["a"])
+    line.start("b")
+    line.wait_until(lambda: line.places["b"] == [1])
+
+    line.release("a")
+    line.wait_until(lambda: line.entered == ["a", "b"])
+    line.end()
+
+    assert line.errors == {}
+
+
+def test_a_slot_freed_for_a_first_job_canceled_goes_to_the_next_one_at_once(
+    runs: Callable[[int], _Runs], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(jobs, "_SLOT_POLL", _NO_POLL)
+    line = runs(1)
+    line.start("a")
+    line.wait_until(lambda: line.entered == ["a"])
+    canceled = line.start("b")
+    line.wait_until(lambda: line.places["b"] == [1])
+    line.start("c")
+    line.wait_until(lambda: line.places["c"] == [2])
+
+    # "b" sees its cancel once the freed slot wakes it, and leaves the slot to "c". Seen sooner,
+    # while "a" holds the slot, "a"'s release wakes "c" instead.
+    canceled.cancel()
     line.release("a")
     line.wait_until(lambda: line.entered == ["a", "c"])
     line.end()
