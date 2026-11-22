@@ -11,6 +11,9 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `MainView.build_initial_view()` lets apps with required main-view constructor arguments
+  load studies, start new studies, and restore state after a reload or web session hibernation.
+
 - `VerticalView`, `HorizontalView`, and `GridView` take a `frame=Frame(...)`. It draws a border
   around their content on Qt, Textual, and the web, with an optional title.
 

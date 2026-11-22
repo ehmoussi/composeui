@@ -242,6 +242,9 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   starts and after New and Open, to give again what a study does not hold, such as a large
   table's source.
   See https://ehmoussi.github.io/composeui/user-guide/building-views.html#saving-and-loading-state
+- **Override `MainView.build_initial_view` if the constructor needs arguments.** Return a
+  new view of the same class with its starting values, without reusing live child views.
+  ComposeUI uses it for Open, New, `--reload`, and web session restore.
 - **Ask before replacing the study.** New, Open and Exit ask before they lose unsaved
   changes. An action of the app's own that replaces the study calls
   `main_view.ask_discard_changes(proceed)`, which calls `proceed()` at once when nothing is

@@ -561,6 +561,37 @@ so a callback connected only to those does not run. On New and Open, a model rea
 The app's own command-line options apply after `loaded` (see
 [Command-line options of your own](#command-line-options-of-your-own)).
 
+If your main view's constructor needs arguments, pass `run` a function that supplies them.
+ComposeUI calls that function at startup on Qt and Textual, and for each new session on the web.
+
+For New, Open, and session restore, also override `MainView.build_initial_view`. Use the
+current instance's configuration to return a separate view of the same class with its
+starting values. ComposeUI uses this view to check saved state without changing the running
+view, to start a new study, and to compare starting values across a reload. Do not reuse
+child views from the running app. In the example, `OMIT` keeps `owner` out of the saved state.
+
+```python
+from __future__ import annotations
+
+from attrs import field
+
+from composeui.core.application import run
+from composeui.core.view import OMIT, LabelRowIntInputView, MainView, child, define_view
+
+
+@define_view
+class OwnedMainView(MainView):
+    owner: str = field(metadata={OMIT: True})
+    number: LabelRowIntInputView = child(LabelRowIntInputView)
+
+    def build_initial_view(self) -> OwnedMainView:
+        return OwnedMainView(owner=self.owner)
+
+
+if __name__ == "__main__":
+    run(lambda: OwnedMainView(owner="Ann"))
+```
+
 ### Unsaved changes
 
 New, Open and Exit ask before they lose the changes of the study: "The study has unsaved

@@ -231,12 +231,6 @@ def save_reloaded_state(
     saved_study = main_view._saved_study  # noqa: SLF001 (kept across the scratch save)
     study_file = main_view._study_file  # noqa: SLF001
     unsaved = main_view.has_unsaved_changes()
-    save_study(main_view, model, directory / _STUDY_NAME)
-    # the user's study is still the file they opened, not this scratch one, and its
-    # changes are still unsaved
-    main_view.state_filepath = state_filepath
-    main_view._saved_study = saved_study  # noqa: SLF001
-    main_view._study_file = study_file  # noqa: SLF001
     session: dict[str, Any] = {
         "state_filepath": None if state_filepath is None else str(state_filepath),
         "unsaved": unsaved,
@@ -248,8 +242,16 @@ def save_reloaded_state(
     }
     if code_edits:
         # built now, while it's still the previous code: what its fields start as
-        session["initial"] = type(main_view)().state_data()
-    (directory / _SESSION_NAME).write_text(json.dumps(session))
+        session["initial"] = main_view.build_initial_view().state_data()
+    # Prepare the session first so a build or serialization error leaves the old save intact.
+    session_text = json.dumps(session)
+    save_study(main_view, model, directory / _STUDY_NAME)
+    # the user's study is still the file they opened, not this scratch one, and its
+    # changes are still unsaved
+    main_view.state_filepath = state_filepath
+    main_view._saved_study = saved_study  # noqa: SLF001
+    main_view._study_file = study_file  # noqa: SLF001
+    (directory / _SESSION_NAME).write_text(session_text)
 
 
 def load_reloaded_state(
@@ -268,7 +270,7 @@ def load_reloaded_state(
     # built as `save_reloaded_state` builds it, not `main_view`, which a function may have
     # filled: the two would differ with no edit, and the user's values be lost
     code_state = (
-        json.loads(json.dumps(type(main_view)().state_data()))
+        json.loads(json.dumps(main_view.build_initial_view().state_data()))
         if isinstance(previous_code_state, dict)
         else {}
     )
@@ -282,10 +284,12 @@ def load_reloaded_state(
     )
     try:
         open_study(main_view, model, directory / _STUDY_NAME)
-    except InvalidStateError as error:
-        LOGGER.warning("The state of the previous run is dropped: %s", error)
+    except BaseException as error:
         if main_view.language != language:
             main_view.set_language(language)
+        if not isinstance(error, InvalidStateError):
+            raise
+        LOGGER.warning("The state of the previous run is dropped: %s", error)
         return
     finally:
         _RELOADED_STATE.reset(token)

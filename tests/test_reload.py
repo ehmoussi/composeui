@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
+from typing_extensions import override
 
 import composeui as composeui_package
 from composeui.core import reload as reload_module
@@ -190,6 +191,43 @@ def test_a_state_that_no_longer_fits_is_dropped_with_the_language_it_was_shown_i
     assert "is dropped" in caplog.text
     assert changed.language == "en"  # as the app starts
     assert changed.count == 0
+
+
+@define_view
+class _UnbuildableInitialView(MainView):
+    @override
+    def build_initial_view(self) -> MainView:
+        msg = "the app can't build its initial view"
+        raise TypeError(msg)
+
+
+def test_a_reload_that_cannot_build_its_initial_view_restores_the_language(
+    tmp_path: Path,
+) -> None:
+    previous = _UnbuildableInitialView()
+    previous.set_language("fr")
+    save_reloaded_state(previous, None, tmp_path, code_edits=False)
+    reloaded = _UnbuildableInitialView()
+
+    with pytest.raises(TypeError, match="the app can't build its initial view"):
+        load_reloaded_state(reloaded, None, tmp_path)
+
+    assert reloaded.language == "en"
+
+
+def test_a_reload_save_keeps_the_snapshot_if_the_initial_view_cannot_be_built(
+    tmp_path: Path,
+) -> None:
+    previous = MainView(minimum_width=800)
+    save_reloaded_state(previous, None, tmp_path)
+
+    with pytest.raises(TypeError, match="the app can't build its initial view"):
+        save_reloaded_state(_UnbuildableInitialView(minimum_width=900), None, tmp_path)
+
+    reloaded = MainView()
+    load_reloaded_state(reloaded, None, tmp_path)
+
+    assert reloaded.minimum_width == 800
 
 
 @define_view
