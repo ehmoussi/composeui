@@ -11,6 +11,8 @@ if TYPE_CHECKING:
 
     from typing_extensions import Unpack
 
+    from composeui.core.view import MainView
+
 __all__ = ["InvalidStateError", "Model", "RefusedError"]
 
 
@@ -93,6 +95,9 @@ class Model:
         The autosave then calls `save_data` on the main thread instead.
         """
         return None
+
+    def _set_main_view(self, main_view: MainView) -> None:
+        """Know the main view of the model's session, which the app gives it once wired."""
 
     def loaded(self) -> None:
         """React once New or Open has put both the views and the data in place.

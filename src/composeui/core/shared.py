@@ -126,6 +126,10 @@ class SharedData(Generic[R, ProgressT]):
             raise _own_copy(run.error)
         return run.share(run.value)  # type: ignore[arg-type]  # set when it didn't fail
 
+    def _shared(self, value: R) -> tuple[R, Callable[[R], R]]:
+        """Get the value to keep, and how each session gets it; refuse one it could change."""
+        return _sharer(value, self.__name__)
+
     def _settle(self, run: _Run[R, ProgressT]) -> None:
         """Keep `run`'s value if it's still the current run, and wake its waiters."""
         with self._condition:
@@ -189,7 +193,7 @@ class _Run(Generic[R, ProgressT]):
         jobs._CURRENT.job = self.job  # noqa: SLF001 (the load's thread runs a job too)
         try:
             value = self.shared._load(self.job)  # noqa: SLF001 (its own run)
-            self.value, self.share = _sharer(value, self.shared.__name__)
+            self.value, self.share = self.shared._shared(value)  # noqa: SLF001 (its own run)
         except BaseException as error:  # noqa: BLE001 (each waiter raises it in its own thread)
             self.error = error
         finally:

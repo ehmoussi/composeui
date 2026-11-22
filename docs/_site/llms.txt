@@ -22,7 +22,7 @@
 - [Charts](https://ehmoussi.github.io/composeui/user-guide/charts.html): lines, dots, and bars in one chart, stacked bars, steps, categories, axes, their bounds, log scales and dates, a second y axis, reference lines, clicks, and report images
 - [Maps](https://ehmoussi.github.io/composeui/user-guide/maps.html): geographic points on Qt Location and deck.gl maps, tile usage, viewport signals, and saved state
 - [Running work in threads](https://ehmoussi.github.io/composeui/user-guide/threads.html): jobs, their progress and failures, external programs, reusable loading tasks, runs that follow the latest input, data loaded once and shared by the sessions, and a limit on the jobs that run at once
-- [A SQLite model](https://ehmoussi.github.io/composeui/user-guide/sqlite-model.html): keep the app's data in SQLite with `DatabaseModel` and `SqliteDatabase`
+- [A SQLite model](https://ehmoussi.github.io/composeui/user-guide/sqlite-model.html): keep the app's data in SQLite with `DatabaseModel` and `SqliteDatabase`, each session's own (`per_session`) or one for every session (`shared`)
 - [Importing CSV data](https://ehmoussi.github.io/composeui/user-guide/csv-import.html): a SQLite table of an `attrs` row class, filled from a CSV file or URL
 - [Translating the app](https://ehmoussi.github.io/composeui/user-guide/translation.html): translation catalogs, and checking them
 - [Running the app](https://ehmoussi.github.io/composeui/user-guide/running-the-app.html): start an app on a backend, reload it on a change, log messages, and serve it on the web with its limits (`WebSettings`) and its look (`WebStyle`)

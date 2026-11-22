@@ -293,11 +293,12 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   See https://ehmoussi.github.io/composeui/user-guide/threads.html#a-limit-on-the-jobs-that-run-at-once
 - **Keep the model out of the views.** The optional model (`Model`, `DatabaseModel`) holds
   the data and knows no view. The app gives it to `run` with `build_model=` and
-  `setup_model=`. A `DatabaseModel` declares one `per_session` database, a
-  `SqliteDatabase` that declares the tables (`model.study.runs.add(...)`), never tables
-  of its own. Batch inserts and CSV imports (`insert_batches`, `CSVSqliteTable`,
-  `fill`, `fill_from_file`, `fill_from_url`) commit once their generator is read to the
-  end. Pass only trusted URLs.
+  `setup_model=`. A `DatabaseModel` declares databases, never tables of its own: a
+  `SqliteDatabase` declares the tables (`model.study.runs.add(...)`). At most one is
+  `per_session`, saved in the study. A `shared` one is the process's, for every session,
+  outside the study; with `fill`, call `ready(job)` in a job before a query. Batch inserts
+  and CSV imports (`insert_batches`, `CSVSqliteTable`, `fill`, `fill_from_file`,
+  `fill_from_url`) commit once their generator is read to the end. Pass only trusted URLs.
   See https://ehmoussi.github.io/composeui/user-guide/sqlite-model.html and
   https://ehmoussi.github.io/composeui/user-guide/csv-import.html
 - **Show many rows in a `SourceTableView`,** on a `ListSource`, a `SqliteSource` (`table.source()`

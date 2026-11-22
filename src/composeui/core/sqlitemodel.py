@@ -18,6 +18,7 @@ import gzip
 import io
 import itertools
 import json
+import logging
 import math
 import operator
 import os
@@ -52,6 +53,7 @@ from typing_extensions import dataclass_transform, override
 from composeui.core._views.tables import ColumnKind, column_kind
 from composeui.core.jobs import current_job
 from composeui.core.model import InvalidStateError, Model, RefusedError
+from composeui.core.shared import SharedData
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.view import CONVERTER, Filter, FilterOperator, Sort, SourceColumn
 
@@ -64,6 +66,9 @@ if TYPE_CHECKING:
     from attrs import AttrsInstance
     from typing_extensions import TypeAlias, Unpack
 
+    from composeui.core.jobs import Job, Jobs
+    from composeui.core.view import MainView
+
     #: a query's parameters: by position, or by name
     Parameters: TypeAlias = Union[Sequence[Any], Mapping[str, Any]]
 
@@ -71,6 +76,7 @@ __all__ = [
     "AllowedUrls",
     "CSVSqliteTable",
     "DatabaseModel",
+    "ReadOnlyDatabaseError",
     "SqliteDatabase",
     "SqliteSource",
     "SqliteTable",
@@ -79,9 +85,12 @@ __all__ = [
     "define_csv_row",
     "open_csv_url",
     "per_session",
+    "shared",
     "table",
     "unique_name",
 ]
+
+LOGGER = logging.getLogger("COMPOSEUI")
 
 _T = TypeVar("_T")
 SqliteTableT = TypeVar("SqliteTableT", bound="SqliteTable")
@@ -1221,9 +1230,11 @@ class SqliteDatabase:
     Declare the tables in the class, ``runs = table(Runs)``, for the callbacks to reach
     (``model.study.runs.add(...)``), or add them in `__init__` with `add_table`. A new
     database is created from the tables' `create` scripts at `schema_version`. When a
-    study saved at an older version is opened, `migrations` bring it up to date.
+    database saved at an older version is opened, `migrations` bring it up to date.
 
-    It isn't a model: a `DatabaseModel` declares it, e.g. ``study = per_session(Study)``.
+    It isn't a model: a `DatabaseModel` declares it, e.g. ``study = per_session(Study)`` for
+    a database of each session, saved in the study, or ``crm = shared(Crm)`` for one that
+    every session reads and writes.
     """
 
     #: the tables' version, kept in the database (``PRAGMA user_version``); raise it with
@@ -1240,11 +1251,12 @@ class SqliteDatabase:
         {
             # the connections `reading` read during a write, its rows uncommitted (else a
             # write spilling to the disk locks them out until it commits); the study file
-            # is saved in the default journal (`_save`)
+            # is saved in the default journal (`_Engine.save`)
             "journal_mode": "WAL",
             "foreign_keys": "ON",
             # the database is a scratch copy nothing reopens after a crash: waiting for the
-            # disk on every commit protects nothing, the study file is written apart
+            # disk on every commit protects nothing, the study file is written apart. A
+            # shared database kept in a file of its own waits for it (`NORMAL`)
             "synchronous": "OFF",
             # a row replaced (`INSERT OR REPLACE`) fires its delete triggers, and a trigger
             # may fire itself, so triggers keeping other tables up to date see every change
@@ -1255,25 +1267,12 @@ class SqliteDatabase:
     def __init__(self) -> None:
         self._tables: list[SqliteTable] = []
         for name, declared_table in _declared(type(self), _DeclaredTable).items():
-            # before the file, which `_new_database` creates with them
+            # before the file, which the engine creates with them
             built = declared_table.table_type(self)
             self._tables.append(built)
             setattr(self, name, built)
-        # one connection for the database, which threads (a worker, web requests) take in turn
-        self._lock = threading.RLock()
-        # which file the queries `reading` read, and how many: held for no query, so a
-        # read never waits for the turn a write holds
-        self._readers_lock = threading.Lock()
-        self._closed = False
-        #: the turns held, which keep the connection open once the database is closed
-        self._turns = 0
-        self._depth = 0
-        self._changed: list[SqliteTable] = []
-        #: the transactions committed that changed rows (`_data_revision`), and those of them
-        #: not made by a job started with the study (`_data_version`)
-        self._writes = 0
-        self._user_writes = 0
-        self._database = self._new_database()
+        # its model gives it one once it's built: a session's copy, or a shared one
+        self._engine: _Engine | _Handle | None = None
 
     @property
     def _signals(self) -> list[Signal[Unpack[tuple[Any, ...]]]]:
@@ -1281,23 +1280,156 @@ class SqliteDatabase:
         tables = [vars(table).values() for table in self._tables]
         return [value for values in tables for value in values if isinstance(value, Signal)]
 
+    def _started(self) -> _Engine | _Handle:
+        engine = self._engine
+        assert engine is not None, "its model gives it an engine as it builds it"
+        return engine
+
     def add_table(self, table_type: type[SqliteTableT]) -> SqliteTableT:
-        """Add a table, created in the current file too, and return it."""
+        """Add a table, created in the current file too, and return it.
+
+        In `__init__` alone for a `shared` database: each session's copy adds it, but the
+        file is created once.
+        """
         table = table_type(self)
-        with self._turn() as db:
-            db.executescript(table.create)
+        if self._engine is not None:  # else created with the others once it's built
+            self._engine.add_table(table)
         self._tables.append(table)
         return table
 
     @contextlib.contextmanager
+    def connection(self, *, changing: SqliteTable | None = None) -> Generator[sqlite3.Connection]:
+        """Give the database's connection for one transaction.
+
+        The transaction commits once the block ends, or rolls back if the block raises, so
+        its writes land together or not at all. A block inside another (one table's method
+        calling another's) joins the outer transaction. If the block changed rows,
+        `changing`'s `changed` is emitted after the commit. For a block in a job's thread, it
+        is emitted on the main thread (see `Job.call_on_main_thread`), where the views it
+        refreshes are. For a `shared` database, it is emitted in the other sessions too,
+        each on its own main thread.
+
+        The threads take turns, those of every session for a `shared` database. A `shared`
+        database opened `read_only` reads here as `reading` does, and refuses a write
+        (`ReadOnlyDatabaseError`).
+        """
+        with self._started().connection(changing=changing) as db:
+            yield db
+
+    @contextlib.contextmanager
+    def reading(self) -> Generator[sqlite3.Connection]:
+        """Give a connection that only reads the database, for a long query.
+
+        Unlike `connection()`, it waits for no other thread's turn, and holds none. The
+        database's other queries run meanwhile, e.g. a large table's cells while a job
+        orders its rows or writes some (`SqliteSource`). In the WAL journal, it reads the
+        rows committed, during a write too. A file New or Open replace meanwhile, or the
+        model's `close`, is deleted once the query is over. Once the model is closed,
+        raises `sqlite3.ProgrammingError`, as `connection()` does: e.g. a web download
+        its session's end cuts short.
+
+        The connection is reused, e.g. for the next window of a large table: read each
+        query's rows to the end in the block. A query left half read keeps the rows as
+        they were when it started, for the next reader too.
+        """
+        with self._started().reading() as db:
+            yield db
+
+    def fill(self, job: Job[None, Any]) -> None:
+        """Fill a `shared` database once, as it's created: override it to write its rows.
+
+        It runs in a thread of its own, before any session can use the database, and the
+        sessions' `ready` wait for it. `job` reports its progress to them, and is canceled
+        once no session waits: stop then, e.g. with `job.raise_if_canceled()`. A fill
+        that fails or stops leaves no file, and the next `ready` fills again. Never
+        called for a `per_session` database.
+        """
+
+    def ready(self, job: Job[Any, Any]) -> None:
+        """Wait, in `job`'s thread, until the database can be used: its `fill` is done.
+
+        The first session runs `fill`, and the others wait for it, its progress reported
+        to their jobs. Raises `JobCanceledError` once `job` is canceled. Returns at once
+        for a database without `fill`, or a `per_session` one. A `shared` database with
+        `fill` refuses any query until its session's `ready` has returned.
+        """
+        self._started().ready(job)
+
+    def forget(self) -> None:
+        """Have the next sessions start a new copy of a `shared` database, filled again.
+
+        The sessions that have it keep theirs, which is deleted once the last one is done
+        with it. Refused for a `per_session` database, which New replaces, and for a
+        database kept in a file (`location`).
+        """
+        self._started().forget()
+
+
+class ReadOnlyDatabaseError(sqlite3.OperationalError):
+    """A write refused by a database shared `read_only`, which its sessions only read."""
+
+
+def _emit(changed: list[SqliteTable]) -> None:
+    """Emit the tables' `changed`, on the main thread if this is a job's."""
+    job = current_job()
+    for table in changed:
+        if job is None:
+            table.changed.emit()
+        else:
+            job.call_on_main_thread(table.changed.emit)
+
+
+class _Engine:
+    """A database file's connections, which threads take in turn, and its life.
+
+    A `per_session` database's engine is its own, which New and Open give a new file. A
+    `shared` database's file has one engine for every session (`_Generation`).
+    """
+
+    def __init__(
+        self,
+        owner: SqliteDatabase,
+        pragmas: Mapping[str, int | str],
+        database: _Database | None = None,
+        *,
+        path: Path | None = None,
+        shared: bool = False,
+    ) -> None:
+        # weak: the database owns its engine
+        self._owner = cast("SqliteDatabase", weakref.proxy(owner))
+        self._pragmas = pragmas
+        #: a shared file's engine: a job New drops still writes in it, and it emits no
+        #: `changed`, which each session's handle emits instead (`_Handle`)
+        self._shared = shared
+        # one connection for the file, which threads (a worker, web requests) take in turn
+        self._lock = threading.RLock()
+        # which file the queries `reading` read, and how many: held for no query, so a
+        # read never waits for the turn a write holds
+        self._readers_lock = threading.Lock()
+        self._closed = False
+        #: the turns held, which keep the connection open once the engine is closed
+        self._turns = 0
+        self._depth = 0
+        self._changed: list[SqliteTable] = []
+        #: the transactions committed that changed rows (`_data_revision`), and those of them
+        #: not made by a job started with the study (`data_version`)
+        self.writes = 0
+        self.user_writes = 0
+        self._database = self._new_database(path) if database is None else database
+
+    def add_table(self, table: SqliteTable) -> None:
+        with self._turn() as db:
+            db.executescript(table.create)
+
+    @contextlib.contextmanager
     def _turn(self) -> Generator[sqlite3.Connection]:
-        """Hold the turn on the file's connection, which `_close` leaves open until its end.
+        """Hold the turn on the file's connection, which `close` leaves open until its end.
 
         Closing a connection during another thread's statement crashes the process.
         """
         with self._lock:
             job = current_job()
-            if job is not None and job.is_dropped:  # its study was replaced
+            if not self._shared and job is not None and job.is_dropped:  # study replaced
                 msg = "A job dropped by a new study can't use the database."
                 raise RefusedError(msg)
             with self._readers_lock:
@@ -1313,21 +1445,23 @@ class SqliteDatabase:
                     self._close_if_unused(self._database)
 
     def _close_if_unused(self, database: _Database) -> None:
-        """Close a replaced file, or a closed database's, once unused; hold the readers' lock."""
+        """Close a replaced file, or a closed engine's, once unused; hold the readers' lock."""
         is_over = database is not self._database or (self._closed and self._turns == 0)
         if is_over and database.readers == 0:
             database.close()
 
     @contextlib.contextmanager
-    def connection(self, *, changing: SqliteTable | None = None) -> Generator[sqlite3.Connection]:
-        """Give the database's connection for one transaction.
+    def connection(
+        self,
+        *,
+        changing: SqliteTable | None = None,
+        on_commit: Callable[[list[SqliteTable]], None] | None = None,
+    ) -> Generator[sqlite3.Connection]:
+        """Give the connection for one transaction; see `SqliteDatabase.connection`.
 
-        The transaction commits once the block ends, or rolls back if the block raises, so
-        its writes land together or not at all. A block inside another (one table's method
-        calling another's) joins the outer transaction. If the block changed rows,
-        `changing`'s `changed` is emitted after the commit. For a block in a job's thread, it
-        is emitted on the main thread (see `Job.call_on_main_thread`), where the views it
-        refreshes are.
+        `on_commit` gets the tables whose `changed` the commit emits, once the turn is over.
+        Without it, a session's own database emits them, and a shared file's engine none:
+        its `fill`'s, which no session sees yet.
         """
         changed: list[SqliteTable] = []
         with self._turn() as db:
@@ -1346,10 +1480,10 @@ class SqliteDatabase:
                     db.commit()
                     changed, self._changed = self._changed, []
                     if db.total_changes != before:
-                        self._writes += 1
+                        self.writes += 1
                         job = current_job()
                         if job is None or not job._is_the_study_s:  # noqa: SLF001
-                            self._user_writes += 1
+                            self.user_writes += 1
             except BaseException:
                 if outermost:
                     db.rollback()
@@ -1358,29 +1492,14 @@ class SqliteDatabase:
             finally:
                 self._depth -= 1
         # outside the lock: a view refreshing may query another thread's way
-        job = current_job()
-        for table in changed:
-            if job is None:
-                table.changed.emit()
-            else:
-                job.call_on_main_thread(table.changed.emit)
+        if on_commit is not None:
+            on_commit(changed)
+        elif not self._shared:
+            _emit(changed)
 
     @contextlib.contextmanager
     def reading(self) -> Generator[sqlite3.Connection]:
-        """Give a connection that only reads the database, for a long query.
-
-        Unlike `connection()`, it waits for no other thread's turn, and holds none. The
-        database's other queries run meanwhile, e.g. a large table's cells while a job
-        orders its rows or writes some (`SqliteSource`). In the WAL journal, it reads the
-        rows committed, during a write too. A file New or Open replace meanwhile, or the
-        model's `close`, is deleted once the query is over. Once the database is closed,
-        raises `sqlite3.ProgrammingError`, as `connection()` does: e.g. a web download
-        its session's end cuts short.
-
-        The connection is reused, e.g. for the next window of a large table: read each
-        query's rows to the end in the block. A query left half read keeps the rows as
-        they were when it started, for the next reader too.
-        """
+        """Give a connection that only reads; see `SqliteDatabase.reading`."""
         database, db = self._take_reader()
         try:
             if db is None:
@@ -1407,7 +1526,14 @@ class SqliteDatabase:
                 database.idle_readers.append(db)
             self._close_if_unused(database)
 
-    def _pin(self) -> _PinnedDatabase:
+    def ready(self, job: Job[Any, Any]) -> None:
+        """Return: a session's own database needs no fill."""
+
+    def forget(self) -> None:
+        msg = "A per_session database forgets nothing: New gives the session a new one"
+        raise TypeError(msg)
+
+    def pin(self) -> _PinnedDatabase:
         """Pin the committed rows of now: a reader's transaction, which a copy reads later.
 
         Another thread copies them while the app goes on writing. Counted as a reader, so a
@@ -1427,10 +1553,10 @@ class SqliteDatabase:
             raise
         return _PinnedDatabase(self, database, db)
 
-    def _new(self) -> None:
+    def new(self) -> None:
         self._replace_database(self._new_database())
 
-    def _save(self, path: Path) -> None:
+    def save(self, path: Path) -> None:
         target = sqlite3.connect(str(path))
         try:
             with self._turn() as db:
@@ -1440,7 +1566,7 @@ class SqliteDatabase:
         finally:
             target.close()
 
-    def _open(self, path: Path) -> None:
+    def open_study(self, path: Path) -> None:
         """Open a study's database, refused unless it is made as a new one is.
 
         The file may come from anyone (e.g. a web upload): its schema is the file's own,
@@ -1448,7 +1574,7 @@ class SqliteDatabase:
         triggers may call no function with side effects (`trusted_schema`), and the whole
         open is cut after `open_time_limit`.
         """
-        database = _Database(self.pragmas)
+        database = _Database(self._pragmas)
         db = database.connection
         try:
             source = sqlite3.connect(str(path))
@@ -1458,7 +1584,7 @@ class SqliteDatabase:
                 source.close()
             database.start_journal()  # after the backup: it keeps the file's page size
             db.execute("PRAGMA trusted_schema = OFF")
-            deadline = time.monotonic() + self.open_time_limit
+            deadline = time.monotonic() + self._owner.open_time_limit
             # a true answer interrupts the statement running (`OperationalError`)
             db.set_progress_handler(lambda: time.monotonic() > deadline, 10_000)
             try:
@@ -1468,7 +1594,7 @@ class SqliteDatabase:
             finally:
                 db.set_progress_handler(None, 0)
             db.execute(
-                _pragma_statement("trusted_schema", self.pragmas.get("trusted_schema", "ON"))
+                _pragma_statement("trusted_schema", self._pragmas.get("trusted_schema", "ON"))
             )
         except sqlite3.DatabaseError as error:
             database.close()
@@ -1479,27 +1605,56 @@ class SqliteDatabase:
             raise
         self._replace_database(database)
 
-    def _loaded(self) -> None:
+    def open_kept(self, *, read_only: bool) -> None:
+        """Bring the file of a shared database, kept from a previous run, up to date.
+
+        The server's own file: checked against a new database, not for damage. Read-only,
+        it must be at `schema_version` already.
+        """
+        db = self._database.connection
+        try:
+            if read_only:
+                self._check_version(db)
+            else:
+                self._database.start_journal()
+                self._upgrade(db)
+            self._check_schema(db)
+        except InvalidStateError as error:
+            msg = f"{self._database.path}: {error}"
+            raise InvalidStateError(msg) from error
+
+    def _check_version(self, db: sqlite3.Connection) -> None:
+        """Refuse a read-only database at another version: it can't be brought up to date."""
+        (version,) = db.execute("PRAGMA user_version").fetchone()
+        if version != self._owner.schema_version:
+            msg = (
+                f"its version ({version}) isn't {self._owner.schema_version}, and a"
+                " read-only database can't be brought up to date"
+            )
+            raise InvalidStateError(msg)
+
+    def loaded(self) -> None:
         # every table may have changed; emitted only now, so the views refreshing read the
         # study's views (e.g. a filter), not the ones it replaces
-        for table in self._tables:
+        for table in self._owner._tables:  # noqa: SLF001 (its own database's)
             table.changed.emit()
 
-    def _close(self) -> None:
+    def close(self) -> None:
         # not the write's turn: closing the app doesn't wait for a job's long write, whose
         # end closes it, as the last query `reading` it does
         with self._readers_lock:
             self._closed = True
             self._close_if_unused(self._database)
 
-    def _new_database(self) -> _Database:
-        database = _Database(self.pragmas)
+    def _new_database(self, path: Path | None = None) -> _Database:
+        """Create the tables in a new file: a temporary one, or `path`, which it keeps."""
+        database = _Database(self._pragmas, path, keep=path is not None)
         database.start_journal()
         db = database.connection
-        for table in self._tables:
+        for table in self._owner._tables:  # noqa: SLF001 (its own database's)
             db.executescript(table.create)
         # an int, which a pragma can't take as a parameter
-        db.execute(f"PRAGMA user_version = {int(self.schema_version)}")
+        db.execute(f"PRAGMA user_version = {int(self._owner.schema_version)}")
         db.commit()
         return database
 
@@ -1529,22 +1684,29 @@ class SqliteDatabase:
             raise InvalidStateError(msg)
 
     def _upgrade(self, db: sqlite3.Connection) -> None:
-        """Bring a database opened from a study up to `schema_version`."""
+        """Bring a database opened from a file up to `schema_version`."""
+        schema_version = self._owner.schema_version
         (version,) = db.execute("PRAGMA user_version").fetchone()
-        if version > self.schema_version:
+        if version > schema_version:
             msg = "it was saved by a newer version of the application"
             raise InvalidStateError(msg)
-        if version < 1:  # every study's database has a version: this one isn't a study's
+        if version < 1:  # every database made here has a version: this one isn't one
             msg = "its data doesn't match this application"
             raise InvalidStateError(msg)
-        for step in range(version, self.schema_version):
-            migrate = self.migrations.get(step)
+        for step in range(version, schema_version):
+            migrate = self._owner.migrations.get(step)
             if migrate is None:
                 msg = f"its data (version {version}) can't be brought up to date"
                 raise InvalidStateError(msg)
             migrate(db)
-        db.execute(f"PRAGMA user_version = {int(self.schema_version)}")
+        db.execute(f"PRAGMA user_version = {int(schema_version)}")
         db.commit()
+
+    def finish_file(self) -> None:
+        """Close a shared database's new file, in SQLite's default journal: one file alone."""
+        with self._turn() as db:
+            db.execute("PRAGMA journal_mode = DELETE")
+        self.close()
 
 
 SqliteDatabaseT = TypeVar("SqliteDatabaseT", bound=SqliteDatabase)
@@ -1572,13 +1734,56 @@ def per_session(
     return cast("SqliteDatabaseT", _PerSession(database_type, data_name))
 
 
+#: what tells a shared database's files apart: its class, its file, and whether it's read-only
+_StoreKey: TypeAlias = "tuple[type[SqliteDatabase], Optional[Path], bool]"
+
+
+class _Shared(Generic[SqliteDatabaseT]):
+    """A database a `DatabaseModel` class shares between the sessions (see `shared`)."""
+
+    def __init__(
+        self, database_type: type[SqliteDatabaseT], location: Path | None, *, read_only: bool
+    ) -> None:
+        self.database_type = database_type
+        # resolved once: the process's folder may change
+        self.location = None if location is None else Path(location).resolve()
+        self.read_only = read_only
+
+    @property
+    def key(self) -> _StoreKey:
+        return (self.database_type, self.location, self.read_only)
+
+
+def shared(
+    database_type: type[SqliteDatabaseT],
+    *,
+    location: Path | None = None,
+    read_only: bool = False,
+) -> SqliteDatabaseT:
+    """Declare a database of a `DatabaseModel` that every session of the process shares.
+
+    E.g. ``crm = shared(Crm, location=Path("crm.sqlite"))``. The process opens it once, as
+    the first model is built, and runs its migrations then. Each model's attribute is the
+    session's handle on it, of the database's class: a write in one session emits its
+    tables' `changed` in every other one, on its own main thread. The study neither saves
+    nor opens it, and New leaves it alone.
+
+    With a `location`, the database is kept in that file, across the process's runs: `fill`
+    fills it only when the file doesn't exist yet. Without one, it's a temporary file,
+    deleted as the process ends, and `fill` fills it in each process. With `read_only`, the
+    sessions only read it: only `fill` writes.
+    """
+    # the model's attribute is the database: typed as one, as `table` does
+    return cast("SqliteDatabaseT", _Shared(database_type, location, read_only=read_only))
+
+
 class DatabaseModel(Model):
     """A model whose data is in databases, which its class declares.
 
     E.g. ``study = per_session(Study)``, for the callbacks to reach
     (``model.study.runs.add(...)``). Its fields are databases, never tables: declare the
     tables in a `SqliteDatabase`. The `per_session` database is saved and opened with the
-    study.
+    study; the `shared` ones are the process's.
     """
 
     @override
@@ -1598,6 +1803,26 @@ class DatabaseModel(Model):
                 f" ({', '.join(per_sessions)}): a study holds one, put their tables together"
             )
             raise TypeError(msg)
+        filled = [
+            name
+            for name, declared in per_sessions.items()
+            if declared.database_type.fill is not SqliteDatabase.fill
+        ]
+        if len(filled) > 0:
+            msg = (
+                f"{cls.__name__}.{filled[0]} is a per_session database with a fill:"
+                " only a shared database is filled"
+            )
+            raise TypeError(msg)
+        shareds = _declared(cls, _Shared)
+        keys = [declared.key for declared in shareds.values()]
+        twice = [name for name, declared in shareds.items() if keys.count(declared.key) > 1]
+        if len(twice) > 0:
+            msg = (
+                f"{cls.__name__} shares the same database in several fields"
+                f" ({', '.join(twice)}): one is enough"
+            )
+            raise TypeError(msg)
         cls.data_name = next(
             (
                 f"{name}.sqlite" if declared.data_name is None else declared.data_name
@@ -1607,12 +1832,32 @@ class DatabaseModel(Model):
         )
 
     def __init__(self) -> None:
-        #: the database saved with the study: none or one (see `__init_subclass__`)
-        self._per_session: list[SqliteDatabase] = []
-        for name, declared in _declared(type(self), _PerSession).items():
-            database = declared.database_type()
-            self._per_session.append(database)
-            setattr(self, name, database)
+        #: the engine of the database saved with the study: none or one
+        self._per_session: list[_Engine] = []
+        #: the session's handles on the shared databases
+        self._handles: list[_Handle] = []
+        #: every database, whose tables' signals are the model's
+        self._databases: list[SqliteDatabase] = []
+        try:
+            for name, declared_per_session in _declared(type(self), _PerSession).items():
+                database = declared_per_session.database_type()
+                engine = _Engine(database, database.pragmas)
+                database._engine = engine  # noqa: SLF001 (the engine it's built for)
+                self._per_session.append(engine)
+                self._databases.append(database)
+                setattr(self, name, database)
+            for name, declared_shared in _declared(type(self), _Shared).items():
+                store = _store_of(declared_shared)
+                database = declared_shared.database_type()
+                handle = _Handle(store, database)
+                database._engine = handle  # noqa: SLF001 (the engine it's built for)
+                self._handles.append(handle)
+                store.attach(handle)
+                self._databases.append(database)
+                setattr(self, name, database)
+        except BaseException:
+            self.close()  # e.g. a shared file of a newer version: its temporary files go
+            raise
 
     @property
     @override
@@ -1620,8 +1865,14 @@ class DatabaseModel(Model):
         """Get the model's signals, its databases' tables' (`SqliteTable.changed`) among them."""
         return [
             *super().signals,
-            *(signal for database in self._per_session for signal in database._signals),  # noqa: SLF001 (its own database)
+            *(signal for database in self._databases for signal in database._signals),  # noqa: SLF001 (its own database)
         ]
+
+    @override
+    def _set_main_view(self, main_view: MainView) -> None:
+        # the shared databases tell this session's views of the other sessions' writes
+        for handle in self._handles:
+            handle.jobs = weakref.ref(main_view.jobs)
 
     @property
     @override
@@ -1629,28 +1880,29 @@ class DatabaseModel(Model):
         """Get the committed writes of the `per_session` database, not of the study's jobs.
 
         Those of the jobs started with the study (as the app starts, New, Open) aren't
-        counted: the next start makes them again.
+        counted: the next start makes them again. The `shared` databases' aren't either:
+        the study doesn't save them.
         """
-        return sum(database._user_writes for database in self._per_session)  # noqa: SLF001 (its own database)
+        return sum(engine.user_writes for engine in self._per_session)
 
     @override
     def _data_revision(self) -> int:
-        return sum(database._writes for database in self._per_session)  # noqa: SLF001 (its own database)
+        return sum(engine.writes for engine in self._per_session)
 
     @override
     def _pin_data(self) -> _PinnedDatabase | None:
         # called only for a model with data (`data_name`), so with its database
-        return next((database._pin() for database in self._per_session), None)  # noqa: SLF001 (its own database)
+        return next((engine.pin() for engine in self._per_session), None)
 
     @override
     def new(self) -> None:
-        for database in self._per_session:
-            database._new()  # noqa: SLF001 (its own database)
+        for engine in self._per_session:
+            engine.new()
 
     @override
     def save_data(self, path: Path) -> None:
-        for database in self._per_session:
-            database._save(path)  # noqa: SLF001 (its own database)
+        for engine in self._per_session:
+            engine.save(path)
 
     @override
     def open_data(self, path: Path) -> None:
@@ -1659,25 +1911,378 @@ class DatabaseModel(Model):
         See `SqliteDatabase.open_time_limit`: the file may come from anyone, e.g. a web
         upload, and its schema is checked before its views and triggers may run.
         """
-        for database in self._per_session:
-            database._open(path)  # noqa: SLF001 (its own database)
+        for engine in self._per_session:
+            engine.open_study(path)
 
     @override
     def loaded(self) -> None:
-        for database in self._per_session:
-            database._loaded()  # noqa: SLF001 (its own database)
+        for engine in self._per_session:
+            engine.loaded()
 
     @override
     def close(self) -> None:
-        for database in self._per_session:
-            database._close()  # noqa: SLF001 (its own database)
+        for engine in self._per_session:
+            engine.close()
+        for handle in self._handles:
+            handle.close()
+
+
+class _Generation:
+    """A file of a shared database, and the sessions' handles bound to it."""
+
+    def __init__(self, core: SqliteDatabase, engine: _Engine) -> None:
+        #: the database the engine reads its tables and settings from, which `fill` filled
+        self.core = core
+        self.engine = engine
+        self.holders = 0
+        #: closed once forgotten and no longer held: a handle can't bind to it
+        self.closed = False
+
+
+class _Fill(SharedData["_Generation", Any]):
+    """A shared database's file, filled once for every session (see `SharedData`)."""
+
+    def __init__(self, store: _SharedStore) -> None:
+        super().__init__(store.open_generation)
+        self.__name__ = store.database_type.__name__
+
+    @override
+    def _shared(self, value: _Generation) -> tuple[_Generation, Callable[[_Generation], Any]]:
+        # the file is shared as it is: its sessions' handles keep it apart
+        return value, _same
+
+    def kept(self) -> _Generation | None:
+        """Get the file filled for the next sessions; None until one is, or once forgotten."""
+        with self._condition:
+            return self._value if self._has_value else None
+
+
+def _same(value: _Generation) -> _Generation:
+    return value
+
+
+class _SharedStore:
+    """A `shared` database in this process: its file, and the sessions' handles on it.
+
+    Each handle binds to the current file (`_Generation`): at once, or once `fill` has run.
+    After `forget`, the next handles bind to a new file, and the previous one is closed
+    once its last handle is.
+    """
+
+    def __init__(self, declared: _Shared[Any]) -> None:
+        self.database_type: type[SqliteDatabase] = declared.database_type
+        self.location = declared.location
+        self.read_only = declared.read_only
+        pragmas = dict(self.database_type.pragmas)
+        if self.location is not None and str(pragmas.get("synchronous", "")).upper() == "OFF":
+            # a file kept across the runs, which a crash must leave whole
+            pragmas["synchronous"] = "NORMAL"
+        self.pragmas: Mapping[str, int | str] = MappingProxyType(pragmas)
+        # reentrant: a handle bound at once opens the file under it
+        self._lock = threading.RLock()
+        self._handles: weakref.WeakSet[_Handle] = weakref.WeakSet()
+        #: the file of the next sessions, for a database without `fill` (else `_Fill.kept`)
+        self._current: _Generation | None = None
+        self._fill = _Fill(self) if self.database_type.fill is not SqliteDatabase.fill else None
+        # the changes to tell other sessions, by handle, while a thread of its own tells it:
+        # it holds no other lock while it waits for its session's, and a busy session (e.g.
+        # a long web request) delays no other one
+        self._notices = threading.Lock()
+        self._pending: dict[_Handle, set[int]] = {}
+
+    def attach(self, handle: _Handle) -> None:
+        """Count a session's new handle, bound to the current file unless it needs a fill."""
+        with self._lock:
+            self._handles.add(handle)
+            if self._fill is None:
+                if self._current is None:
+                    self._current = self.open_generation(None)
+                self._bind(handle, self._current)
+
+    def ready(self, handle: _Handle, job: Job[Any, Any]) -> None:
+        """Bind `handle` to the filled file, filling it first if no other session has."""
+        assert self._fill is not None, "a handle without a fill is bound as it's attached"
+        while True:
+            generation = self._fill(job)
+            with self._lock:
+                if handle.closed or handle.generation is not None:
+                    # closed meanwhile, or ready in another job of its session
+                    self._close_if_unused(generation)
+                    return
+                if not generation.closed:
+                    self._bind(handle, generation)
+                    return
+            # forgotten, and closed by its last handle before this one got it: fill again
+
+    def release(self, handle: _Handle) -> None:
+        """Forget a closed handle, closing a file no other handle needs."""
+        with self._lock:
+            self._handles.discard(handle)
+            generation, handle.generation = handle.generation, None
+            if generation is not None:
+                generation.holders -= 1
+                self._close_if_unused(generation)
+
+    def forget(self) -> None:
+        if self.location is not None:
+            msg = (
+                f"{self.database_type.__name__} is kept in {self.location}: only a shared"
+                " database in a temporary file can be forgotten"
+            )
+            raise TypeError(msg)
+        with self._lock:
+            previous = self._kept()
+            self._current = None
+            if self._fill is not None:
+                self._fill.forget()
+            self._close_if_unused(previous)
+
+    def _bind(self, handle: _Handle, generation: _Generation) -> None:
+        handle.generation = generation
+        generation.holders += 1
+
+    def _kept(self) -> _Generation | None:
+        """Get the file of the next sessions, if there is one yet."""
+        return self._current if self._fill is None else self._fill.kept()
+
+    def _close_if_unused(self, generation: _Generation | None) -> None:
+        if generation is not None and generation.holders == 0 and generation is not self._kept():
+            generation.closed = True
+            generation.engine.close()
+
+    def open_generation(self, job: Job[Any, Any] | None) -> _Generation:
+        """Open the kept file, or make a new one, filled by `job` if not None."""
+        location = self.location
+        if location is not None and location.exists():
+            return self._opened(location)
+        core = self.database_type()
+        # a kept file is made beside, then renamed: a failed fill leaves none
+        path = None if location is None else _beside(location)
+        engine = _Engine(core, self.pragmas, path=path, shared=True)
+        core._engine = engine  # noqa: SLF001 (the engine it's built for)
+        try:
+            if job is not None:
+                core.fill(job)
+                # a fill may stop early and return, e.g. once its last session left
+                job.raise_if_canceled()
+            if location is None or path is None:  # a temporary file: the engine's own
+                return _Generation(core, engine)
+            engine.finish_file()
+        except BaseException:
+            engine.close()
+            if path is not None:
+                _remove_file(path)
+            raise
+        with self._lock:
+            if location.exists():  # pragma: no cover (filled meanwhile by a canceled run)
+                _remove_file(path)
+            else:
+                path.replace(location)
+        return self._opened(location)
+
+    def _opened(self, location: Path) -> _Generation:
+        core = self.database_type()
+        database = _Database(self.pragmas, location, keep=True, read_only=self.read_only)
+        engine = _Engine(core, self.pragmas, database, shared=True)
+        core._engine = engine  # noqa: SLF001 (the engine it's built for)
+        try:
+            engine.open_kept(read_only=self.read_only)
+        except BaseException:
+            engine.close()
+            raise
+        return _Generation(core, engine)
+
+    def tell(self, writer: _Handle, generation: _Generation, indices: set[int]) -> None:
+        """Have the other sessions on `generation` emit the `changed` of these tables."""
+        with self._lock:
+            others = [
+                handle
+                for handle in self._handles
+                if handle is not writer and handle.generation is generation
+            ]
+        if len(others) == 0:
+            return
+        with self._notices:
+            # a session told already gets these with the changes its thread hasn't told yet
+            untold = [handle for handle in others if handle not in self._pending]
+            for handle in others:
+                self._pending.setdefault(handle, set()).update(indices)
+        for handle in untold:
+            # a daemon: the process doesn't wait for it to end
+            thread = threading.Thread(
+                target=self._tell_session,
+                args=(handle,),
+                name=f"composeui-{self.database_type.__name__}-notices",
+                daemon=True,
+            )
+            try:
+                thread.start()
+            except RuntimeError:
+                # e.g. no thread left: the write is done, and the session is told the next one
+                with self._notices:
+                    del self._pending[handle]
+                LOGGER.exception("Telling a session of a change failed")
+
+    def _tell_session(self, handle: _Handle) -> None:
+        """Tell a session its tables changed, the changes made meanwhile together, until none.
+
+        The thread keeps the handle until then, not its session (`_Handle.deliver`).
+        """
+        while True:
+            with self._notices:
+                indices = self._pending[handle]
+                if len(indices) == 0:  # all told: the next change starts another thread
+                    del self._pending[handle]
+                    return
+                self._pending[handle] = set()
+            _deliver(handle, indices)
+
+
+def _deliver(handle: _Handle, indices: set[int]) -> None:
+    """Tell a session its tables changed, logging what its callbacks raise."""
+    try:
+        handle.deliver(indices)
+    except Exception:  # a session's callback: its next changes are still told
+        LOGGER.exception("Telling a session of a change failed")
+
+
+#: the shared databases of the process (`_store_of`)
+_STORES: dict[_StoreKey, _SharedStore] = {}
+_STORES_LOCK = threading.Lock()
+
+
+def _store_of(declared: _Shared[Any]) -> _SharedStore:
+    """Get the process's store of a shared database, made by its first session."""
+    with _STORES_LOCK:
+        store = _STORES.get(declared.key)
+        if store is None:
+            if declared.location is not None and any(
+                key[1] == declared.location for key in _STORES
+            ):
+                msg = (
+                    f"{declared.location} is shared already, by another class or with another"
+                    " read_only: one file, one shared database"
+                )
+                raise ValueError(msg)
+            store = _STORES[declared.key] = _SharedStore(declared)
+    return store
+
+
+class _Handle:
+    """A session's handle on a shared database: the session's tables on the store's file."""
+
+    def __init__(self, store: _SharedStore, owner: SqliteDatabase) -> None:
+        self._store = store
+        # weak: the database owns its handle
+        self._owner = weakref.ref(owner)
+        #: the file it reads and writes, once bound (`_SharedStore.attach`, `ready`)
+        self.generation: _Generation | None = None
+        self.closed = False
+        #: its session's jobs, which hand the other sessions' changes to its main thread
+        self.jobs: weakref.ReferenceType[Jobs] | None = None
+
+    def add_table(self, table: SqliteTable) -> None:
+        msg = (
+            f"{self._store.database_type.__name__} is shared: its tables are created once,"
+            " as declared by its class or added in its __init__"
+        )
+        raise TypeError(msg)
+
+    def _bound(self) -> _Generation:
+        if self.closed:
+            msg = "Cannot operate on a closed database."
+            raise sqlite3.ProgrammingError(msg)
+        generation = self.generation
+        if generation is None:
+            name = self._store.database_type.__name__
+            msg = f"{name} isn't filled yet: call its ready(job) in a job first"
+            raise RuntimeError(msg)
+        return generation
+
+    @contextlib.contextmanager
+    def connection(self, *, changing: SqliteTable | None = None) -> Generator[sqlite3.Connection]:
+        generation = self._bound()
+        if self._store.read_only:
+            with self._read_only(generation) as db:
+                yield db
+            return
+        on_commit = functools.partial(self._committed, generation)
+        with generation.engine.connection(changing=changing, on_commit=on_commit) as db:
+            yield db
+
+    @contextlib.contextmanager
+    def reading(self) -> Generator[sqlite3.Connection]:
+        generation = self._bound()
+        if self._store.read_only:
+            with self._read_only(generation) as db:
+                yield db
+            return
+        with generation.engine.reading() as db:
+            yield db
+
+    @contextlib.contextmanager
+    def _read_only(self, generation: _Generation) -> Generator[sqlite3.Connection]:
+        """Read on a connection that refuses a write with a message of its own."""
+        with generation.engine.reading() as db:
+            try:
+                yield db
+            except sqlite3.OperationalError as error:
+                if db.in_transaction:  # a write refused began one: the next reader reuses db
+                    db.rollback()
+                if "readonly database" not in str(error):
+                    raise
+                name = self._store.database_type.__name__
+                msg = f"{name} is shared read-only: its sessions can't write to it"
+                raise ReadOnlyDatabaseError(msg) from error
+
+    def _committed(self, generation: _Generation, changed: list[SqliteTable]) -> None:
+        """Emit this session's `changed`, and have the other sessions emit theirs."""
+        if len(changed) == 0:
+            return
+        _emit(changed)
+        owner = self._owner()
+        assert owner is not None  # its write's own database
+        tables = owner._tables  # noqa: SLF001 (its own database's)
+        self._store.tell(self, generation, {tables.index(table) for table in changed})
+
+    def deliver(self, indices: set[int]) -> None:
+        """Emit the `changed` of another session's write, on this session's main thread."""
+        owner = self._owner()
+        if owner is None or self.closed:
+            return
+        tables = [owner._tables[index] for index in sorted(indices)]  # noqa: SLF001 (its own database's)
+
+        def emit() -> None:
+            # a web session ended meanwhile runs it no more (`call_in_session`)
+            for table in tables:
+                table.changed.emit()
+
+        jobs = None if self.jobs is None else self.jobs()
+        if jobs is None:  # no app: as a write of its own outside a job
+            emit()
+        else:
+            jobs._post(emit)  # noqa: SLF001 (the session's main thread)
+
+    def ready(self, job: Job[Any, Any]) -> None:
+        if self.closed:
+            msg = "Cannot operate on a closed database."
+            raise sqlite3.ProgrammingError(msg)
+        if self.generation is None:
+            self._store.ready(self, job)
+
+    def forget(self) -> None:
+        self._store.forget()
+
+    def close(self) -> None:
+        self.closed = True
+        self._store.release(self)
 
 
 class _PinnedDatabase:
-    """A database's rows pinned by a reader's transaction (`SqliteDatabase._pin`)."""
+    """A database's rows pinned by a reader's transaction (`_Engine.pin`)."""
 
-    def __init__(self, owner: SqliteDatabase, database: _Database, db: sqlite3.Connection) -> None:
-        self._owner = owner
+    def __init__(self, engine: _Engine, database: _Database, db: sqlite3.Connection) -> None:
+        self._engine = engine
         self._database = database
         self._db = db
 
@@ -1685,24 +2290,32 @@ class _PinnedDatabase:
         target = sqlite3.connect(str(path))
         try:
             self._db.backup(target)
-            # as `SqliteDatabase._save`: a file another app opens leaves no journal beside it
+            # as `_Engine.save`: a file another app opens leaves no journal beside it
             target.execute("PRAGMA journal_mode = DELETE")
         finally:
             target.close()
 
     def release(self) -> None:
         self._db.rollback()  # the read's transaction, before another query reuses the reader
-        self._owner._give_back_reader(self._database, self._db)  # noqa: SLF001 (its database)
+        self._engine._give_back_reader(self._database, self._db)  # noqa: SLF001 (its engine)
 
 
 class _Database:
-    """A connection to a scratch database in a temporary file, deleted with it.
+    """A connection to a database file: a temporary one, deleted with it, unless `keep`.
 
     Its journal is SQLite's default until `start_journal` sets the one of `pragmas`: a
-    backup into a WAL database from one of another page size fails.
+    backup into a WAL database from one of another page size fails. A `read_only` one
+    writes nothing, its journal included.
     """
 
-    def __init__(self, pragmas: Mapping[str, int | str]) -> None:
+    def __init__(
+        self,
+        pragmas: Mapping[str, int | str],
+        path: Path | None = None,
+        *,
+        keep: bool = False,
+        read_only: bool = False,
+    ) -> None:
         statements = [
             _pragma_statement(name, value)
             for name, value in pragmas.items()
@@ -1712,11 +2325,18 @@ class _Database:
         self.pragma_statements = statements
         journal = pragmas.get("journal_mode")
         self._journal = None if journal is None else _pragma_statement("journal_mode", journal)
-        fd, name = tempfile.mkstemp(prefix="composeui-", suffix=".sqlite")
-        os.close(fd)
-        self.path = Path(name)
-        # threads take turns through the `SqliteDatabase`'s lock
-        self.connection = sqlite3.connect(name, check_same_thread=False, timeout=WAIT_SECONDS)
+        if path is None:
+            fd, name = tempfile.mkstemp(prefix="composeui-", suffix=".sqlite")
+            os.close(fd)
+            path = Path(name)
+        self.path = path
+        # threads take turns through the engine's lock
+        self.connection = sqlite3.connect(
+            f"{path.as_uri()}?mode=ro" if read_only else str(path),
+            uri=read_only,
+            check_same_thread=False,
+            timeout=WAIT_SECONDS,
+        )
         self.connection.row_factory = sqlite3.Row
         for statement in statements:
             self.connection.execute(statement)
@@ -1724,7 +2344,7 @@ class _Database:
         self.idle_readers: list[sqlite3.Connection] = []
         # also when the database is dropped unclosed (e.g. an expired web session's)
         self._finalizer = weakref.finalize(
-            self, _discard, self.connection, self.path, self.idle_readers
+            self, _discard, self.connection, self.path, self.idle_readers, keep=keep
         )
         #: the queries reading it on connections of their own (`SqliteDatabase.reading`)
         self.readers = 0
@@ -1744,6 +2364,19 @@ class _Database:
 
     def close(self) -> None:
         self._finalizer()
+
+
+def _beside(location: Path) -> Path:
+    """Get a new file's path beside `location`, for a file renamed to it once complete."""
+    fd, name = tempfile.mkstemp(prefix=f"{location.name}-", suffix=".partial", dir=location.parent)
+    os.close(fd)
+    return Path(name)
+
+
+def _remove_file(path: Path) -> None:
+    """Delete a database file, with the WAL journal's files a crash may leave beside it."""
+    for name in (path.name, f"{path.name}-wal", f"{path.name}-shm", f"{path.name}-journal"):
+        path.with_name(name).unlink(missing_ok=True)
 
 
 def _schema(db: sqlite3.Connection) -> set[tuple[object, ...]]:
@@ -1776,11 +2409,17 @@ def _pragma_statement(name: str, value: int | str) -> str:
     return f"PRAGMA {name} = {value}"
 
 
-def _discard(connection: sqlite3.Connection, path: Path, readers: list[sqlite3.Connection]) -> None:
+def _discard(
+    connection: sqlite3.Connection,
+    path: Path,
+    readers: list[sqlite3.Connection],
+    *,
+    keep: bool,
+) -> None:
     for reader in readers:  # first: the last connection closed deletes the WAL journal
         reader.close()
     readers.clear()
     connection.close()
-    # the WAL journal's files too, which the last connection closed deletes, unless it crashed
-    for name in (path.name, f"{path.name}-wal", f"{path.name}-shm"):
-        path.with_name(name).unlink(missing_ok=True)
+    if not keep:
+        # the WAL journal's files too, which the last connection closed deletes, unless it crashed
+        _remove_file(path)

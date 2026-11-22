@@ -603,6 +603,10 @@ class PickupsView(DashboardView):
 The [Uber pickups example](../../src/examples/uberpickupsframe.py) and the
 [first dashboard](../../src/examples/uberdashboard.py) read their CSV file this way.
 
+Data that the sessions query in SQL, or write, goes in a
+[database shared by every session](sqlite-model.md#a-database-shared-by-every-session) instead.
+Its `fill` runs once in the same way.
+
 ## A limit on the jobs that run at once
 
 `JobSlots`, from `composeui.core.jobs`, lets at most a number of jobs run a block at once. The
