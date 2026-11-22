@@ -60,10 +60,10 @@ The diagram shows the default path, where `content` runs during the POST.
 
 ![The POST returns a ticket link. A separate GET returns the file.](../images/web-download.svg)
 
-1. A click on a `DownloadView` sends an htmx POST. By default, `content` runs during the POST.
-   With `in_job`, the POST starts a job that runs `content`. In both cases, `MainView.download`
-   passes the result to `WebMainRenderer.download`. The app can also call `MainView.download`
-   directly.
+1. A click on a `DownloadView` sends an htmx POST. `prepare`, if set, runs first, during the
+   POST. By default, `content` runs during the POST too. With `in_job`, the POST starts a job
+   that runs `content`. In both cases, `MainView.download` passes the result to
+   `WebMainRenderer.download`. The app can also call `MainView.download` directly.
 2. The session keeps the file under a ticket: 128 random bits (`webcore/downloads.py`).
 3. Event responses, the jobs poll, and the full page list tickets not yet fetched.
    `downloads_marker` adds a link per ticket in `#cui-downloads`.

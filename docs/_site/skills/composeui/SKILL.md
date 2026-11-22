@@ -186,7 +186,9 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
 - **Give the user a file with `DownloadView`**, or `main_view.download(...)` from a callback,
   not a `SavePathInputView`: on the web, a save path writes a file on the server, not on the
   user's computer. Its `content` returns the bytes, or a `DownloadedFile(filename, content,
-  media_type)` to name the file at the click, and runs in a job with `in_job=True`. For a
+  media_type)` to name the file at the click, and runs in a job with `in_job=True`. A job can't
+  read the views: `prepare` reads them at the click and returns the arguments of `content`, or
+  raises `ValueError` or `OSError` to refuse. `enabled_if` gives the button its condition. For a
   file too large to make first, it returns a `StreamContent(write)`: read the views in `content`,
   and give `write` only those values, as it runs later on its own thread. A test without a
   backend reads the files given in `main_view.downloads`.

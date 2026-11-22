@@ -25,13 +25,16 @@ from composeui.core.view import (
     CellWidget,
     ConsoleView,
     DownloadedFile,
+    DownloadView,
     FilePathInputView,
     FileUploadView,
     FormView,
     GroupFormView,
+    InputView,
     LabelView,
     LanguageMenu,
     ListView,
+    LogType,
     MainView,
     MapPoint,
     MapView,
@@ -674,3 +677,179 @@ def test_a_download_view_gives_the_name_and_type_its_content_chooses_at_the_clic
         ("run-1.out", b"one", "text/plain"),  # without the folder
         ("run-2.out", b"two", "text/plain"),
     ]
+
+
+@define_view
+class _RunsMainView(MainView):
+    """Export gives the selected run's file, made in a job that waits for `gate`."""
+
+    has_file_menu = False
+
+    run: InputView = Factory(InputView)
+    export: DownloadView = Factory(
+        lambda self: DownloadView(
+            filename="run.zip", in_job=True, enabled_if=lambda: bool(self.run.text)
+        ),
+        takes_self=True,
+    )
+
+    @override
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.gate = threading.Event()
+        self.export.content = self.archive
+
+    def archive(self) -> bytes:
+        self.gate.wait(10)
+        return b"zip"
+
+
+@define_view
+class _RunsLaterMainView(_RunsMainView):
+    """The same Export, given its condition once it is built, as an app's view sets it."""
+
+    export: DownloadView = Factory(lambda: DownloadView(filename="run.zip", in_job=True))
+
+    @override
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.export.enabled_if = lambda: bool(self.run.text)
+
+
+@pytest.mark.parametrize("main_view_type", [_RunsMainView, _RunsLaterMainView])
+def test_a_download_view_is_enabled_only_while_its_condition_holds_and_no_file_is_made(
+    main_view_type: type[_RunsMainView],
+) -> None:
+    main_view = Application(build_main_view=main_view_type).main_view
+    download = main_view.export
+    no_run = download.is_enabled
+    main_view.run.text = "run-1"
+    selected = download.is_enabled
+    try:
+        download.clicked.emit()
+        making = download.is_enabled
+        main_view.run.text = ""
+    finally:
+        main_view.gate.set()
+        main_view.jobs.wait()
+    made_without_run = download.is_enabled
+    download.enabled_if = lambda: True
+    replaced = download.is_enabled
+
+    assert (no_run, selected, making, made_without_run, replaced) == (
+        False,
+        True,
+        False,
+        False,  # the job's end doesn't enable it while no run is selected
+        True,
+    )
+    assert [file.content for file in main_view.downloads] == [b"zip"]
+
+
+@define_view
+class _PreparedMainView(MainView):
+    """Export names its file after the run, read on the main thread at the click."""
+
+    has_file_menu = False
+
+    run: InputView = Factory(InputView)
+    export: DownloadView = Factory(DownloadView)
+
+    @override
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.threads: list[str] = []
+        self.export.prepare = self.selected_run
+        self.export.content = self.archive
+
+    def selected_run(self) -> tuple[str, int]:
+        self.threads.append(threading.current_thread().name)
+        if not self.run.text:
+            msg = "Select a run"
+            raise ValueError(msg)
+        return self.run.text, 2
+
+    def archive(self, run: str, parts: int) -> DownloadedFile:
+        self.threads.append(threading.current_thread().name)
+        return DownloadedFile(f"{run}.zip", b"zip" * parts, "application/zip")
+
+
+@pytest.mark.parametrize("in_job", [False, True])
+def test_a_download_view_s_prepare_reads_the_views_on_the_main_thread_for_its_content(
+    in_job: bool,
+) -> None:
+    main_view = Application(build_main_view=_PreparedMainView).main_view
+    main_view.export.in_job = in_job
+    main_view.run.text = "run-1"
+
+    main_view.export.clicked.emit()
+    main_view.jobs.wait()
+
+    assert main_view.threads[0] == threading.main_thread().name
+    assert (main_view.threads[1] != main_view.threads[0]) is in_job
+    assert [(file.filename, file.content) for file in main_view.downloads] == [
+        ("run-1.zip", b"zipzip")
+    ]
+
+
+@pytest.mark.parametrize("error", [ValueError("Select a run"), OSError("Run folder is gone")])
+def test_a_download_view_s_prepare_refuses_the_click_with_its_error_as_notification(
+    error: Exception,
+) -> None:
+    main_view = Application(build_main_view=_PreparedMainView).main_view
+    main_view.export.in_job = True
+
+    def refuse() -> tuple[str, int]:
+        raise error
+
+    main_view.export.prepare = refuse
+
+    main_view.export.clicked.emit()
+    main_view.jobs.wait()
+
+    assert main_view.threads == []  # content never ran
+    assert main_view.downloads == []
+    assert (main_view.notification.message, main_view.notification.kind) == (
+        str(error),
+        LogType.ERROR,
+    )
+
+
+@pytest.mark.parametrize("in_job", [False, True])
+def test_a_download_view_tells_why_its_file_can_t_be_made_with_or_without_a_job(
+    in_job: bool,
+) -> None:
+    main_view = Application(build_main_view=_PreparedMainView).main_view
+    main_view.export.in_job = in_job
+    main_view.export.prepare = None
+
+    def fail() -> bytes:
+        msg = "disk full"
+        raise OSError(msg)
+
+    main_view.export.content = fail
+
+    main_view.export.clicked.emit()
+    main_view.jobs.wait()
+
+    assert main_view.downloads == []
+    assert (main_view.notification.message, main_view.notification.kind) == (
+        "Can't make the file: disk full.",
+        LogType.ERROR,
+    )
+
+
+def test_a_download_view_without_a_job_lets_a_bug_in_its_content_escape_as_a_job_does() -> None:
+    main_view = Application(build_main_view=_PreparedMainView).main_view
+    main_view.export.prepare = None
+
+    def broken() -> bytes:
+        msg = "can't concat str to bytes"  # as a bug in the app's code raises
+        raise TypeError(msg)
+
+    main_view.export.content = broken
+
+    with pytest.raises(TypeError):
+        main_view.export.clicked.emit()
+
+    assert main_view.notification.message == ""

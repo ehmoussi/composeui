@@ -55,6 +55,17 @@ class CalledInJobError(RuntimeError):
     """A job's function tried to start or change jobs instead of using a main-thread callback."""
 
 
+#: the errors of a bug in the app's code: they escape a job, rather than fail it (see `Jobs`)
+PROGRAMMING_ERRORS = (
+    CalledInJobError,
+    AssertionError,
+    AttributeError,
+    NameError,
+    NotImplementedError,
+    TypeError,
+)
+
+
 class JobCanceledError(Exception):
     """Raised by a job's function that stops because it was canceled, without a result.
 
@@ -1166,14 +1177,7 @@ class Jobs:
         _CURRENT.job = job  # for the thread's life: a thread of its own per job
         try:
             result = work(job, *args, **kwargs)
-        except (
-            CalledInJobError,
-            AssertionError,
-            AttributeError,
-            NameError,
-            NotImplementedError,
-            TypeError,
-        ):
+        except PROGRAMMING_ERRORS:
             self._on_main_thread(job, functools.partial(self._abort, job))
             raise
         except Exception as error:  # the app's code: whatever it raises, the job is over

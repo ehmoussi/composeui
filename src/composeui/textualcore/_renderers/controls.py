@@ -283,7 +283,9 @@ class TextualDownloadRenderer(TextualButtonRenderer):
     def __init__(self, view: ButtonViewLike) -> None:
         super().__init__(view)
         self._refresh_dispatcher.update(
-            dict.fromkeys(("filename", "media_type", "content", "in_job"), self._noop)
+            dict.fromkeys(
+                ("filename", "media_type", "content", "in_job", "prepare", "enabled_if"), self._noop
+            )
         )
 
     @staticmethod
