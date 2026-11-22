@@ -166,6 +166,7 @@ def _add_reference_to_signals(main_view: MainView, model: Model | None) -> None:
     set_references(main_view, main_view, model)
     if model is not None:
         main_view.jobs.set_model(model)
+        model._set_main_view(main_view)  # noqa: SLF001 (the app wires its model)
         for signal in model.signals:
             signal.set_main_view(main_view)
             signal.set_model(model)

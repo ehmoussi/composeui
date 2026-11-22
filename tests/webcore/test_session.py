@@ -37,6 +37,7 @@ from starlette.testclient import TestClient
 from composeui.core._views.base import made_signals
 from composeui.core.application import WebSettings
 from composeui.core.model import Model
+from composeui.core.sqlitemodel import DatabaseModel, SqliteDatabase, SqliteTable, shared, table
 from composeui.core.view import (
     ConsoleView,
     DialogView,
@@ -144,6 +145,70 @@ def test_a_session_s_model_closes_with_it() -> None:
         browser.post(f"/widget/{exit_id}", data={"event": "triggered"})
 
     assert session_model.is_closed
+
+
+class _Signatures(SqliteTable):
+    create = "CREATE TABLE signature(name TEXT NOT NULL);"
+
+    def add(self, name: str) -> None:
+        with self.connection() as db:
+            db.execute("INSERT INTO signature VALUES (?)", (name,))
+
+    def names(self) -> list[str]:
+        return self.fetch_column("SELECT name FROM signature ORDER BY rowid")
+
+
+class _SharedBook(SqliteDatabase):
+    signatures = table(_Signatures)
+
+
+class _SharedGuestbook(DatabaseModel):
+    book = shared(_SharedBook)
+
+
+def test_a_browser_s_write_to_a_shared_database_shows_in_another_s_next_request() -> None:
+    models: list[_SharedGuestbook] = []
+    views: list[HelloMainView] = []
+
+    def build_model() -> _SharedGuestbook:
+        models.append(_SharedGuestbook())
+        return models[-1]
+
+    class GuestbookApp(WebModelApplication[HelloMainView, _SharedGuestbook]):
+        @override
+        def setup_session(self, main_view: HelloMainView) -> None:
+            views.append(main_view)
+
+    def show_signatures(main_view: HelloMainView, model: _SharedGuestbook) -> None:
+        def show() -> None:
+            main_view.summary.text = ", ".join(model.book.signatures.names())
+
+        model.book.signatures.changed.connect(show)
+
+    app = GuestbookApp(
+        build_main_view=HelloMainView, build_model=build_model, setup_model=show_signatures
+    )
+    name = app.main_view.form.name
+
+    @app.connect(view=name, signals=[name.editing_finished])
+    def sign(*, view: NameRowView, model: _SharedGuestbook) -> None:
+        model.book.signatures.add(view.text)
+
+    web = app.create_starlette_app()
+    with _Browser(web) as alice, _Browser(web) as bob:
+        alice.get("/")
+        bob.get("/")
+        alice_view, bob_view = views
+        bob_told = threading.Event()
+        # after the session's own callback, under its lock: its views have changed
+        models[1].book.signatures.changed.connect(bob_told.set)
+
+        field_id = _field_id(alice_view.form.name)
+        alice.post(f"/widget/{field_id}", data={"value": "Alice", "event": "change"})
+        assert bob_told.wait(30)
+
+        summary = _element(bob.get("/").text, _widget_id(bob_view.summary.renderer)).text
+        assert summary == "Alice"
 
 
 def test_each_browser_gets_its_own_model() -> None:

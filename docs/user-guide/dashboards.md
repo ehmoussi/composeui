@@ -40,7 +40,8 @@ the [first dashboard example](../../src/examples/uberdashboard.py).
 A task reads the file in a thread, so that the window shows while it reads. It returns a frame,
 in your frame library. Here, Polars reads the file and adds the hour of each pickup.
 [`@shared_data`](threads.md#data-shared-by-the-sessions) reads it once for every session, and
-gives each session its own clone of the frame:
+gives each session its own clone of the frame. Data too large to keep in memory goes in a
+[shared database](sqlite-model.md#filled-once-read-only) that SQLite queries instead:
 
 ```python
 import polars as pl

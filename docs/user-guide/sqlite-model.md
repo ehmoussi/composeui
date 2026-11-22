@@ -168,4 +168,134 @@ every backend (`uv run python -m examples.pipecatalogue --backend qt`):
 [`src/examples/pipesweep.py`](../../src/examples/pipesweep.py) writes to its database from a job
 (`uv run python -m examples.pipesweep --backend qt`).
 
+## A database shared by every session
+
+A `per_session` database is the user's own: on the web, each session has a copy. Data that
+every user reads and writes, such as the customers of a CRM, goes in a database that
+`shared` declares instead. The process has one, which every session's model reaches:
+
+```python
+from pathlib import Path
+
+from composeui.core.sqlitemodel import (
+    DatabaseModel,
+    SqliteDatabase,
+    SqliteTable,
+    per_session,
+    shared,
+    table,
+)
+
+
+class Customers(SqliteTable):
+    create = "CREATE TABLE customer(id INTEGER PRIMARY KEY, name TEXT NOT NULL);"
+
+    def add(self, name: str) -> None:
+        with self.connection() as db:
+            db.execute("INSERT INTO customer(name) VALUES (?)", (name,))
+
+    def names(self) -> list[str]:
+        return self.fetch_column("SELECT name FROM customer ORDER BY id")
+
+
+class Notes(SqliteTable):
+    create = "CREATE TABLE note(text TEXT NOT NULL);"
+
+
+class Study(SqliteDatabase):
+    notes = table(Notes)
+
+
+class Crm(SqliteDatabase):
+    customers = table(Customers)
+
+
+class CrmModel(DatabaseModel):
+    study = per_session(Study)  # each user's own, saved in the study
+    crm = shared(Crm, location=Path("crm.sqlite"))  # one for every user, kept in a file
+
+
+alice, bob = CrmModel(), CrmModel()  # two sessions' models
+alice.crm.customers.add("Ada")
+print(bob.crm.customers.names())  # ['Ada']
+alice.close()
+bob.close()
+```
+
+- **One per process.** The first model built opens the database, and runs its `migrations`
+  then, once. Each model's attribute is the session's handle on it, of the database's class.
+  A session that ends lets it go: the shared database never keeps a session.
+- **Not in the study.** Save and Open leave it out, and New leaves it alone. Its writes are not
+  [unsaved changes](building-views.md#unsaved-changes).
+- **A file, or a temporary one.** With `location`, the database is kept in that file across the
+  runs of the app. SQLite then waits for the disk at each commit (`synchronous = NORMAL`). A
+  file of a newer version is refused, with `InvalidStateError`. Without `location`, the
+  database is a temporary file, deleted as the process ends.
+- **Writes take turns.** The threads of every session take turns on its connection, as the
+  threads of one session do. `reading` reads without waiting, during a write too.
+- **Every session follows.** After a commit, the tables' `changed` is emitted in the session
+  that wrote, as for a `per_session` database. Each other session then gets it on its own main
+  thread, with the changes made meanwhile together. On the web, the user sees them at their next
+  request, such as a click.
+- **Text that other users wrote.** A table's Export CSV writes a text cell as it is. A
+  spreadsheet runs a cell that starts with `=`, `+`, `-` or `@` as a formula. Check such text
+  when a session writes it.
+- **One field per database.** A model that declares the same shared database twice is refused,
+  and so is a file that two classes, or two `read_only` values, share. A shared database's
+  tables are declared in its class or added in its `__init__`: `add_table` on a session's
+  handle is refused.
+
+### Filled once, read-only
+
+A database that every session reads, filled once, such as a large CSV file to query, declares
+its rows in `fill`. With `read_only=True`, the sessions only read it:
+
+```python
+import contextlib
+
+from composeui.core.jobs import Job
+
+DATA_URL = "https://example.org/pickups.csv.gz"
+
+
+class Pickups(SqliteDatabase):
+    rows = table(PickupsTable)  # a CSVSqliteTable
+
+    def fill(self, job: Job[None, int]) -> None:  # once, in a thread of its own
+        with contextlib.closing(self.rows.fill_from_url(DATA_URL)) as batches:
+            for count in batches:
+                job.report_progress(count)
+
+
+class PickupsModel(DatabaseModel):
+    pickups = shared(Pickups, read_only=True)
+
+    def load(self, job: Job[list[int], int]) -> list[int]:  # a task's function
+        self.pickups.ready(job)  # the first session fills it, the others wait
+        return self.pickups.rows.by_hour()
+```
+
+- **`ready(job)` waits for the fill,** in a job's thread. The first session's `ready` starts
+  `fill` in a thread of its own, and the others wait for it. Each job gets the fill's progress.
+  Until its `ready` returns, a session's queries raise `RuntimeError`. A database without
+  `fill`, and a `per_session` one, are ready at once.
+- **Kept in a file.** With `location`, `fill` runs only when the file doesn't exist yet. It
+  fills a new file beside it, renamed to `location` once `fill` is over. The next runs of the
+  app open the file without `fill`. To fill it again, delete the file before the app starts.
+- **Canceled or failed.** A job canceled stops waiting and raises `JobCanceledError`. When no
+  job waits any longer, the fill's job is canceled: read `job.is_canceled`, or call
+  `job.raise_if_canceled()`, to stop early. A fill that fails fails each job that waits for it.
+  A fill that stops leaves no file, and the next `ready` fills again. `fill` runs for every
+  session, so `job.call_on_main_thread` raises `CalledInJobError` in it, as in a
+  [`@shared_data` load](threads.md#data-shared-by-the-sessions).
+- **`forget()`** gives the next sessions a new database, filled again, for example after the
+  data changed. The sessions that have the previous one keep it. Its file is deleted once the
+  last of them ends. A database kept in a file (`location`) and a `per_session` one can't be
+  forgotten.
+- **Read-only.** `fill` writes, before any session reads. Then a write of a session raises
+  `ReadOnlyDatabaseError`, and `connection()` reads as `reading` does. A file of the app that
+  is read-only, such as reference data, opens without a write:
+  `shared(Materials, location=Path("materials.sqlite"), read_only=True)`. It must be at the
+  database's `schema_version`, as it can't be brought up to date.
+
 To import CSV data into a table of the database, see [Importing CSV data](csv-import.md).

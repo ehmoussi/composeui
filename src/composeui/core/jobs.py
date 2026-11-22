@@ -1217,6 +1217,23 @@ class Jobs:
             functools.partial(_as_main_thread, self._drain if drained else callback)
         )
 
+    def _post(self, callback: Callable[[], None]) -> None:
+        """Have `callback`, of no job, called on the main thread, without waiting for it.
+
+        E.g. another session's change to a shared database. Queued as the jobs' results are
+        until the main view is rendered.
+        """
+        main_view = self._main_view()
+        with self._results_lock:
+            # none once the app is gone: nothing then reads the queue
+            rendered = main_view is not None and self._handed_over
+            renderer = None if main_view is None or not rendered else main_view.renderer
+            if renderer is None:
+                self._results.put(callback)
+                return
+        # outside the lock: a web session's renderer takes the session's lock
+        renderer.post_on_main_thread(functools.partial(_as_main_thread, callback))
+
     def _drain(self) -> None:
         """Call, in order, all that the jobs handed over and the main thread hasn't called yet.
 

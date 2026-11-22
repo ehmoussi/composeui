@@ -202,8 +202,8 @@ These are open, not oversights to fix silently. Raise them when a change touches
 - **No escape of formulas in CSV exports.** A table's Export CSV (`csv_chunks`) and
   `frame_content` write a text cell that starts with `=`, `+`, `-` or `@` as it is: a
   spreadsheet can run it as a formula
-  ([CSV Injection](https://owasp.org/www-community/attacks/CSV_Injection)). Each session exports
-  its own data today, so the cell's author is the user who opens the file. It matters once users
-  read data that others wrote (shared data, users). The fix changes the data: escape text cells
+  ([CSV Injection](https://owasp.org/www-community/attacks/CSV_Injection)). A session exports its
+  own data, or a `shared` database's (`DatabaseModel`), whose cells other users wrote: one user
+  can put a formula in a file that another opens. The fix changes the data: escape text cells
   only, never numbers, with a way to keep the exact values for a file read back, and the same
   rule in both exports. `ROADMAP.md` holds the item.
