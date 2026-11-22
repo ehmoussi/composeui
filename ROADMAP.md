@@ -83,6 +83,9 @@ The order of the work for **Now**:
 - **Cached query results** (Now). Results kept by their parameters, with an expiry, a size limit
   and a refresh. A recipe in the user guide reads a SQL query into a table and a chart, and keeps
   the user's work when the query fails.
+- **Checks on whole columns** (Next). `fill_from_frame` and the CSV import check the common
+  validators of a row class, such as `ge`, `le` and `in_`, and its dates, in the frame's library,
+  not in Python for each row. Done when the Uber CSV imports in about 2 s, against 8.5 s.
 - **Matplotlib figures** (Now). A figure view that redraws when the app changes the figure: an
   interactive canvas on Qt, an image on the web and Textual.
 - **A NumPy table source** (Next). Arrays sorted and filtered with NumPy alone, tested against
