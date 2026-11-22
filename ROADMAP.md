@@ -70,16 +70,11 @@ what exists. This file holds only the work that is left.
 
 The order of the work for **Now**:
 
-1. Share the data: the shared SQLite database, measured against the budgets.
-2. The charts: check the HTML, then the new charts.
-3. Deployment in a container.
+1. The charts: check the HTML, then the new charts.
+2. Deployment in a container.
 
 ## Data and dashboards
 
-- **A shared SQLite database** (Now). What `shared_data` does for a frame, for SQLite: one import
-  per process, read by every session, each session keeping its own database for its writes. Done
-  when 4 SQLite sessions at once each load within twice the time of one session, and move the hour
-  within 500 ms, in the concurrency case of [`benchmarks/sessions.py`](benchmarks/sessions.py).
 - **Cached query results** (Now). Results kept by their parameters, with an expiry, a size limit
   and a refresh. A recipe in the user guide reads a SQL query into a table and a chart, and keeps
   the user's work when the query fails.
@@ -278,13 +273,10 @@ reproducible.
 
 ## Known problems
 
-- **SQLite sessions slow down when they load at once.** In the SQLite Uber example on the web, a
-  load takes 9.3 s with one session and 33.3 s with 4 at once. Each session imports its own copy
-  of the CSV, and the CSV's checks run in Python, one session at a time
-  ([the checks](benchmarks/README.md#why-sqlite-sessions-slow-down)). Moves no longer slow down
-  as much: with 4 sessions, a move takes 0.51 s
-  ([ids in one text](benchmarks/README.md#ids-in-one-text)). The shared SQLite database
-  addresses the loads.
+- **SQLite moves miss the budget with 4 sessions at once.** In the SQLite Uber example on the
+  web, a move takes 0.40 s with one session and 0.53 s with 4 at once, at the median. Loads no
+  longer slow down: the sessions share one database, and 4 load in 9.6 s, as one does
+  ([a shared database](benchmarks/README.md#a-shared-database)).
 - **A process that exits during a write may crash.** At exit, the model's finalizer closes the
   connection and deletes its files while a job's thread can still be writing. A process that is
   killed leaves its files behind. "A clean exit during a write" fixes both.

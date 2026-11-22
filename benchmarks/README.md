@@ -33,7 +33,8 @@ map's job. A browser can get the map's points up to 300 ms later, at its next po
 
 [`uber.py`](uber.py) measures the two Uber pickups examples:
 
-- [`uberpickups.py`](../src/examples/uberpickups.py) keeps the rows in SQLite.
+- [`uberpickups.py`](../src/examples/uberpickups.py) keeps the rows in SQLite, in a database that
+  its sessions share since [a shared database](#a-shared-database).
 - [`uberpickupsframe.py`](../src/examples/uberpickupsframe.py) keeps them in a Polars frame.
 
 Both read the same CSV: the 1,028,136 pickups of September 2014. The benchmark downloads it
@@ -400,25 +401,95 @@ of [many rows per statement](#many-rows-per-statement).
   132 s before. One thread alone took 2.8 s, against 1.9 s before: SQLite copies the ids into
   the temporary table, then Python reads them a text at a time.
 
+### A shared database
+
+This change reads the SQLite example's CSV file once per process, into a database that every
+session shares read-only (`shared(Pickups, read_only=True)`), on top of `fde0877`. Before, each
+session imported its own copy. Its results are in
+[`results/sessions-shared-database.json`](results/sessions-shared-database.json), with the same
+machine, Python and options. Only the SQLite example was measured again. The "before" columns
+are those of [ids in one text](#ids-in-one-text).
+
+| Sessions | Load, before | Load, after | Move, before | Move, after | Move p95, after | Peak, before | Peak, after |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 9.3 s | 9.4 s | 0.43 s | 0.40 s | 0.46 s | 125 MiB | 125 MiB |
+| 2 | 15.4 s | 9.3 s | 0.46 s | 0.47 s | 0.58 s | 168 MiB | 125 MiB |
+| 4 | 33.3 s | 9.6 s | 0.51 s | 0.53 s | 0.73 s | 255 MiB | 129 MiB |
+
+What each session costs, after the first session, in the cleanup case:
+
+| Measure | Before | After |
+| --- | ---: | ---: |
+| Load | 9.6 s | 0.54 s |
+| Process memory (RSS) | 15.2 MiB | 0.8 MiB |
+| Temporary files | 125 MiB | none |
+| Open file descriptors | 5 | 0 |
+| Time to close | 12 ms | 0.5 ms |
+
+- **Sessions at once load in the time of one.** The first session fills the database, and the
+  others wait for that fill: with 4 sessions, a load takes 1.02 times as long as one session's,
+  against 3.6 times before.
+- **A later session loads in about 0.5 s.** It reads the hour's counts from the filled
+  database, and imports nothing.
+- **The process keeps one copy.** The first session adds 125 MiB of temporary files, and the
+  next ones none. As the sessions end, the shared database stays, with its journal: 3 files and
+  5 file descriptors. No other file stays, and all 4 main views are freed.
+- **Moves do not change.** A move queries the database as before: with 4 sessions, 0.53 s at the
+  median, just above the 500 ms budget.
+- **A session left during the load is clean.** At each moment, no crash, no failed job, and no
+  file left. Its main view is freed within 0.04 s.
+
+The Polars example ran again on the same code, with the same options, in the same file. Its
+results equal those of `b9995b8` within a few hundredths of a second. Side by side, with
+medians:
+
+| Sessions | SQLite load | Polars load | SQLite move | Polars move | SQLite move p95 | Polars move p95 | SQLite moves/s | Polars moves/s | SQLite peak | Polars peak |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1 | 9.4 s | 0.52 s | 0.40 s | 0.23 s | 0.46 s | 0.25 s | 2.6 | 4.5 | 125 MiB | 306 MiB |
+| 2 | 9.3 s | 0.57 s | 0.47 s | 0.28 s | 0.58 s | 0.38 s | 4.3 | 7.1 | 125 MiB | 318 MiB |
+| 4 | 9.6 s | 0.67 s | 0.53 s | 0.49 s | 0.73 s | 0.56 s | 7.2 | 8.5 | 129 MiB | 336 MiB |
+
+What the sessions cost, in the cleanup case:
+
+| Measure | SQLite | Polars |
+| --- | ---: | ---: |
+| The first session's load | 9.3 s | 0.26 s |
+| A later session's load | 0.54 s | 0.15 s |
+| The first session's process memory (RSS) | 31 MiB | 234 MiB |
+| A later session's process memory | 0.8 MiB | 4.9 MiB |
+| Temporary files | 125 MiB, once | none |
+| Time to close | 0.5 ms | 0.6 ms |
+
+- **Polars loads faster, SQLite keeps less in memory.** The first load reads the CSV: in 9.3 s
+  into SQLite, whose CSV checks run in Python, and in 0.26 s into a Polars frame. The frame stays
+  in memory: 234 MiB, against 31 MiB and a file of 125 MiB for SQLite.
+- **Both share their data.** A later session adds 0.8 MiB with SQLite, and 4.9 MiB with Polars.
+- **Polars moves faster.** With 4 sessions, a Polars move takes 0.49 s at the median, within the
+  500 ms budget, and a SQLite move 0.53 s. At the 95th percentile, both are above it: 0.56 s and
+  0.73 s.
+
 ### Sessions findings
 
 - **The SQLite example does not scale past 2 sessions at once.** From 2 to 4 sessions, a load
   takes about 11 times as long, and a move about 8 times as long. Moves also become slower after
   the loads are over. With [many rows per statement](#many-rows-per-statement), a load takes 2.4
   times as long, and a move 6 times. With [ids in one text](#ids-in-one-text), a move takes
-  1.1 times as long, but a load still 2.2 times.
+  1.1 times as long, but a load still 2.2 times. With [a shared database](#a-shared-database),
+  a load takes as long with 4 sessions as with one.
   ["Why SQLite sessions slow down"](#why-sqlite-sessions-slow-down) gives the cause.
 - **The budget holds for one SQLite session.** A move takes 0.38 s, within the 500 ms budget of
   [the roadmap](../ROADMAP.md#budgets). With 2 sessions, the median is 0.45 s, but the 95th
   percentile is 0.94 s. With [ids in one text](#ids-in-one-text), 4 SQLite sessions take 0.51 s
-  at the median, just above the budget. Polars stays within the budget up to 4 sessions at the
-  median, and its 95th percentile at 4 sessions is 0.55 s.
+  at the median, just above the budget, and 0.53 s with [a shared database](#a-shared-database).
+  Polars stays within the budget up to 4 sessions at the median, and its 95th percentile at 4
+  sessions is 0.55 s.
 - **Shared data takes Polars' memory down to the size of the frame.** 4 sessions peak at 335 MiB,
   against 1,012 MiB before `shared_data`: each session after the first adds 5 MiB, not 54 MiB.
   Loads and moves take the same time. Throughput stops growing at about 9 moves per second, from
   4 sessions.
-- **Disk limits the SQLite example.** At 125 MiB per session, the 1,000 sessions of
-  `max_sessions` would take about 125 GB.
+- **A shared database takes the SQLite example's disk down to one copy.** Before, at 125 MiB
+  per session, the 1,000 sessions of `max_sessions` would take about 125 GB. With
+  [a shared database](#a-shared-database), the process keeps one copy of 125 MiB.
 
 ### Why SQLite sessions slow down
 
