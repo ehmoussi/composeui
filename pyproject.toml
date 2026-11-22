@@ -253,6 +253,12 @@ ignore = [
 [tool.ruff.lint.flake8-bugbear]
 extend-immutable-calls = ["composeui.core.sqlitemodel.csv_field"]
 
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# A widget that hides under the pointer, such as a notification's close button, left its hand
+# on WSLg's Wayland until the pointer moved. Qt's buttons show no hand: their hover is enough.
+"qtpy.QtCore.Qt.CursorShape.PointingHandCursor".msg = "a hidden widget's hand cursor stays on Wayland: show the hover instead"
+"qtpy.QtCore.Qt.PointingHandCursor".msg = "a hidden widget's hand cursor stays on Wayland: show the hover instead"
+
 [tool.ruff.lint.flake8-type-checking]
 # Views and CSV schemas resolve attrs field annotations at runtime.
 runtime-evaluated-decorators = [

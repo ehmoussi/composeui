@@ -358,7 +358,8 @@ _NOTIFICATION_ICONS = {
     LogType.WARNING: QStyle.StandardPixmap.SP_MessageBoxWarning,
     LogType.INFO: QStyle.StandardPixmap.SP_MessageBoxInformation,
 }
-#: the close button: a cross without a frame, a round tint under the pointer
+#: the close button: a cross without a frame, a round tint under the pointer. No hand
+#: cursor: the button hides under the pointer, and WSLg's Wayland kept the hand until it moved
 _NOTIFICATION_CLOSE_STYLE = (
     "QToolButton { border: none; border-radius: 11px; padding: 2px 6px; }"
     " QToolButton:hover { background: rgba(128, 128, 128, 0.25); }"
@@ -400,7 +401,6 @@ class QtNotificationBarRenderer(QtWidgetRenderer[NotificationBar, QFrame]):
             close = QToolButton()
             close.setText("\u2715")
             close.setStyleSheet(_NOTIFICATION_CLOSE_STYLE)
-            close.setCursor(Qt.CursorShape.PointingHandCursor)
             layout.addWidget(close, alignment=Qt.AlignmentFlag.AlignTop)
             self._label, self._icon, self._close = label, icon, close
             self._rendered_object = frame
