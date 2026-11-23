@@ -232,6 +232,11 @@ bob.close()
   file of a newer version is refused, with `InvalidStateError`. The process closes the file
   once no session holds it, such as between two tests. The next model opens it again, without
   `fill`. Without `location`, the database is a temporary file, deleted as the process ends.
+- **A file chosen as the model is built.** A callable `location` gives the file as each model
+  is built, such as a file in a state folder that the app reads as it starts, or that each test
+  sets: `shared(Crm, location=lambda: Path(os.environ["CRM_FOLDER"]) / "crm.sqlite")`. When
+  the callable gives another file, the sessions built before keep the previous file. They and
+  the new sessions don't see each other's writes.
 - **Writes take turns.** The threads of every session take turns on its connection, as the
   threads of one session do. `reading` reads without waiting, during a write too.
 - **Every session follows.** After a commit, the tables' `changed` is emitted in the session

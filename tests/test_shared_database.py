@@ -15,7 +15,7 @@ import weakref
 import zipfile
 from contextlib import closing
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import pytest
 from typing_extensions import override
@@ -68,7 +68,9 @@ class _BookModel(DatabaseModel):
     book: Book
 
 
-def _book_model(location: Optional[Path] = None) -> type[_BookModel]:
+def _book_model(
+    location: Union[Path, Callable[[], Path], None] = None,
+) -> type[_BookModel]:
     """Get a model sharing a database of a class of its own: the process keeps one per class."""
 
     class OwnBook(Book):
@@ -467,6 +469,26 @@ def test_a_kept_file_is_closed_once_no_session_holds_it_and_opened_again_without
         assert len(fills) == (1 if filled else 0)
 
 
+def test_a_callable_location_gives_each_model_the_file_of_its_time(tmp_path: Path) -> None:
+    """E.g. a state folder that the app reads as it starts, and that each test sets."""
+    for name in ("first", "second"):
+        (tmp_path / name).mkdir()
+    folder = tmp_path / "first"
+    model_type = _book_model(lambda: folder / "book.sqlite")
+    alice = model_type()
+    alice.book.names.add("Ada")
+    folder = tmp_path / "second"
+    with closing(model_type()) as bob:
+        bob.book.names.add("Bob")
+        alice.book.names.add("Alan")  # alice keeps the file she was built with
+        assert bob.book.names.texts() == ["Bob"]
+    alice.close()
+
+    folder = tmp_path / "first"
+    with closing(model_type()) as carol:
+        assert carol.book.names.texts() == ["Ada", "Alan"]
+
+
 def test_a_kept_file_opened_again_waits_for_no_late_write_and_is_told_of_it(
     tmp_path: Path,
 ) -> None:
@@ -708,8 +730,10 @@ def _refused_per_session_fill(_tmp_path: Path) -> None:
     type("Refused", (DatabaseModel,), {"study": per_session(_Filled)})
 
 
-def _refused_twice_shared(_tmp_path: Path) -> None:
-    type("Refused", (DatabaseModel,), {"one": shared(Book), "other": shared(Book)})
+def _refused_twice_shared(tmp_path: Path) -> None:
+    path = tmp_path / "book.sqlite"
+    fields = {"one": shared(Book, location=path), "other": shared(Book, location=lambda: path)}
+    type("Refused", (DatabaseModel,), fields)()
 
 
 def _refused_shared_file(tmp_path: Path) -> None:
