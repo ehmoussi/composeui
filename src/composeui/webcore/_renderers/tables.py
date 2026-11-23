@@ -1383,7 +1383,7 @@ class SourceTableViewLike(ViewLike, Protocol):
     def selection_text(self) -> str: ...
     def csv_chunks(self) -> Iterator[str]: ...
 
-    export_filename: str
+    export_filename: str | None
 
 
 class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
@@ -1408,7 +1408,8 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
     above the frame. Ctrl+C in the frame posts `copy` (see `tables.js`): the selected rows'
     text (`SourceTableView.selection_text`) comes back in a hidden element, which the page
     writes to the clipboard. A link above the frame downloads the rows shown as CSV
-    (`csv_chunks`, streamed by the `/_composeui/widget/{id}/csv` route).
+    (`csv_chunks`, streamed by the `/_composeui/widget/{id}/csv` route), unless
+    `export_filename` is None.
     """
 
     #: its `dispatch` decides by event: a disabled table still scrolls and is read
@@ -1436,7 +1437,8 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
         self._refresh_dispatcher.update(
             {
                 **dict.fromkeys(
-                    ("source", "texts", "filter_texts", "filterable_columns"), self._mark_dirty
+                    ("source", "texts", "filter_texts", "filterable_columns", "export_filename"),
+                    self._mark_dirty,
                 ),
                 "row_count": self._reorder,
                 **dict.fromkeys(
@@ -1448,8 +1450,6 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
                 # shown with the order they give, which the view sends as `row_count`
                 "sort_column": lambda _view, _table, _value: None,
                 "sort_descending": lambda _view, _table, _value: None,
-                # read as the user downloads
-                "export_filename": lambda _view, _table, _value: None,
                 # never: the web orders in the request's thread (`draws_on_main_thread`)
                 "is_ordering": lambda _view, _table, _value: None,
             }
@@ -1479,17 +1479,24 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
     def _whole_html(self, *, oob: bool) -> Markup:
         return Markup(
             '<div {root_attributes} class="flex flex-col gap-2">{bar_html}'
-            # a plain link: htmx can't start a download
-            '<a class="btn btn-ghost btn-xs self-end" href="/_composeui/widget/{widget_id}/csv"'
-            " download>{export}</a>{frame_html}{copied_html}</div>"
+            "{export_html}{frame_html}{copied_html}</div>"
         ).format(
             root_attributes=self._root_attributes(oob=oob),
             bar_html=self._bar_html(),
+            export_html=self._export_html(),
             frame_html=self._frame_html(),
             copied_html=self._copied_html(),
-            widget_id=self.widget_id,
-            export=self._view.texts.get("export", ""),
         )
+
+    def _export_html(self) -> Markup:
+        """Render the link downloading the rows shown as CSV; nothing without a file name."""
+        if self._view.export_filename is None:
+            return Markup()
+        return Markup(
+            # a plain link: htmx can't start a download
+            '<a class="btn btn-ghost btn-xs self-end" href="/_composeui/widget/{widget_id}/csv"'
+            " download>{export}</a>"
+        ).format(widget_id=self.widget_id, export=self._view.texts.get("export", ""))
 
     @override
     def dispatch(self, event: str, form: Mapping[str, str]) -> None:
@@ -1558,9 +1565,12 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
             self._start, self._before = start, before
             self._mark_parts("rows")
 
-    def csv_file(self) -> tuple[str, Iterator[str]]:
-        """Get the download's name, and the rows shown as CSV, in pieces."""
-        return self._view.export_filename, self._view.csv_chunks()
+    def csv_file(self) -> tuple[str, Iterator[str]] | None:
+        """Get the download's name, and the rows shown as CSV, in pieces; None: no export."""
+        filename = self._view.export_filename
+        if filename is None:
+            return None
+        return filename, self._view.csv_chunks()
 
     def _copy(self, _form: Mapping[str, str]) -> None:
         self._copied = self._view.selection_text()

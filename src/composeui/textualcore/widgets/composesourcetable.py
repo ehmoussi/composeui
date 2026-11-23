@@ -64,7 +64,8 @@ class ComposeSourceTable(ScrollView, can_focus=True):
     emits the position of the row the user clicked, or the cursor's on Space, and whether
     Shift extends the selection to it. `row_activated` emits it on a double click or
     Enter. A selected row has the primary color. `copy_requested` emits on Ctrl+C. Its
-    key `e` asks where to export the rows as CSV, which `export_path_chosen` emits.
+    key `e` asks where to export the rows as CSV, which `export_path_chosen` emits, unless
+    `set_export_filename` took it away.
     """
 
     BINDINGS: ClassVar[list[BindingType]] = [
@@ -118,9 +119,21 @@ class ComposeSourceTable(ScrollView, can_focus=True):
         self.row_activated: Signal[int] = Signal()
         self.copy_requested: SignalNoArgs = SignalNoArgs()
         self.export_path_chosen: Signal[Path] = Signal()
-        #: the name the export's dialog offers
-        self.export_filename = "table.csv"
+        #: the name the export's dialog offers; None: no export
+        self.export_filename: str | None = "table.csv"
         self.set_export_text("Export CSV")
+
+    def set_export_filename(self, filename: str | None) -> None:
+        """Name the file the export's dialog offers; None takes the export's key away."""
+        self.export_filename = filename
+        self.refresh_bindings()
+
+    @override
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        # False also leaves the key out of the footer
+        if action == "export":
+            return self.export_filename is not None
+        return super().check_action(action, parameters)
 
     def set_export_text(self, text: str) -> None:
         """Describe the key exporting the rows, e.g. in the app's footer."""
@@ -135,7 +148,8 @@ class ComposeSourceTable(ScrollView, can_focus=True):
         self.app.push_screen(dialog, self._export_path_chosen)
 
     def _export_path_chosen(self, path: Path | None) -> None:
-        if path is not None:
+        # the app can take the export away while the dialog is open
+        if path is not None and self.export_filename is not None:
             self.export_path_chosen.emit(
                 path if _is_csv(path) else path.with_name(f"{path.name}.csv")
             )

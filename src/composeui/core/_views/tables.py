@@ -1908,7 +1908,9 @@ class SourceTableView(View):
     on Qt and Textual, Shift extends the selection (`extend_to`), and a double click or
     Enter activates the row (`activate_at`). Ctrl+C copies the selected rows to the
     clipboard (`selection_text`). Export CSV writes the rows shown to a file
-    (`export_csv`): Qt's context menu, Textual's key `e`, the web's link under the rows.
+    (`export_csv`): Qt's button and context menu, Textual's key `e`, the web's link above the
+    rows.
+    `export_filename` None takes Export CSV away, e.g. from a list with nothing to keep.
 
     While `filterable_columns` names columns, a filter bar shows above the rows, as a
     `TableView`'s: a search, "+ Filter" opening an editor of a column and a value, and the
@@ -2013,8 +2015,8 @@ class SourceTableView(View):
     )
     #: the columns the user filters in the table's bar, by name: none hides the bar
     filterable_columns: list[str] = attrs.field(factory=list[str])
-    #: the name Export CSV offers for the file; the app's, not a study's
-    export_filename: str = attrs.field(default="table.csv", metadata={OMIT: True})
+    #: the name Export CSV offers for the file; the app's, not a study's. None: no Export CSV
+    export_filename: Optional[str] = attrs.field(default="table.csv", metadata={OMIT: True})
     selection_mode: SelectionMode = attrs.field(
         default=SelectionMode.SINGLE, on_setattr=_reconcile_mode
     )

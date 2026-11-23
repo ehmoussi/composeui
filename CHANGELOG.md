@@ -11,6 +11,10 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `SourceTableView.export_filename` set to `None` removes Export CSV from the table: the
+  web's link, Qt's button and context menu entry, and Textual's key `e`. The web also refuses
+  the table's CSV address.
+
 - `ParsedInputView`, with `RowParsedInputView` and `LabelRowParsedInputView`, takes a value
   typed in the app's own format, such as a memory typed as "4 GB" or a time as "1h 30m". The
   app gives `parse` and `format`. `value` is `None` while the text can't be read, and the text

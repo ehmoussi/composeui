@@ -1379,6 +1379,35 @@ def test_a_large_table_s_button_exports_its_rows_as_csv(
         ]
 
 
+def test_a_large_table_without_an_export_filename_offers_no_export_csv(
+    qtbot: QtBot, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    view = RoomsDataMainView()
+    view.rooms.export_filename = None
+    view.render(RendererType.QT)
+    box = _widget(view.rooms)
+    assert isinstance(box, QDataFilterTable)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    qtbot.waitExposed(window)
+    action = box.table.export_action
+
+    # an invisible action stays out of the context menu, and hides its button
+    assert (action.isVisible(), box.export.isVisible()) == (False, False)
+    view.rooms.export_filename = "rooms.csv"
+    assert (action.isVisible(), box.export.isVisible()) == (True, True)
+
+    def get_save_file_name(*_args: object) -> tuple[str, str]:
+        view.rooms.export_filename = None  # e.g. a job's callback, while the dialog is open
+        return str(tmp_path / "rooms.csv"), ""
+
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", get_save_file_name)
+    qtbot.mouseClick(box.export, Qt.MouseButton.LeftButton)
+    qtbot.waitUntil(lambda: not view.jobs.is_running)  # an export writes in a job
+    assert list(tmp_path.iterdir()) == []
+
+
 def test_a_check_all_box_follows_its_column_turning_read_only_or_plain(qtbot: QtBot) -> None:
     view = CellWidgetsMainView()
     view.render(RendererType.QT)

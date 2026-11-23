@@ -923,7 +923,7 @@ class WebSession(RenderTarget):
     def table_csv(self, widget_id: str) -> tuple[str, Iterator[str]] | None:
         """Get the file name and the CSV, in pieces, of one of this session's large tables.
 
-        None if it isn't one.
+        None if it isn't one, or if it doesn't export (`export_filename` None).
 
         The rows shown at the call (`SourceTableView.csv_chunks`), each piece read under the
         session's lock: the session's other requests go on between two pieces.
@@ -932,7 +932,10 @@ class WebSession(RenderTarget):
             renderer = self.renderers.get(widget_id)
             if not isinstance(renderer, WebSourceTableRenderer):
                 return None
-            filename, chunks = renderer.csv_file()
+            csv_file = renderer.csv_file()
+            if csv_file is None:
+                return None
+            filename, chunks = csv_file
 
         def locked() -> Iterator[str]:
             # the source must stay open until the last row
