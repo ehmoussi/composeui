@@ -785,15 +785,45 @@
   /* a console's Copy all writes its whole text to the clipboard: the page holds the lines
      the view keeps. Without the clipboard (a page over plain HTTP from another host), it
      selects the text instead, for the user's Ctrl+C. */
+  /** @type {WeakMap<HTMLElement, {timer: number}>} */
+  var consoleCopies = new WeakMap();
+  /** @param {HTMLElement} box */
+  function selectConsoleText(box) {
+    window.getSelection()?.selectAllChildren(box);
+  }
   document.addEventListener("click", function (event) {
-    var button = /** @type {Element} */ (event.target).closest("[data-copy-console]");
+    const button = /** @type {Element} */ (event.target).closest("[data-copy-console]");
     if (!(button instanceof HTMLElement)) return;
-    var box = document.getElementById(/** @type {string} */ (button.dataset.copyConsole));
+    const box = document.getElementById(/** @type {string} */ (button.dataset.copyConsole));
     if (box === null) return;
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(/** @type {string} */ (box.textContent)).catch(function () {});
+      var status = /** @type {HTMLElement} */ (button.nextElementSibling);
+      var copied = /** @type {HTMLElement} */ (
+        button.querySelector(".cui-console-copy > :last-child")
+      );
+      var attempt = {timer: 0};
+      clearTimeout(consoleCopies.get(button)?.timer);
+      consoleCopies.set(button, attempt);
+      button.removeAttribute("data-console-copied");
+      status.textContent = "";
+      navigator.clipboard.writeText(/** @type {string} */ (box.textContent)).then(function () {
+        // A replaced button or an older attempt must not announce success.
+        if (!button.isConnected || consoleCopies.get(button) !== attempt) return;
+        button.setAttribute("data-console-copied", "");
+        status.textContent = copied.textContent;
+        attempt.timer = window.setTimeout(function () {
+          if (consoleCopies.get(button) !== attempt) return;
+          button.removeAttribute("data-console-copied");
+          status.textContent = "";
+          consoleCopies.delete(button);
+        }, 1800);
+      }, function () {
+        if (consoleCopies.get(button) !== attempt) return;
+        consoleCopies.delete(button);
+        if (document.activeElement === button) selectConsoleText(box);
+      });
     } else {
-      /** @type {Selection} */ (window.getSelection()).selectAllChildren(box);
+      selectConsoleText(box);
     }
   });
   function keepConsoles() {

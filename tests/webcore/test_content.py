@@ -282,6 +282,24 @@ def test_a_console_shows_its_ansi_colors_in_inline_styles_and_drops_them_when_as
         assert styles(body, f"{output_id}-text") == []
 
 
+def test_a_console_uses_the_translated_copy_confirmation_with_older_labels() -> None:
+    views: list[RunMainView] = []
+
+    class RunApp(WebApplication[RunMainView]):
+        @override
+        def setup_session(self, main_view: RunMainView) -> None:
+            main_view.set_language("fr")
+            main_view.output.texts = {"copy": "Copier le journal", "save": "Exporter le journal"}
+            views.append(main_view)
+
+    with _Browser(RunApp(build_main_view=RunMainView).create_starlette_app()) as client:
+        page = client.get("/").text
+        console = _element(page, _widget_id(views[-1].output.renderer))
+        buttons = [attributes for tag, attributes in console.descendants if tag == "button"]
+        assert [button["aria-label"] for button in buttons] == ["Copier le journal"]
+        assert "Copié" in console.text
+
+
 def test_a_console_s_link_downloads_its_text() -> None:
     views: list[RunMainView] = []
 

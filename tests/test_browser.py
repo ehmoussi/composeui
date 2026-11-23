@@ -2382,10 +2382,38 @@ def test_a_console_s_copy_all_writes_its_whole_text_to_the_clipboard(
     console = page.locator("pre")
     expect(console).to_contain_text("Progress 100%")
 
-    page.get_by_role("button", name="Copy all").click()
+    button = page.get_by_role("button", name="Copy all")
+    width = _box(button)["width"]
+    copied = button.get_by_text("Copied", exact=True)
+    expect(copied).to_have_css("opacity", "0")
+    button.click()
 
     lines = ["Ready <ok>", *(f"Step {step}" for step in range(1, 31)), "Progress 100%"]
+    expect(page.get_by_role("status").filter(has_text="Copied")).to_have_text("Copied")
+    expect(copied).to_have_css("opacity", "1")
+    assert _box(button)["width"] == pytest.approx(width, abs=0.5)
     assert _clipboard_becomes(page, "\n".join(lines))
+
+    # A denied write selects the output for manual copy but must not say it was copied.
+    protocol = context.new_cdp_session(page)
+    context.clear_permissions()
+    context_id = protocol.send("Target.getTargetInfo")["targetInfo"]["browserContextId"]
+    for unsanitized in (True, False):
+        protocol.send(
+            "Browser.setPermission",
+            {
+                "permission": {"name": "clipboard-write", "allowWithoutSanitization": unsanitized},
+                "setting": "denied",
+                "origin": run_base_url,
+                "browserContextId": context_id,
+            },
+        )
+    button.click()
+    page.wait_for_function(
+        "() => window.getSelection()?.toString().includes('Progress 100%')", timeout=5000
+    )
+    expect(copied).to_have_css("opacity", "0")
+    expect(page.get_by_role("status").filter(has_text="Copied")).to_have_count(0)
     context.close()
 
 
@@ -3938,7 +3966,8 @@ def _clipboard_becomes(page: Page, text: str) -> bool:
         page.evaluate(
             """async text => {
                 for (let tries = 0; tries < 100; tries++) {
-                    if (await navigator.clipboard.readText() === text) return true;
+                    const contents = await navigator.clipboard.readText();
+                    if (contents.replace(/\\r\\n/g, "\\n") === text) return true;
                     await new Promise(resolve => requestAnimationFrame(resolve));
                 }
                 return false;

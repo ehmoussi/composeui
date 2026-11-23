@@ -330,6 +330,7 @@ _LINE_BREAKS = re.compile(r"(\r\n|\n|\r)")
 CONSOLE_TEXTS: Mapping[str, str] = {
     "save": T("Save output"),
     "copy": T("Copy all"),
+    "copied": T("Copied"),
     "search": T("Search"),
     "matches": T("{current} of {count}"),
     "no_match": T("No match"),
