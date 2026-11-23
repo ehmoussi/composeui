@@ -545,7 +545,7 @@ a job: the session can delete the file that this thread reads.
 
 The end of the session deletes every copy, also while a job reads it. A server that stops ends
 its sessions. A server that crashes, or that the system kills, leaves the copies in the temporary
-folder.
+folder, until an app starts again: the start removes them.
 
 ## Folder path input
 

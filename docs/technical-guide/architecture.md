@@ -243,6 +243,35 @@ be excluded:
 - Text that the app's code sets, not the user, takes the `UI_TEXT` metadata key. See
   [Saving and loading state](../user-guide/building-views.md#saving-and-loading-state).
 
+## Temporary files and the exit
+
+- **A folder per process.** `scratch_directory` (`core/_files.py`) gives each process a folder in
+  `composeui-scratch-<uid>` (`composeui-scratch` on Windows), in the system's temporary folder. The
+  SQLite model's scratch databases, a study's temporary files, the web's uploads and idle sessions,
+  and a reload's state go in it. The process holds a SQLite lock on its `lock.sqlite` while it runs.
+  The operating system releases the lock however the process ends.
+- **A start removes a crash's files.** `Application` removes the folders that no process holds. It
+  leaves a folder younger than a minute: its process locks it only once it made it. When another
+  user owns `composeui-scratch-<uid>`, or may write in it, or a file is at its path, the process
+  uses a folder of `mkdtemp` instead, which no start removes. A file that another user puts at that
+  path doesn't stop the app.
+- **Unfinished files beside the user's.** `partial_path` names a file beside its destination,
+  renamed over it once complete. It first records the file's path in the process's folder. A
+  start removes the files that an abandoned folder records.
+- **A reload's child holds its supervisor's folder** (`hold_scratch`). If the supervisor is
+  killed first, the child's files stay until the child ends.
+- **The exit waits for the writes.** A connection closed during another thread's statement crashes
+  the process. Each database of the SQLite model counts the turns and the readers that use it. At
+  Python's exit, `_close_at_exit` refuses new uses: a job's thread waits for the process's end, and
+  the main thread gets `RefusedError`. Both are refused outside the model's locks
+  (`_refuse_at_exit`): a job's thread that waits holds no lock that the main thread needs. The exit
+  waits `EXIT_WAIT_SECONDS` for the uses to end. It then interrupts the statements left, on the
+  turns' connection and on the readers' connections, and waits `INTERRUPTED_WAIT_SECONDS`. It then
+  closes each database that no thread uses, and that no other thread still running made. Python runs
+  the `weakref` finalizers before: a database's finalizer is kept off Python's exit, and a close
+  detaches it to run it. A web server that stops waits in the same way for the databases of the
+  sessions that it closed (`wait_for_closed_writes`): uvicorn ends without Python's exit.
+
 ## A button click
 
 An event goes from the toolkit's widget to the view, and a change goes back from the view to

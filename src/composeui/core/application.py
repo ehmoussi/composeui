@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, ClassVar, Generic, Optional, Protocol, TextIO,
 import attrs
 from typing_extensions import TypedDict, TypeVarTuple, Unpack, overload, override
 
+from composeui.core._files import cleanup_abandoned
 from composeui.core._views.base import _STREAM_HANDLER as VIEW_STREAM_HANDLER
 from composeui.core._views.base import LOGGER as VIEW_LOGGER
 from composeui.core._views.base import set_references
@@ -296,6 +297,7 @@ class Application(Generic[MainViewT]):
     can_autosave: ClassVar[bool] = False
 
     def __init__(self, *, build_main_view: Callable[[], MainViewT]) -> None:
+        cleanup_abandoned()  # what a crash left: nothing else would remove it
         take_filter_patterns()  # a mistyped setting stops the app here, not at a first filter
         if self.backend is not None:
             _Running.backend = self.backend

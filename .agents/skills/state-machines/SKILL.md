@@ -131,8 +131,9 @@ These are common answers, grouped by kind. Your table can need another one.
 - **A restored session owns only what it can prove is its own.** A saved state that names a path
   can be wrong or changed: check the path before the session can delete it, as `_saved_uploads` in
   `webcore/session.py` does. See the `web-security` skill.
-- **Write beside a file, then rename.** Use `_partial_path` and `_publish` in `core/_views/files.py`. A
-  failure or a cancel leaves the previous file, and reports no success.
+- **Write beside a file, then rename.** Use `partial_path` in `core/_files.py` and `_publish` in
+  `core/_views/files.py`. A failure or a cancel leaves the previous file, and reports no success.
+  After a crash, the next start removes the unfinished file.
 - **Cleanup goes in `finally`, and restores what was there before.** Restore a previous state,
   such as `blockSignals`' return value, rather than a constant.
 

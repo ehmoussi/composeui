@@ -37,8 +37,9 @@ from typing import TYPE_CHECKING
 import attrs
 from typing_extensions import override
 
+from composeui.core._files import partial_path
 from composeui.core._views.base import _retranslate
-from composeui.core._views.files import _partial_path, _publish
+from composeui.core._views.files import _publish
 from composeui.core.translation import CATALOGS_DIR, load_catalog
 from composeui.core.view import MainView
 
@@ -307,14 +308,11 @@ def write_catalog(main_view_class: type[MainView], language: str) -> tuple[Path,
     path = directory / f"{language}.json"
     directory.mkdir(parents=True, exist_ok=True)
     # beside it, then over it: a failed write leaves the translator's catalog as it was
-    partial = _partial_path(path)
-    try:
+    with partial_path(path) as partial:
         partial.write_text(
             json.dumps(catalog, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
         )
         _publish(partial, path)
-    finally:
-        partial.unlink(missing_ok=True)
     return path, added
 
 

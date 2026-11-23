@@ -119,10 +119,12 @@ tables through the database (`model.study.runs.add(...)`).
   The database is a scratch copy in a temporary file. So the user's file changes only
   when the user saves it, and a failed save leaves the file whole. Opening checks everything
   first. When a file does not fit, the study stays as it was, and a notification says why.
-- **Exits during a write.** When the app exits while a job writes to the database, the exit
-  waits up to 5 s for the write, then interrupts it. The job's write then fails, and its
-  transaction rolls back. A web server that stops waits in the same way for the jobs of the
-  sessions that it closes.
+- **Exits during a write.** When the app exits while a job writes to the database, the exit waits up
+  to 5 s for the write, then interrupts it. The job's write then fails, and its transaction rolls
+  back. A web server that stops waits in the same way for the jobs of the sessions that it closes. A
+  crash or a kill leaves the database's temporary file. The next app that starts removes it, once
+  the crashed process's folder is unchanged for a minute. A script that only builds a model, without
+  an app, removes nothing.
 - **Versions.** Raise the database's `schema_version` with every change to the tables. Add
   the step from the previous version to its `migrations` (`{1: add_stress_column}`). When the
   user opens a study saved by an older version, the database is brought up to date. A study
@@ -235,7 +237,8 @@ bob.close()
   runs of the app. SQLite then waits for the disk at each commit (`synchronous = NORMAL`). A
   file of a newer version is refused, with `InvalidStateError`. The process closes the file
   once no session holds it, such as between two tests. The next model opens it again, without
-  `fill`. Without `location`, the database is a temporary file, deleted as the process ends.
+  `fill`. Without `location`, the database is a temporary file, deleted as the process ends,
+  or after a crash, as an app starts again.
 - **A file chosen as the model is built.** A callable `location` gives the file as each model
   is built, such as a file in a state folder that the app reads as it starts, or that each test
   sets: `shared(Crm, location=lambda: Path(os.environ["CRM_FOLDER"]) / "crm.sqlite")`. When

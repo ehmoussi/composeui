@@ -23,8 +23,9 @@ import unicodedata
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 
+from composeui.core._files import partial_path, scratch_directory
 from composeui.core._views.dialogs import dialogs_in
-from composeui.core._views.files import _partial_path, _publish
+from composeui.core._views.files import _publish
 from composeui.core.model import InvalidStateError
 from composeui.core.reactivity import batch, stop_reactions
 from composeui.core.registry import RendererType
@@ -194,12 +195,11 @@ def _keep_in_folder(
             pass
         path = folder / f"{stem}-{number}{suffix}"
         number += 1
-    partial = _partial_path(path)
     try:
-        shutil.move(str(received), str(partial))
-        _publish(partial, path)  # with the mode the folder gives a new file
+        with partial_path(path) as partial:
+            shutil.move(str(received), str(partial))
+            _publish(partial, path)  # with the mode the folder gives a new file
     except BaseException:
-        partial.unlink(missing_ok=True)
         path.unlink(missing_ok=True)
         raise
     return path
@@ -236,7 +236,7 @@ def _saved_uploads(file: Path, uploads_folder: Path | None) -> Path | None:
     if not file.exists():
         return None
     path = Path(file.read_text(encoding="utf-8"))
-    parent = Path(tempfile.gettempdir()) if uploads_folder is None else uploads_folder
+    parent = scratch_directory() if uploads_folder is None else uploads_folder
     is_ours = path.parent == parent and path.name.startswith("composeui-")
     return path if is_ours and path.is_dir() and not path.is_symlink() else None
 
@@ -658,7 +658,7 @@ class WebSession(RenderTarget):
             is_held = renderer.holds_file if isinstance(renderer, WebTableRenderer) else _no_path
             return _keep_in_folder(folder, name, received, is_held)
         if isinstance(renderer, WebActionRenderer):
-            path = Path(tempfile.mkdtemp(prefix="composeui-"), name)
+            path = Path(tempfile.mkdtemp(prefix="composeui-", dir=scratch_directory()), name)
             shutil.move(str(received), str(path))
             return path
         if isinstance(renderer, WebTableRenderer):
@@ -735,10 +735,17 @@ class WebSession(RenderTarget):
         message = f"Can't open {filename!r}{others}: {error}."
         return self._respond(functools.partial(self.main_view.notify, message, LogType.ERROR))
 
+    def _uploads_parent(self) -> Path:
+        """Get the folder of the session's uploads: the server's, else the process's own."""
+        if self._uploads_folder is None:
+            return scratch_directory()
+        self._uploads_folder.mkdir(mode=0o700, exist_ok=True)
+        return self._uploads_folder
+
     def _upload_directory(self, widget_id: str) -> Path:
         """Get a new directory for a field's upload, which `_hold_upload` makes the field's."""
         if self._uploads is None:
-            self._uploads = Path(tempfile.mkdtemp(prefix="composeui-", dir=self._uploads_folder))
+            self._uploads = Path(tempfile.mkdtemp(prefix="composeui-", dir=self._uploads_parent()))
         field = self._uploads / widget_id
         field.mkdir(exist_ok=True)
         return Path(tempfile.mkdtemp(dir=field))
@@ -774,7 +781,7 @@ class WebSession(RenderTarget):
         its own directory, removed once no path of `kept` is in it.
         """
         if self._uploads is None:
-            self._uploads = Path(tempfile.mkdtemp(prefix="composeui-", dir=self._uploads_folder))
+            self._uploads = Path(tempfile.mkdtemp(prefix="composeui-", dir=self._uploads_parent()))
         table = self._uploads / widget_id
         table.mkdir(exist_ok=True)
         for directory in table.iterdir():
@@ -817,7 +824,10 @@ class WebSession(RenderTarget):
         With `is_save`, the user saved the study (Save's post): it has no unsaved changes
         any more. A link's GET only downloads, and changes nothing.
         """
-        with self.lock, tempfile.TemporaryDirectory(prefix="composeui-") as directory:
+        with (
+            self.lock,
+            tempfile.TemporaryDirectory(prefix="composeui-", dir=scratch_directory()) as directory,
+        ):
             main_view = self.main_view
             if main_view.state_filepath is not None:
                 name = main_view.state_filepath.name
@@ -862,7 +872,7 @@ class WebSession(RenderTarget):
 
     def _open_upload(self, filename: str, content: bytes) -> bool:
         """Open an uploaded study, or say in a notification why it can't; tell if it opened."""
-        with tempfile.TemporaryDirectory(prefix="composeui-") as directory:
+        with tempfile.TemporaryDirectory(prefix="composeui-", dir=scratch_directory()) as directory:
             path = Path(directory, "study")
             path.write_bytes(content)
             try:
@@ -1147,9 +1157,13 @@ class SessionStore:
             self._uploads_folder = folder.path / UPLOADS_FOLDER_NAME
             self.open_folder()
         elif self._directory is not None:
+            # in the supervisor's folder: the next process takes them, with the sessions
+            self._uploads_folder = self._directory / UPLOADS_FOLDER_NAME
             self._find_saved(self._directory)
         elif hibernation is not None:
-            self._directory = Path(tempfile.mkdtemp(prefix="composeui-sessions-"))
+            self._directory = Path(
+                tempfile.mkdtemp(prefix="composeui-sessions-", dir=scratch_directory())
+            )
             self._owns_directory = True
 
     def open_folder(self) -> None:

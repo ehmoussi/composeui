@@ -205,8 +205,6 @@ The SQLite model is complete otherwise: do not rebuild it.
 - **Sessions that survive a crash** (Later). `session_folder` keeps them across a restart, and
   the idle ones across a crash: a copy of each session in memory at intervals, with its uploads
   kept while a copy names them and one writer for its last use.
-- **Cleanup after a crash** (Now). The next start removes the temporary files that a crash or a
-  kill left.
 - **Formulas in CSV exports** (Now: a `shared` database holds what other users wrote). A table's
   Export CSV and `frame_content` escape a text cell that a spreadsheet would run as a formula,
   with a way to keep the exact values.

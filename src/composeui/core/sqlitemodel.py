@@ -51,6 +51,7 @@ from urllib.request import HTTPRedirectHandler, build_opener, urlopen
 import attrs
 from typing_extensions import dataclass_transform, override
 
+from composeui.core._files import partial_path, scratch_directory
 from composeui.core._views.tables import ColumnKind, column_kind
 from composeui.core.jobs import current_job
 from composeui.core.model import InvalidStateError, Model, RefusedError
@@ -2107,28 +2108,26 @@ class _SharedStore:
         if location is not None and location.exists():
             return self._opened(location)
         core = self.database_type()
-        # a kept file is made beside, then renamed: a failed fill leaves none
-        path = None if location is None else _beside(location)
-        engine = _Engine(core, self.pragmas, path=path, shared=True)
-        core._engine = engine  # noqa: SLF001 (the engine it's built for)
-        try:
-            if job is not None:
-                core.fill(job)
-                # a fill may stop early and return, e.g. once its last session left
-                job.raise_if_canceled()
-            if location is None or path is None:  # a temporary file: the engine's own
-                return _Generation(core, engine)
-            engine.finish_file()
-        except BaseException:
-            engine.close()
-            if path is not None:
-                _remove_file(path)
-            raise
-        with self._lock:
-            if location.exists():  # pragma: no cover (filled meanwhile by a canceled run)
-                _remove_file(path)
-            else:
-                path.replace(location)
+        with contextlib.ExitStack() as files:
+            # a kept file is made beside, then renamed: a failed fill, or a crash, leaves none
+            path = None if location is None else files.enter_context(partial_path(location))
+            engine = _Engine(core, self.pragmas, path=path, shared=True)
+            core._engine = engine  # noqa: SLF001 (the engine it's built for)
+            try:
+                if job is not None:
+                    core.fill(job)
+                    # a fill may stop early and return, e.g. once its last session left
+                    job.raise_if_canceled()
+                if location is None or path is None:  # a temporary file: the engine's own
+                    return _Generation(core, engine)
+                engine.finish_file()
+            except BaseException:
+                engine.close()
+                raise
+            with self._lock:
+                # else filled meanwhile by a canceled run: this one's file goes with `path`
+                if not location.exists():  # pragma: no branch
+                    path.replace(location)
         return self._opened(location)
 
     def _opened(self, location: Path) -> _Generation:
@@ -2402,7 +2401,10 @@ class _Database:
         journal = pragmas.get("journal_mode")
         self._journal = None if journal is None else _pragma_statement("journal_mode", journal)
         if path is None:
-            fd, name = tempfile.mkstemp(prefix="composeui-", suffix=".sqlite")
+            # the process's own folder: a crash's file goes at the next start
+            fd, name = tempfile.mkstemp(
+                prefix="composeui-", suffix=".sqlite", dir=scratch_directory()
+            )
             os.close(fd)
             path = Path(name)
         self.path = path
@@ -2559,13 +2561,6 @@ def _close_at_exit() -> None:
 
 # a job's thread is a daemon: Python's exit doesn't wait for it
 atexit.register(_close_at_exit)
-
-
-def _beside(location: Path) -> Path:
-    """Get a new file's path beside `location`, for a file renamed to it once complete."""
-    fd, name = tempfile.mkstemp(prefix=f"{location.name}-", suffix=".partial", dir=location.parent)
-    os.close(fd)
-    return Path(name)
 
 
 def _remove_file(path: Path) -> None:

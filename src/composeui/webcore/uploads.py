@@ -21,6 +21,8 @@ from python_multipart.multipart import parse_options_header
 from starlette.concurrency import run_in_threadpool
 from starlette.exceptions import HTTPException
 
+from composeui.core._files import scratch_directory
+
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
@@ -295,7 +297,9 @@ async def receive_upload(
     directory = None
     # no room for a folder: the body is still read, for a notification to say so
     with contextlib.suppress(OSError):
-        directory = Path(await run_in_threadpool(tempfile.mkdtemp, prefix="composeui-"))
+        directory = Path(
+            await run_in_threadpool(tempfile.mkdtemp, prefix="composeui-", dir=scratch_directory())
+        )
     try:
         yield await _receive_multipart(request, directory, max_size, min_free_disk)
     finally:

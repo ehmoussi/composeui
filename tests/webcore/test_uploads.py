@@ -67,6 +67,18 @@ class _UploadMainView(MainView):
     field: FilePathInputView = child(FilePathInputView)
 
 
+def _files_in(folder: Path) -> list[Path]:
+    """Get what's in `folder` and below, but the process's own folder in it and its lock."""
+    # `composeui-scratch-<uid>` on POSIX, `composeui-scratch` on Windows
+    return [
+        path
+        for path in folder.rglob("*")
+        if path.name != "lock.sqlite"
+        and not path.name.startswith("composeui-scratch")
+        and not path.parent.name.startswith("composeui-scratch")
+    ]
+
+
 @pytest.mark.parametrize("limit", [1024, 8 * 1024 * 1024])
 def test_a_main_view_sets_the_largest_file_a_user_can_upload(
     monkeypatch: pytest.MonkeyPatch, limit: int
@@ -133,7 +145,7 @@ def test_an_upload_stops_going_to_the_disk_once_over_the_limit(
 
     assert asyncio.run(receive())
     assert 0 < max(written) <= 1_000_000
-    assert list(tmp_path.iterdir()) == []  # the scratch folder is gone
+    assert _files_in(tmp_path) == []  # the scratch folder is gone
 
 
 def test_the_files_of_a_form_each_keep_their_own_bytes_and_share_one_limit(
@@ -152,7 +164,7 @@ def test_the_files_of_a_form_each_keep_their_own_bytes_and_share_one_limit(
     assert asyncio.run(receive(6)) == (None, [("a.csv", b"123"), ("b.csv", b"456")])
     # each under the limit, but not together
     assert asyncio.run(receive(5))[0] is UploadRefusal.TOO_LARGE
-    assert list(tmp_path.iterdir()) == []
+    assert _files_in(tmp_path) == []
 
 
 def _disk_with(*free: int) -> mock.Mock:
@@ -186,7 +198,7 @@ def test_an_upload_stops_going_to_the_disk_once_it_runs_short(
 
     assert asyncio.run(receive()) is UploadRefusal.NO_ROOM
     assert sum(1 for size in sizes if size > 0) < 6  # it stopped, and its bytes are gone
-    assert list(tmp_path.iterdir()) == []
+    assert _files_in(tmp_path) == []
 
 
 class _BufferedTailFails:
@@ -262,7 +274,7 @@ def test_a_full_disk_says_so_and_never_hands_over_a_cut_file(
         status = _swapped(response.text, _widget_id(main_view.notification.renderer))
         assert status.text == "Can't open 'small.csv': the server has no room for it right now."
         assert dataset.file is None
-        assert list(tmp_path.iterdir()) == []
+        assert _files_in(tmp_path) == []
 
 
 def test_a_file_that_would_fill_the_disk_is_refused_and_keeps_the_field_s_file(
@@ -357,7 +369,7 @@ def test_a_malformed_upload_hands_nothing_over_and_leaves_no_file(
 
     assert response.status_code == 400
     assert picked == []
-    assert list(tmp_path.iterdir()) == []
+    assert _files_in(tmp_path) == []
 
 
 def test_a_server_that_stops_removes_the_uploads_of_its_sessions() -> None:
@@ -393,7 +405,7 @@ def test_an_upload_that_arrives_after_its_session_ended_stays_nowhere(
     assert _pick_file(session, field.widget_id, "late.csv", b"1,2") is None
 
     assert measurements.path is None
-    assert list(tmp_path.iterdir()) == []
+    assert _files_in(tmp_path) == []
 
 
 @pytest.mark.parametrize(
@@ -457,7 +469,7 @@ def test_an_upload_is_one_file_on_the_disk_as_its_callbacks_run(
         field = _part(dataset, "field")
         files: list[list[Path]] = []
         dataset.uploaded.connect(
-            lambda _file: files.append([p for p in tmp_path.rglob("*") if p.is_file()])
+            lambda _file: files.append([path for path in _files_in(tmp_path) if path.is_file()])
         )
         url = f"/_composeui/widget/{field.widget_id}/file"
 
