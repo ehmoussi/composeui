@@ -80,6 +80,37 @@
       /** @type {HTMLInputElement} */ (box).indeterminate = true;
     });
   });
+  /* An ordinary edit can swap in a new body without changing its layout. An anchor survives
+     that swap, but not a new layout in which the same id may name a different row. */
+  /** @type {{id: string, version: string | undefined} | null} */
+  var checkAnchor = null;
+  document.addEventListener("click", function (event) {
+    var box = event.target;
+    if (!(box instanceof HTMLInputElement) || !("checkColumn" in box.dataset) || box.disabled) return;
+    var body = /** @type {HTMLElement} */ (box.closest("tbody"));
+    var previous = checkAnchor === null ? null : document.getElementById(checkAnchor.id);
+    if (event.shiftKey && previous instanceof HTMLInputElement && previous !== box &&
+        !previous.disabled && previous.closest("tbody") === body &&
+        previous.dataset.checkColumn === box.dataset.checkColumn &&
+        body.dataset.checkBody === checkAnchor?.version) {
+      // The native click has changed `checked` already. Cancel its individual `change` post.
+      event.preventDefault();
+      htmx.ajax("post", /** @type {string} */ (box.getAttribute("hx-post")), {
+        source: body,
+        swap: "none",
+        values: {
+          event: "check_range",
+          body: body.dataset.checkBody,
+          column: box.dataset.checkColumn,
+          anchor: previous.dataset.checkRow,
+          row: box.dataset.checkRow,
+          checked: box.checked ? "on" : "",
+        },
+      });
+    } else {
+      checkAnchor = {id: box.id, version: body.dataset.checkBody};
+    }
+  });
   /* a table's filter editor: its regular expression toggle shows only for a column a
      pattern filters, and the value's placeholder hints at what filters the column picked */
   document.addEventListener("change", function (event) {

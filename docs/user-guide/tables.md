@@ -179,6 +179,8 @@ What each backend shows:
     toggles it instead of sorting.
 - **The web** shows a check box, a `<select>`, a button, or a link-like button. A click on
   a widget does not select its row.
+  - Click a check box, then Shift+click another box in the same column to check or clear a
+    range. The range follows the displayed row order and skips disabled or covered cells.
   - A file path's "…" button uploads the file that the user picks in the browser. The session
     keeps a copy of the file, and the cell shows the copy's path.
   - At the table's next upload, the session removes each copy whose path no cell of the table

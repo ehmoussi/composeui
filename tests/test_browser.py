@@ -80,6 +80,7 @@ from tests.splitter import SplitterMainView, VerticalSplitterMainView
 from tests.studyfiles import StudyFileMainView, StudyFilesTableMainView
 from tests.tables import (
     CellWidgetsMainView,
+    CheckRangeMainView,
     DataFilesTableMainView,
     EditableTableMainView,
     MillionRowsMainView,
@@ -2753,6 +2754,74 @@ def test_a_table_s_cell_widgets_change_their_cells_without_selecting_their_row(
     for box in boxes.all():
         expect(box).not_to_be_checked()
     expect(keep_all).to_be_focused()
+
+
+@pytest.mark.parametrize("hold_anchor", [False, True], ids=["after-swap", "before-swap"])
+def test_shift_click_checks_and_clears_the_displayed_range_in_one_post(
+    browser: Browser, *, hold_anchor: bool
+) -> None:
+    app = WebApplication(build_main_view=CheckRangeMainView).create_starlette_app()
+    with _serve(app) as url, browser.new_context(base_url=url) as context:
+        page = context.new_page()
+        page.goto("/")
+        with _posted(page):
+            page.get_by_role("button", name="Room", exact=True).click()
+
+        def box(name: str) -> Locator:
+            return (
+                page.get_by_role("row").filter(has_text=name).get_by_role("checkbox", name="Heated")
+            )
+
+        alpha, bravo, charlie, delta, echo = (
+            box(name)
+            for name in ("Room Alpha", "Room Bravo", "Room Charlie", "Room Delta", "Room Echo")
+        )
+        expect(bravo).to_be_disabled()
+        expect(page.get_by_text("Elsewhere")).to_be_hidden()
+        held: list[tuple[Route, APIResponse]] = []
+        if hold_anchor:
+
+            def delay_anchor(route: Route) -> None:
+                held.append((route, route.fetch()))
+
+            page.route("**/widget/*", delay_anchor, times=1)
+            with page.expect_request(lambda request: request.method == "POST"):
+                alpha.check()
+        else:
+            with _posted(page):
+                alpha.check()  # a RecordTableView swaps its body after the edit
+        requests: list[str] = []
+        page.on("request", lambda request: requests.append(request.method))
+
+        with _posted(page):
+            delta.click(modifiers=["Shift"])
+        expect(delta).to_be_checked()
+        if hold_anchor:
+            # The range reached the server while the page still held the old body.
+            [(route, answer)] = held
+            with _posted(page):
+                route.fulfill(response=answer)
+            expect(delta).to_be_checked()
+        expect(charlie).to_be_checked()
+        expect(bravo).not_to_be_checked()
+        expect(echo).not_to_be_checked()
+        expect(delta).to_be_focused()
+        assert requests.count("POST") == 1
+
+        with _posted(page):
+            delta.click(modifiers=["Shift"])
+        expect(alpha).not_to_be_checked()
+        expect(charlie).not_to_be_checked()
+        expect(delta).not_to_be_checked()
+        assert requests.count("POST") == 2
+
+        # A new row order discards the old anchor.
+        with _posted(page):
+            page.get_by_role("button", name="Room", exact=True).click()
+        with _posted(page):
+            delta.click(modifiers=["Shift"])
+        expect(delta).to_be_checked()
+        expect(charlie).not_to_be_checked()
 
 
 def test_a_double_click_or_f2_edits_a_cell_keeping_what_is_typed_through_a_swap(

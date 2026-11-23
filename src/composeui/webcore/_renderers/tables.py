@@ -22,6 +22,7 @@ from composeui.core.view import (
     SEARCH_DELAY_MS,
     CellKind,
     NodeMark,
+    RecordTableView,
     SelectionMode,
     as_pattern,
 )
@@ -534,6 +535,9 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
 
     def __init__(self, view: TableViewLike) -> None:
         super().__init__(view)
+        self._body_number = 0
+        self._check_layout: tuple[object, ...] = ()
+        self._table_render = 0
         #: the cell the user is editing, by row and column
         self._editing: tuple[int, int] | None = None
         self._server_files: _ServerFiles | None = None
@@ -591,6 +595,11 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             "files": self._files_html,
             "files-list": self._files_list_html,
         }
+
+    @override
+    def to_html(self, *, oob: bool = False) -> Markup:
+        self._table_render += 1
+        return super().to_html(oob=oob)
 
     @override
     def _whole_html(self, *, oob: bool) -> Markup:
@@ -723,8 +732,13 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             Markup("<tr>{}</tr>").format(Markup("").join(bottom)) if groups else ""
         )
         return self._table_part(
-            Markup('<thead id="{widget_id}-head"{oob}>{rows}</thead>').format(
-                widget_id=self.widget_id, oob=self._oob(oob=oob), rows=rows
+            Markup(
+                '<thead id="{widget_id}-head" data-table-render="{render}"{oob}>{rows}</thead>'
+            ).format(
+                widget_id=self.widget_id,
+                render=self._table_render,
+                oob=self._oob(oob=oob),
+                rows=rows,
             ),
             oob=oob,
         )
@@ -759,14 +773,74 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             arrow=arrow,
         )
 
-    def _body_html(self, *, oob: bool = False) -> Markup:
-        shown = self._view.shown_rows
-        styles = self._view.shown_cell_styles()
-        covered = {
+    @staticmethod
+    def _covered_cells(styles: Mapping[tuple[int, int], CellStyle]) -> set[tuple[int, int]]:
+        return {
             (position + offset, column)
             for (position, column), style in styles.items()
             for offset in range(1, style.row_span)
         }
+
+    def _check_columns_key(self) -> tuple[object, ...]:
+        view = self._view
+        return (
+            tuple(view.headers),
+            tuple(view.editable_columns),
+            tuple(view.columns) if isinstance(view, RecordTableView) else (),
+        )
+
+    def _check_row_key(self, row: int, editable: list[int]) -> tuple[object, ...]:
+        view = self._view
+        checks = {
+            column
+            for column in editable
+            if (widget := view.cell_widget(row, column)) is not None
+            and widget.kind is CellKind.CHECK_BOX
+        }
+        cells = view.rows[row]
+        text = tuple(
+            cells[column] if column < len(cells) else ""
+            for column in range(max(len(cells), len(view.headers)))
+            if column not in checks
+        )
+        record_key: tuple[tuple[int, object], ...] = ()
+        if checks and isinstance(view, RecordTableView):
+            record = view.records[row]
+            check_fields = {view.columns[column].field for column in checks}
+            values = (
+                getattr(record, field.name, attrs.NOTHING)
+                for field in attrs.fields(type(record))
+                if field.name not in check_fields
+            )
+            # Keep non-checkbox fields, including hidden ones. Compare their identities
+            # without asking arbitrary field values to support equality.
+            record_key = tuple((id(value), value) for value in values)
+        return checks, text, record_key
+
+    def _check_body_number(self) -> int:
+        view = self._view
+        editable = self._editable_columns()
+        rows = (
+            tuple(self._check_row_key(row, editable) for row in view.shown_rows) if editable else ()
+        )
+        layout = (
+            self._check_columns_key(),
+            tuple(view.row_headers),
+            tuple(view.shown_rows),
+            {cell: (style.is_enabled, style.row_span) for cell, style in view.cell_styles.items()},
+            rows,
+        )
+        # Check the live view at dispatch as well as at render time: a job can change
+        # the view before its fragments reach the page. Checking a box alone keeps the layout.
+        if layout != self._check_layout:
+            self._check_layout = layout
+            self._body_number += 1
+        return self._body_number
+
+    def _body_html(self, *, oob: bool = False) -> Markup:
+        shown = self._view.shown_rows
+        styles = self._view.shown_cell_styles()
+        covered = self._covered_cells(styles)
         rows = Markup("").join(
             self._row_html(index, self._view.rows[index], position, styles, covered)
             for position, index in enumerate(shown)
@@ -778,8 +852,15 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
                 '<tr><td colspan="{}" class="text-center opacity-70">{}</td></tr>'
             ).format(columns, no_match)
         return self._table_part(
-            Markup('<tbody id="{widget_id}-body"{oob}>{rows}</tbody>').format(
-                widget_id=self.widget_id, oob=self._oob(oob=oob), rows=rows
+            Markup(
+                '<tbody id="{widget_id}-body" data-table-render="{render}"'
+                ' data-check-body="{number}"{oob}>{rows}</tbody>'
+            ).format(
+                widget_id=self.widget_id,
+                render=self._table_render,
+                number=self._check_body_number(),
+                oob=self._oob(oob=oob),
+                rows=rows,
             ),
             oob=oob,
         )
@@ -961,12 +1042,15 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             return Markup(
                 '<input id="{widget_id}" type="checkbox" class="checkbox checkbox-sm"'
                 ' name="checked" value="on" aria-label="{header}"{checked}'
+                ' data-check-row="{row}" data-check-column="{column}"'
                 '{post} hx-trigger="change"'
                 ' autocomplete="off"{value}>'
             ).format(
                 widget_id=widget_id,
                 header=header,
                 checked=checked,
+                row=row,
+                column=column,
                 post=self._post({"event": "check", **values}),
                 value="" if is_editable else " disabled",
             )
@@ -1129,6 +1213,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             return
         handlers = {
             "check": self._check,
+            "check_range": self._check_range,
             "pick": self._pick,
             "check_all": self._check_all,
             "click_cell": self._click_cell,
@@ -1280,6 +1365,59 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
     def _check(self, form: Mapping[str, str]) -> None:
         self._set_widget_cell(
             self._widget_cell(form, (CellKind.CHECK_BOX,)), CHECKED_TEXTS["checked" in form]
+        )
+
+    def _check_range(self, form: Mapping[str, str]) -> None:
+        self._mark_parts("head", "body", "count")
+        if form.get("body") != str(self._check_body_number()):
+            return  # an older body
+        checked = form.get("checked")
+        editable = self._editable_columns()
+        column = next((c for c in editable if str(c) == form.get("column")), None)
+        if column is None or checked not in ("on", ""):
+            return
+        shown = list(self._view.shown_rows)
+        ends = (form.get("anchor"), form.get("row"))
+        positions = [position for position, row in enumerate(shown) if str(row) in ends]
+        if len(positions) != len(ends):
+            return
+        first, last = positions
+        covered = self._covered_cells(self._view.shown_cell_styles())
+        targets = [
+            row
+            for position, row in enumerate(shown[first : last + 1], first)
+            if (position, column) not in covered and self._check_box_cell(row, column)
+        ]
+        if not {shown[first], shown[last]}.issubset(targets):
+            return
+        changed_to = checked == "on"
+        rows = [(row, self._check_row_key(row, editable)) for row in targets]
+        columns_key = self._check_columns_key()
+        styles = self._view.cell_styles.copy()
+        by_row = {row: position for position, row in enumerate(shown)}
+        for row, before in rows:
+            # A callback can change the layout before the next edit.
+            if not self.takes_events or self._check_columns_key() != columns_key:
+                break
+            if self._view.shown_rows != shown or self._view.cell_styles != styles:
+                shown = list(self._view.shown_rows)
+                styles = self._view.cell_styles.copy()
+                by_row = {index: position for position, index in enumerate(shown)}
+                covered = self._covered_cells(self._view.shown_cell_styles())
+            position = by_row.get(row)
+            if (
+                position is not None
+                and (position, column) not in covered
+                and self._check_box_cell(row, column)
+                and self._view.is_checked(row, column) != changed_to
+                and self._check_row_key(row, editable) == before
+            ):
+                self._view.edit_cell(row, column, CHECKED_TEXTS[changed_to])
+
+    def _check_box_cell(self, row: int, column: int) -> bool:
+        return (
+            self._widget_cell({"row": str(row), "column": str(column)}, (CellKind.CHECK_BOX,))
+            is not None
         )
 
     def _pick(self, form: Mapping[str, str]) -> None:

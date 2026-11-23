@@ -211,6 +211,14 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   its message, which `syncInvalidFields` marks the field by.
 - **A check-all box posts its state.** A click does what the page showed, partly checked to
   checked, not what the server would decide from its own rows, which a stale page may not show.
+- **A check-box range posts the version of the rows shown.** A redraw alone keeps the version.
+  Toggling a box also keeps it if only its checked state changes. The server compares the
+  posted version with the current table, including updates it has not sent yet. If the versions
+  differ, it sends the current rows without applying the range. Each edit can run a callback.
+  The server checks the next cell again before editing it.
+- **A late table response must not replace a newer render.** If a swap removed the control
+  that sent a request, the page compares the server's render numbers before applying its
+  table fragments. Send order does not tell which response is newer: a post can miss its turn.
 
 ## Order and sessions
 

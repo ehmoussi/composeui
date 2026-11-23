@@ -260,23 +260,28 @@
     requestNumber += 1;
     event.detail.xhr.composeuiNumber = requestNumber;
   });
-  document.addEventListener("htmx:beforeSwap", function (event) {
-    var number = event.detail.xhr.composeuiNumber;
-    if (number === undefined) return;
-    var sent = number;
+  /** @param {string} response @param {(fragment: Element) => boolean} isOlder */
+  function freshFragments(response, isOlder) {
     var answer = document.createElement("template");
-    answer.innerHTML = event.detail.serverResponse;
+    answer.innerHTML = response;
     var isStale = false;
     Array.from(answer.content.children).forEach(function (fragment) {
-      if (fragment.id === "" || !fragment.hasAttribute("hx-swap-oob")) return;
-      if ((fragmentNumbers[fragment.id] || 0) > sent) {
+      if (isOlder(fragment)) {
         fragment.remove();
         isStale = true;
-      } else {
-        fragmentNumbers[fragment.id] = sent;
       }
     });
-    if (isStale) event.detail.serverResponse = answer.innerHTML;
+    return isStale ? answer.innerHTML : response;
+  }
+  document.addEventListener("htmx:beforeSwap", function (event) {
+    const sent = event.detail.xhr.composeuiNumber;
+    if (sent === undefined) return;
+    event.detail.serverResponse = freshFragments(event.detail.serverResponse, function (fragment) {
+      if (fragment.id === "" || !fragment.hasAttribute("hx-swap-oob")) return false;
+      if ((fragmentNumbers[fragment.id] || 0) > sent) return true;
+      fragmentNumbers[fragment.id] = sent;
+      return false;
+    });
   });
   /* Save and Save As submit a form, which carries no header: its fields carry the same */
   document.addEventListener("submit", function (event) {
@@ -335,6 +340,17 @@
      before the answer to a click on another row) still swaps its fragments: htmx looks
      for them from the element, which is no longer in the page. Whether it is, is read
      before htmx handles the answer, which may swap it out itself. */
+  /** @param {Element} fragment */
+  function isOlderTablePart(fragment) {
+    var part = fragment instanceof HTMLTemplateElement ? fragment.content.firstElementChild
+      : fragment.matches('[data-cui="table"][hx-swap-oob]')
+        ? fragment.querySelector("tbody[data-table-render]") : null;
+    var rendered = part?.getAttribute("data-table-render");
+    if (part === null || rendered == null) return false;
+    var current = document.getElementById(part.id)?.getAttribute("data-table-render");
+    // A request that missed its turn can run later. Compare server renders, not send order.
+    return current != null && Number(rendered) < Number(current);
+  }
   document.addEventListener("htmx:beforeRequest", function (event) {
     var element = event.detail.elt;
     var request = event.detail.xhr;
@@ -344,7 +360,7 @@
     });
     request.addEventListener("load", function () {
       if (isReplaced && request.status === 200) {
-        htmx.swap(document.body, request.responseText, {
+        htmx.swap(document.body, freshFragments(request.responseText, isOlderTablePart), {
           swapStyle: "none", swapDelay: 0, settleDelay: 0,
         });
       }

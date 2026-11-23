@@ -21,6 +21,7 @@ from composeui.core._views.tables import SOURCE_TABLE_WINDOW
 from composeui.core.model import RefusedError
 from composeui.core.registry import RendererType
 from composeui.core.view import (
+    CellStyle,
     CellWidget,
     EditRefusedError,
     SelectionMode,
@@ -38,6 +39,7 @@ from examples.studyinputs import INPUT_FOLDER, OUTPUT_FILE, PATH, StudyInputsMai
 from tests.studyfiles import StudyFilesTableMainView, StudyPathsMainView
 from tests.tables import (
     CellWidgetsMainView,
+    CheckRangeMainView,
     DataFilesTableMainView,
     EditableTableMainView,
     MillionRowsMainView,
@@ -1471,6 +1473,199 @@ def test_a_table_answers_a_stale_page_s_posts_with_itself_as_it_now_is() -> None
         assert _find(same_role, table_id) is None  # nothing to show again
         assert _find(unsorted, f"{table_id}-body") is not None
         assert _find(read_only_check_all, f"{table_id}-head") is not None
+
+
+@pytest.fixture
+def check_ranges() -> Iterator[tuple[TestClient, CheckRangeMainView]]:
+    views: list[CheckRangeMainView] = []
+
+    def build() -> CheckRangeMainView:
+        view = CheckRangeMainView()
+        views.append(view)
+        return view
+
+    with _Browser(WebApplication(build_main_view=build).create_starlette_app()) as client:
+        client.get("/")
+        yield client, views[-1]
+
+
+def _draw_check_body(client: TestClient, widget_id: str) -> str:
+    token = _element(client.get("/").text, f"{widget_id}-body").attributes["data-check-body"]
+    assert token is not None
+    return token
+
+
+def test_a_check_range_refuses_stale_bodies_and_unavailable_endpoints(
+    check_ranges: tuple[TestClient, CheckRangeMainView],
+) -> None:
+    client, view = check_ranges
+    table = view.rooms
+    widget_id = _widget_id(table.renderer)
+
+    table.records = [
+        Room(room.name, room.temperature, is_heated=index == 4)
+        for index, room in enumerate(table.records)
+    ]
+    stale = _draw_check_body(client, widget_id)
+    client.post(f"/widget/{widget_id}", data={"event": "sort", "column": "0"})
+    for values in (
+        {"body": stale},
+        {"anchor": "1"},  # hidden by the search
+        {"anchor": "3"},  # disabled box
+        {"column": "0"},  # not editable
+        {"checked": "invalid"},  # not a request to clear the range
+    ):
+        body = _draw_check_body(client, widget_id)
+        answer = client.post(
+            f"/widget/{widget_id}",
+            data={
+                "event": "check_range",
+                "body": body,
+                "column": "1",
+                "anchor": "4",
+                "row": "0",
+                "checked": "on",
+                **values,
+            },
+        )
+        _swapped(answer.text, f"{widget_id}-body")
+        assert [room.name for room in table.records if room.is_heated] == ["Room Alpha"]
+
+
+@pytest.mark.parametrize("replace_visible_text", [True, False], ids=["visible", "hidden-field"])
+def test_a_check_range_refuses_rows_replaced_before_the_next_response(
+    check_ranges: tuple[TestClient, CheckRangeMainView], *, replace_visible_text: bool
+) -> None:
+    client, view = check_ranges
+    table = view.rooms
+    renderer = table.renderer
+    assert renderer is not None
+    widget_id = _widget_id(renderer)
+    body = _draw_check_body(client, widget_id)
+
+    # A job can hand over new rows while the browser still shows the old ones.
+    name = "Room New" if replace_visible_text else "Room Echo"
+    replacement = Room(name, 18, occupants=1)
+    records = [*table.records[:2], replacement, *table.records[3:]]
+    renderer.call_on_main_thread(lambda: setattr(table, "records", records))
+    response = client.post(
+        f"/widget/{widget_id}",
+        data={
+            "event": "check_range",
+            "body": body,
+            "column": "1",
+            "anchor": "0",
+            "row": "4",
+            "checked": "on",
+        },
+    )
+    assert name in _element(response.text, f"{widget_id}-body").text
+    assert not any(room.is_heated for room in table.records)
+
+
+def test_another_page_showing_the_same_rows_does_not_invalidate_a_check_range(
+    check_ranges: tuple[TestClient, CheckRangeMainView],
+) -> None:
+    client, view = check_ranges
+    table = view.rooms
+    widget_id = _widget_id(table.renderer)
+    body = _draw_check_body(client, widget_id)
+    assert "Room Echo" in client.get("/").text  # another tab with the same session cookie
+    client.post(
+        f"/widget/{widget_id}",
+        data={
+            "event": "check_range",
+            "body": body,
+            "column": "1",
+            "anchor": "0",
+            "row": "4",
+            "checked": "on",
+        },
+    )
+    assert [room.name for room in table.records if room.is_heated] == [
+        "Room Delta",
+        "Room Echo",
+        "Room Alpha",
+    ]
+
+
+def test_a_check_range_leaves_covered_and_already_checked_cells_alone(
+    check_ranges: tuple[TestClient, CheckRangeMainView],
+) -> None:
+    client, view = check_ranges
+    table = view.rooms
+    widget_id = _widget_id(table.renderer)
+    table.cell_styles = {(3, 1): CellStyle(is_enabled=False, row_span=2)}
+    table.records = [
+        Room(room.name, room.temperature, is_heated=index == 2)
+        for index, room in enumerate(table.records)
+    ]
+    events: list[int] = []
+
+    def remember(row: int) -> None:
+        events.append(row)
+
+    table.cell_edited.connect(remember)
+    body = _draw_check_body(client, widget_id)
+    client.post(
+        f"/widget/{widget_id}",
+        data={
+            "event": "check_range",
+            "body": body,
+            "column": "1",
+            "anchor": "2",
+            "row": "5",
+            "checked": "on",
+        },
+    )
+    assert events == [5]
+    assert [room.name for room in table.records if room.is_heated] == ["Room Echo", "Room Charlie"]
+
+
+@pytest.mark.parametrize(
+    "change", ["replace-row", "hide-row", "span", "disable-cell", "disable-table", "change-columns"]
+)
+def test_a_check_range_rechecks_cells_after_each_callback(
+    check_ranges: tuple[TestClient, CheckRangeMainView], change: str
+) -> None:
+    client, view = check_ranges
+    table = view.rooms
+    widget_id = _widget_id(table.renderer)
+    edits: list[int] = []
+
+    def change_rows(row: int) -> None:
+        edits.append(row)
+        if row != 4:
+            return
+        if change == "replace-row":
+            table.records = [*table.records[:5], Room("Room New", 18)]
+        elif change == "hide-row":
+            table.search = "Alpha"
+        elif change == "span":
+            table.cell_styles = {**table.cell_styles, (4, 1): CellStyle(row_span=2)}
+        elif change == "disable-cell":
+            table.cell_styles = {**table.cell_styles, (5, 1): CellStyle(is_enabled=False)}
+        elif change == "disable-table":
+            table.is_enabled = False
+        else:
+            table.headers = ["Room", "Warm"]
+
+    table.cell_edited.connect(change_rows)
+    body = _draw_check_body(client, widget_id)
+    client.post(
+        f"/widget/{widget_id}",
+        data={
+            "event": "check_range",
+            "body": body,
+            "column": "1",
+            "anchor": "4",
+            "row": "5",
+            "checked": "on",
+        },
+    )
+    assert edits == [4]
+    assert table.records[5].name == ("Room New" if change == "replace-row" else "Room Charlie")
+    assert not table.records[5].is_heated
 
 
 def test_a_table_cell_picked_keeps_the_rows_the_app_answers_with() -> None:

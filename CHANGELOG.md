@@ -91,6 +91,8 @@ backends' modules included, can change in any release without an entry here.
 
 - On the web, the console's Copy all button shows "Copied" after a successful copy.
   The button keeps its width.
+- On the web, Shift+click checks or clears a range of check boxes in the same table column.
+  It follows the displayed row order and skips disabled or covered cells.
 - On the web, a `SplitterView` shows a grip where the pointer meets the divider. The grip
   stays in the center on touch screens and when the divider has keyboard focus.
 - On the web, the underline slides to the tab you click without delaying selection. It moves

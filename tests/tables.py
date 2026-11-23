@@ -119,6 +119,39 @@ class SortedRoomsMainView(MainView):
 
 
 @define_view
+class CheckRangeMainView(MainView):
+    app_title = "Heated rooms"
+    extension = ".rooms"
+
+    rooms: RecordTableView[Room] = child(
+        RecordTableView[Room],
+        columns=[
+            Column("name", "Room", sortable=True, filterable=True),
+            Column(
+                "is_heated", "Heated", editable=True, widget=CellWidget.check_box(check_all=True)
+            ),
+        ],
+    )
+
+    @override
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.rooms.records = [
+            Room(name, 18)
+            for name in (
+                "Room Delta",
+                "Elsewhere",
+                "Room Echo",
+                "Room Bravo",
+                "Room Alpha",
+                "Room Charlie",
+            )
+        ]
+        self.rooms.search = "Room"
+        self.rooms.cell_styles = {(3, 1): CellStyle(is_enabled=False)}
+
+
+@define_view
 class CellWidgetsMainView(MainView):
     """A table of variables: kept or not, their role picked, a button and a link each."""
 
