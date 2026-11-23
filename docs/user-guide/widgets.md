@@ -1279,8 +1279,10 @@ The user selects and copies the text on each backend. What each backend shows:
 - **The web** shows a box of preformatted text, and wraps a long line. A change sends only the
   new lines.
   - A "Save output" link above the text downloads it.
-  - A "Copy all" button copies the text. To write the clipboard, the web needs a secure page
-    (HTTPS, or `localhost`). Elsewhere, the button selects the text, for the user's Ctrl+C.
+  - A "Copy all" button copies the text. After a successful copy, it briefly shows "Copied"
+    (`texts["copied"]`). To write to the clipboard, the web needs a secure page (HTTPS or
+    `localhost`). If the clipboard is unavailable, the button selects the text for Ctrl+C.
+    It also selects the text if the clipboard refuses the copy while the button has focus.
   - A search field above the text finds the matches. Shift+Enter shows the previous match.
 
 ## The File menu and picking a file

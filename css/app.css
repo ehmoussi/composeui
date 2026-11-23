@@ -524,6 +524,35 @@ body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {
   /* its lines' offsets, for a search to scroll to a match */
   position: relative;
 }
+/* Both labels size the button, even when only one is visible. */
+.cui-console-copy {
+  display: inline-grid;
+  overflow: hidden;
+}
+.cui-console-copy > span {
+  grid-area: 1 / 1;
+}
+.cui-console-copy > :last-child,
+[data-console-copied] .cui-console-copy > :first-child {
+  opacity: 0;
+}
+[data-console-copied] .cui-console-copy > :last-child {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .cui-console-copy > span {
+    transition: opacity 160ms ease-out, transform 160ms ease-out;
+  }
+  .cui-console-copy > :last-child {
+    transform: translateY(-0.4em);
+  }
+  [data-console-copied] .cui-console-copy > :first-child {
+    transform: translateY(0.4em);
+  }
+  [data-console-copied] .cui-console-copy > :last-child {
+    transform: none;
+  }
+}
 /* a console's search: black on amber, the current match darker, as on Qt and Textual */
 ::highlight(cui-match) {
   background-color: #fde68a;
