@@ -284,7 +284,7 @@ def _fail_the_choice_s_folder(monkeypatch: pytest.MonkeyPatch) -> None:
     real_mkdtemp = tempfile.mkdtemp
 
     def mkdtemp(**kwargs: str) -> str:
-        if "dir" in kwargs:  # the folder of an upload, not the request's scratch folder
+        if "prefix" not in kwargs:  # the folder of an upload, not the request's scratch folder
             raise OSError(errno.ENOSPC, "full")
         return real_mkdtemp(**kwargs)
 

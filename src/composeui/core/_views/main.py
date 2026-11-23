@@ -29,6 +29,7 @@ from cattrs.gen import make_dict_unstructure_fn
 from cattrs.gen import override as attribute_override
 from typing_extensions import override
 
+from composeui.core._files import partial_path
 from composeui.core._views import base
 from composeui.core._views.actions import FileMenu, LanguageMenu
 from composeui.core._views.base import (
@@ -60,7 +61,6 @@ from composeui.core._views.files import (
     DownloadedFile,
     SavePathInputMixin,
     StreamContent,
-    _partial_path,
     _publish,
     is_within_roots,
 )
@@ -694,13 +694,10 @@ class MainView(View):
     def save_state(self, filepath: Path) -> None:
         """Save the current state into a json file, with its versions (`file_data`)."""
         path = filepath.resolve()
-        partial = _partial_path(path)
-        try:
+        with partial_path(path) as partial:
             with partial.open("w") as f:
                 json.dump(self.file_data(), f)
             _publish(partial, path)
-        finally:
-            partial.unlink(missing_ok=True)
         self.state_filepath = filepath
 
     def has_unsaved_changes(self) -> bool:

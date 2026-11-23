@@ -215,6 +215,13 @@ backends' modules included, can change in any release without an entry here.
   uses. A job that asks for a database once the exit started waits for the process's end. A
   web server that stops waits in the same way for the writes of the sessions that it closed.
 
+- A crash or a kill doesn't leave temporary files for good any more. Each process keeps them in a
+  folder of its own, in `composeui-scratch-<uid>` (`composeui-scratch` on Windows) in the system's
+  temporary folder. An app's start removes the folders of the processes that ended: SQLite scratch
+  databases, uploads, idle web sessions, a study's temporary files, and the unfinished file of a
+  save or a download beside the user's file. Two saves of one study at once no longer share their
+  unfinished file.
+
 - A web session with a `session_ttl` longer than 14 days ends after `session_ttl` without a
   request, up to the 400 days that a browser keeps a cookie: before, its cookie lasted 14 days,
   and the session ended with it.

@@ -396,7 +396,7 @@ def test_a_web_server_that_stops_interrupts_a_closed_session_s_write_once_it_wai
             sessions[0][0].jobs.start(count)
             assert running.wait(20)
         # closed under its write, the database's file stayed as long as the write went on
-        assert list(tmp_path.glob("composeui-*")) == []
+        assert list(tmp_path.rglob("composeui-*.sqlite*")) == []
     finally:
         stop.set()
         ended.wait(20)  # a web session's jobs have no `Jobs.wait`

@@ -596,7 +596,7 @@ assert running.wait(30)
     # closed under the statement, the connection crashed the process
     assert (result.returncode, result.stderr) == (0, "")
     # closed once the statement is over, the database's file is removed
-    assert list((tmp_path / "temporary").iterdir()) == []
+    assert list((tmp_path / "temporary").rglob("composeui-*.sqlite*")) == []
 
 
 @pytest.mark.parametrize(
@@ -627,7 +627,7 @@ assert held.wait(30)
 
     assert (result.returncode, result.stderr) == (0, "")
     # the process's end releases it, and the next start removes its file
-    assert len(list((tmp_path / "temporary").glob("composeui-*.sqlite"))) > 0
+    assert len(list((tmp_path / "temporary").rglob("composeui-*.sqlite"))) > 0
 
 
 def test_python_s_exit_waits_for_a_job_s_write_that_ends_meanwhile(tmp_path: Path) -> None:

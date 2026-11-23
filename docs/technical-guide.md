@@ -25,6 +25,7 @@ This guide explains how ComposeUI works and how to contribute to it. To build an
   - [Reactive methods](technical-guide/architecture.md#reactive-methods)
   - [Shared data](technical-guide/architecture.md#shared-data)
   - [View state](technical-guide/architecture.md#view-state)
+  - [Temporary files and the exit](technical-guide/architecture.md#temporary-files-and-the-exit)
   - [A button click](technical-guide/architecture.md#a-button-click)
 - <a id="design-of-the-web-backend" name="design-of-the-web-backend"></a>
   [Design of the web backend](technical-guide/web-backend.md)

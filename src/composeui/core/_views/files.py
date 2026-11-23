@@ -5,7 +5,6 @@ from __future__ import annotations
 import io
 import mimetypes
 import shutil
-import uuid
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import (
@@ -20,6 +19,7 @@ from typing import (
 import attrs
 from typing_extensions import override
 
+from composeui.core._files import partial_path as _partial_path
 from composeui.core._views.base import OMIT, UI_TEXT, LogType, View, define_view, emit_if_made
 from composeui.core._views.inputs import InputMixin
 from composeui.core.signal import Signal, SignalNoArgs
@@ -509,11 +509,6 @@ class FileUploadView(FileUploadMixin, View):
     _renderer_key = "file_upload"
 
 
-def _partial_path(path: Path) -> Path:
-    """Get a name beside `path`, its own, to write a file before it replaces `path`."""
-    return path.with_name(f".{path.name}.{uuid.uuid4().hex}.partial")
-
-
 def _publish(partial: Path, path: Path) -> None:
     """Replace `path` with the whole file `partial`, as one step, keeping `path`'s mode."""
     if path.exists():
@@ -534,19 +529,17 @@ def save_download(
         _save_stream(main_view, path, content)
         return
     target = path.resolve()
-    partial = _partial_path(target)
     try:
-        if isinstance(content, Path):
-            shutil.copyfile(content, partial)
-        else:
-            partial.write_bytes(content)
-        _publish(partial, target)
+        with _partial_path(target) as partial:
+            if isinstance(content, Path):
+                shutil.copyfile(content, partial)
+            else:
+                partial.write_bytes(content)
+            _publish(partial, target)
     except OSError as error:
         failed = main_view.tr("Can't save to {name}: {error}.")
         main_view.notify(failed.format(name=path.name, error=error), LogType.ERROR)
         return
-    finally:
-        partial.unlink(missing_ok=True)
     main_view.status_bar.show_message(main_view.tr("Saved {name}.").format(name=path.name))
 
 
@@ -575,8 +568,7 @@ def _write_stream(job: Job[bool], content: StreamContent, path: Path) -> bool:
     or failed, it leaves the file `path` as it was.
     """
     path = path.resolve()
-    partial = _partial_path(path)
-    try:
+    with _partial_path(path) as partial:
         with partial.open("wb") as file:
 
             def put(piece: bytes) -> None:
@@ -595,8 +587,6 @@ def _write_stream(job: Job[bool], content: StreamContent, path: Path) -> bool:
                     return False
                 raise
         _publish(partial, path)
-    finally:
-        partial.unlink(missing_ok=True)
     return True
 
 
@@ -607,14 +597,11 @@ def _write_csv(job: Optional[Job[bool]], chunks: Iterator[str], path: Path) -> b
     source can't read, a full disk), it leaves the file `path` as it was. Tell if it wrote it.
     """
     path = path.resolve()
-    partial = _partial_path(path)
-    try:
+    with _partial_path(path) as partial:
         with partial.open("w", encoding="utf-8", newline="") as file:
             for chunk in chunks:
                 if job is not None and job.is_canceled:
                     return False
                 file.write(chunk)
         _publish(partial, path)
-    finally:
-        partial.unlink(missing_ok=True)
     return True

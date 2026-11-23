@@ -44,6 +44,7 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 from typing_extensions import override
 
+from composeui.core._files import hold_scratch, scratch_directory
 from composeui.core._views.base import made_signals, view_fields
 from composeui.core._views.tables import FILTER_PATTERNS_VARIABLE
 from composeui.core.application import Application, WebSettings, _add_reference_to_signals
@@ -485,10 +486,10 @@ def create_reloaded_starlette_app() -> Starlette:
     if len(apps) == 0:
         msg = f"{name} didn't run a WebApplication"
         raise RuntimeError(msg)
-    return apps[0].create_starlette_app(
-        saved_sessions=Path(os.environ[_SAVED_SESSIONS_VARIABLE]),
-        secret_key=secret_key,
-    )
+    saved_sessions = Path(os.environ[_SAVED_SESSIONS_VARIABLE])
+    # in the supervisor's folder: kept until this process ends, if the supervisor is killed
+    hold_scratch(saved_sessions.parent)
+    return apps[0].create_starlette_app(saved_sessions=saved_sessions, secret_key=secret_key)
 
 
 class WebApplication(Application[MainViewT]):
@@ -658,7 +659,9 @@ class WebApplication(Application[MainViewT]):
             and has_change_events(Path.cwd())
         ):
             os.environ[_FORCE_POLLING_VARIABLE] = "false"
-        with tempfile.TemporaryDirectory(prefix="composeui-sessions-") as saved_sessions:
+        with tempfile.TemporaryDirectory(
+            prefix="composeui-sessions-", dir=scratch_directory()
+        ) as saved_sessions:
             # for the server's processes, which keep the sessions across its restarts
             os.environ[_SAVED_SESSIONS_VARIABLE] = saved_sessions
             os.environ[_SIGNING_VARIABLE] = secrets.token_urlsafe(32)

@@ -146,8 +146,9 @@ the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the overview.
     answers a number that it has seen with 204: don't repeat an effect. The page drops a fragment
     of an older answer once a later one showed it. See the `state-machines` skill.
 12. **Check what a restored session names.** A saved state holds paths: the session owns a
-    folder only after `_saved_uploads` checks that it is ComposeUI's, in the session folder's
-    `uploads/` or else in the temporary folder. Never delete a path that a
+    folder only after `_saved_uploads` checks that it is ComposeUI's: in the session folder's
+    `uploads/`, in a reload's saved sessions' `uploads/`, or else in the process's own folder
+    (`scratch_directory`). Never delete a path that a
     saved file gives without such a check.
 
 ## Testing

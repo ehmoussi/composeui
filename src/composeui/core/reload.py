@@ -27,6 +27,7 @@ from contextvars import ContextVar
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from composeui.core._files import hold_scratch, scratch_directory
 from composeui.core._views.main import _RELOADED_STATE, load_session_data, session_data
 from composeui.core.model import InvalidStateError
 from composeui.core.study import open_study, save_study
@@ -86,7 +87,10 @@ def is_reloaded() -> bool:
 
 
 def _state_directory() -> Path:
-    return Path(os.environ[RELOADED_VARIABLE])
+    directory = Path(os.environ[RELOADED_VARIABLE])
+    # in the supervisor's folder: kept until this process ends, if the supervisor is killed
+    hold_scratch(directory.parent)
+    return directory
 
 
 def take_changes() -> list[Path] | None:
@@ -165,7 +169,9 @@ def rerun_program() -> Any:
     pycache_prefix = sys.pycache_prefix
     importlib.invalidate_caches()  # the directories' listings, e.g. for a new module
     try:
-        with tempfile.TemporaryDirectory(prefix="composeui-pycache-") as cache:
+        with tempfile.TemporaryDirectory(
+            prefix="composeui-pycache-", dir=scratch_directory()
+        ) as cache:
             sys.pycache_prefix = cache
             _run_as_main(main)
     except _AppKept:
@@ -473,7 +479,9 @@ def run_reloading(
     previous_handler = signal.signal(signal.SIGTERM, _exit)
     child: subprocess.Popen[bytes] | None = None
     try:
-        with tempfile.TemporaryDirectory(prefix="composeui-reload-") as state_directory:
+        with tempfile.TemporaryDirectory(
+            prefix="composeui-reload-", dir=scratch_directory()
+        ) as state_directory:
             env = {**os.environ, RELOADED_VARIABLE: state_directory}
             child = subprocess.Popen(command, env=env)  # noqa: S603
             for changed in changes:

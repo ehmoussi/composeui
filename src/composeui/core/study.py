@@ -14,6 +14,7 @@ import zlib
 from pathlib import Path
 from typing import IO, TYPE_CHECKING
 
+from composeui.core._files import partial_path, scratch_directory
 from composeui.core.jobs import starting_study
 from composeui.core.model import InvalidStateError
 
@@ -60,17 +61,14 @@ def save_study(main_view: MainView, model: Model | None, path: Path) -> None:
         main_view._mark_saved()  # noqa: SLF001
         return
     # written beside `path` and renamed over it, so a failed save leaves the old study whole
-    partial = path.with_name(f".{path.name}.partial")
-    try:
-        with tempfile.TemporaryDirectory(prefix="composeui-") as directory:
+    with partial_path(path) as partial:
+        with tempfile.TemporaryDirectory(prefix="composeui-", dir=scratch_directory()) as directory:
             data_path = Path(directory, model.data_name)
             model.save_data(data_path)
             with zipfile.ZipFile(partial, "w", zipfile.ZIP_DEFLATED) as archive:
                 archive.writestr(VIEWS_NAME, json.dumps(main_view.file_data()))
                 archive.write(data_path, model.data_name)
         partial.replace(path)
-    finally:
-        partial.unlink(missing_ok=True)
     main_view.state_filepath = path
     main_view._remember_study_file(path)  # noqa: SLF001
     main_view._mark_saved()  # noqa: SLF001
@@ -137,7 +135,9 @@ def open_study(
             # before the model's data is replaced: a job writing to it would write into the
             # study opened (see `Jobs`), so it stops once its open fails too
             main_view.jobs.drop()
-            with tempfile.TemporaryDirectory(prefix="composeui-") as directory:
+            with tempfile.TemporaryDirectory(
+                prefix="composeui-", dir=scratch_directory()
+            ) as directory:
                 # the member is named after the model's file, never a path of the archive's
                 archive.extract(model.data_name, directory)
                 model.open_data(Path(directory, model.data_name))
