@@ -466,7 +466,9 @@ filters.
   `column_formats` format. In an app, a job writes the file, a window of rows at a time,
   and the status bar says when the file is done. A new order during the export does not
   change the file. `csv_chunks` gives the same text in pieces. `export_filename` is the
-  name offered for the file (`table.csv`).
+  name offered for the file (`table.csv`). Set it to `None` to remove Export CSV from a
+  table with nothing worth keeping, such as a list of files to open. Then no backend offers
+  it, and the web refuses the table's CSV address.
 
 The study saves the settings and `selected_ids`. It never saves the rows or the source:
 the app gives the view its source again, for example from its command line or its model.

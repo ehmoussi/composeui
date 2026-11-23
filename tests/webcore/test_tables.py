@@ -1406,6 +1406,33 @@ def test_a_large_table_s_link_downloads_its_rows_shown_as_csv(
     assert rooms_data_client.get("/_composeui/widget/nothing/csv").status_code == 404
 
 
+def test_a_large_table_without_an_export_filename_has_no_link_and_refuses_its_csv(
+    rooms_data_views: list[RoomsDataMainView], rooms_data_client: TestClient
+) -> None:
+    rooms_data_client.get("/")
+    (main_view,) = rooms_data_views
+    table_id = _widget_id(main_view.rooms.renderer)
+    address = f"/_composeui/widget/{table_id}/csv"
+
+    def links() -> list[str | None]:
+        """Post to the open page's table: its answer swaps the table changed meanwhile."""
+        response = rooms_data_client.post(f"/_composeui/widget/{table_id}", data={"event": "copy"})
+        return [
+            attributes.get("href")
+            for tag, attributes in _swapped(response.text, table_id).descendants
+            if tag == "a"
+        ]
+
+    main_view.rooms.export_filename = None
+    assert links() == []
+    # the address alone reads no rows
+    assert rooms_data_client.get(address).status_code == 404
+
+    main_view.rooms.export_filename = "rooms.csv"
+    assert links() == [address]
+    assert rooms_data_client.get(address).status_code == 200
+
+
 def test_a_large_table_s_bar_searches_and_filters_its_columns_by_name(
     rooms_data_views: list[RoomsDataMainView], rooms_data_client: TestClient
 ) -> None:

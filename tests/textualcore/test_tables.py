@@ -15,6 +15,7 @@ from textual.app import App
 from textual.binding import Binding
 from textual.coordinate import Coordinate
 from textual.widgets import (
+    Footer,
     Input,
 )
 from textual_fspicker.parts import DirectoryNavigation
@@ -1084,6 +1085,48 @@ async def test_a_large_table_s_key_exports_its_rows_as_csv(
         "Bedroom,19.5,1",
         "Kitchen,21.5,2",
     ]
+
+
+@pytest.mark.asyncio
+async def test_a_large_table_without_an_export_filename_has_no_export_key(
+    tmp_path: Path,
+) -> None:
+    view = RoomsDataMainView()
+    view.rooms.export_filename = None
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+
+    def footer() -> list[object]:
+        """Read the keys that the app's footer shows."""
+        return [getattr(key, "description", None) for key in pilot.app.query_one(Footer).children]
+
+    async with app.run_test(size=(80, 30)) as pilot:
+        app.query_one(ComposeSourceTable).focus()
+        await pilot.pause()
+        assert "Export CSV" not in footer()
+        await pilot.press("e")
+        await pilot.pause()
+        assert [type(screen).__name__ for screen in app.screen_stack] == ["Screen"]
+
+        view.rooms.export_filename = "rooms.csv"
+        for _ in range(100):  # the footer builds its keys again after a refresh
+            await pilot.pause()
+            if "Export CSV" in footer():
+                break
+        assert "Export CSV" in footer()
+
+        await pilot.press("e")
+        await pilot.pause()
+        view.rooms.export_filename = None  # e.g. a job's callback, while the dialog is open
+        app.screen.dismiss(tmp_path / "rooms.csv")  # as the dialog's Save button does
+        for _ in range(100):  # an export writes in a job
+            await pilot.pause(0.05)
+            if not view.jobs.is_running:
+                break
+
+    assert _names(tmp_path) == []
 
 
 @pytest.mark.asyncio

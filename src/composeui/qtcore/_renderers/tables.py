@@ -72,7 +72,7 @@ class TableViewLike(ViewLike, Protocol):
 
 class SourceTableViewLike(ViewLike, Protocol):
     texts: dict[str, str]
-    export_filename: str
+    export_filename: str | None
     sort_column: str | None
     sort_descending: bool
     search: str
@@ -114,8 +114,8 @@ class QtSourceTableRenderer(QtWidgetRenderer[SourceTableViewLike, QDataFilterTab
     `filterable_columns`: the bar knows them by their position among the source's.
     Ctrl+C copies the selected rows to the clipboard (`SourceTableView.selection_text`).
     Export CSV, above the rows and in their context menu, asks where to write the rows
-    (`export_csv`). While a job orders the rows (`is_ordering`), the cursor over them is
-    busy.
+    (`export_csv`), unless `export_filename` is None. While a job orders the rows
+    (`is_ordering`), the cursor over them is busy.
     """
 
     def __init__(self, view: SourceTableViewLike) -> None:
@@ -136,8 +136,7 @@ class QtSourceTableRenderer(QtWidgetRenderer[SourceTableViewLike, QDataFilterTab
                 "selection_mode": lambda _view, _table, _value: None,
                 "selected_ids": self._repaint,
                 "texts": self._refresh_texts,
-                # read as the user exports
-                "export_filename": lambda _view, _table, _value: None,
+                "export_filename": self._refresh_export_filename,
                 "is_ordering": self._refresh_is_ordering,
             }
         )
@@ -195,6 +194,15 @@ class QtSourceTableRenderer(QtWidgetRenderer[SourceTableViewLike, QDataFilterTab
         rendered_object.table.export_action.setText(f"{value.get('export', '')}…")
 
     @staticmethod
+    def _refresh_export_filename(
+        _view: SourceTableViewLike, rendered_object: QDataFilterTable, value: str | None
+    ) -> None:
+        # the name is read as the user exports; None takes the action away, and its button,
+        # which doesn't follow the action's visibility
+        rendered_object.table.export_action.setVisible(value is not None)
+        rendered_object.export.setVisible(value is not None)
+
+    @staticmethod
     def _refresh_is_ordering(
         _view: SourceTableViewLike, rendered_object: QDataFilterTable, value: bool
     ) -> None:
@@ -206,12 +214,14 @@ class QtSourceTableRenderer(QtWidgetRenderer[SourceTableViewLike, QDataFilterTab
 
     def _export(self) -> None:
         """Ask where to write the rows shown as CSV, and write them there."""
-        table = self._rendered_object
+        table, filename = self._rendered_object, self._view.export_filename
         assert table is not None
+        assert filename is not None  # its action shows only with a name
         path, _chosen = QFileDialog.getSaveFileName(
-            table, self._view.texts.get("export", ""), self._view.export_filename, "CSV (*.csv)"
+            table, self._view.texts.get("export", ""), filename, "CSV (*.csv)"
         )
-        if path != "":
+        # the app can take the export away while the dialog is open
+        if path != "" and self._view.export_filename is not None:
             filepath = Path(path)
             if filepath.suffix.lower() != ".csv":
                 filepath = filepath.with_name(f"{filepath.name}.csv")

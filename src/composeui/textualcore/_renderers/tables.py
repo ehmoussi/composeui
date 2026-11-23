@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 class SourceTableViewLike(ViewLike, Protocol):
     texts: dict[str, str]
-    export_filename: str
+    export_filename: str | None
     sort_column: str | None
     sort_descending: bool
     search: str
@@ -66,7 +66,8 @@ class TextualSourceTableRenderer(
     Its filter bar (`ComposeFilterBar`) searches it, and filters the columns of
     `filterable_columns`: the bar knows them by their position among the source's.
     Ctrl+C copies the selected rows to the clipboard (`SourceTableView.selection_text`),
-    through the terminal. Its key `e` asks where to write the rows as CSV (`export_csv`).
+    through the terminal. Its key `e` asks where to write the rows as CSV (`export_csv`),
+    unless `export_filename` is None.
     While a job orders the rows (`is_ordering`), Textual's loading indicator covers them.
     """
 
@@ -138,9 +139,9 @@ class TextualSourceTableRenderer(
 
     @staticmethod
     def _refresh_export_filename(
-        _view: SourceTableViewLike, rendered_object: ComposeDataFilterTable, value: str
+        _view: SourceTableViewLike, rendered_object: ComposeDataFilterTable, value: str | None
     ) -> None:
-        rendered_object.table.export_filename = value
+        rendered_object.table.set_export_filename(value)
 
     @staticmethod
     def _refresh_is_ordering(
