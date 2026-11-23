@@ -16,6 +16,7 @@ from composeui.core.application import (
     check_writable,
     logs_in_file,
 )
+from composeui.core.client import ClientCapabilities
 from composeui.core.registry import RendererType
 from composeui.core.reload import (
     is_reloaded,
@@ -141,6 +142,23 @@ def _show(
     return app.return_code == 0
 
 
+def _terminal_client() -> ClientCapabilities:
+    """Get a terminal app's capabilities: local, but no desktop over SSH or ``textual-serve``.
+
+    The user's shell runs on the app's computer, so its paths are theirs. Over SSH, or in a
+    browser through ``textual-serve`` (which sets ``TEXTUAL_DRIVER`` to its web driver), the
+    desktop of that computer isn't the user's.
+    """
+    is_remote = (
+        "SSH_CONNECTION" in os.environ
+        or "SSH_TTY" in os.environ
+        or "web_driver" in os.environ.get("TEXTUAL_DRIVER", "")
+    )
+    return ClientCapabilities(
+        shares_files=True, can_open_on_desktop=not is_remote, multi_user=False
+    )
+
+
 class TextualApplication(Application[MainViewT]):
     """The Textual app: it shows the main view in the terminal."""
 
@@ -155,6 +173,10 @@ class TextualApplication(Application[MainViewT]):
     def run(self) -> None:
         self._args = self._parse_arguments()
         _exec(self._args, self._start, self.main_view, None, self.render)
+
+    @override
+    def _client(self) -> ClientCapabilities:
+        return _terminal_client()
 
 
 class TextualModelApplication(ModelApplication[MainViewT, ModelT]):
@@ -179,6 +201,10 @@ class TextualModelApplication(ModelApplication[MainViewT, ModelT]):
     def run(self) -> None:
         self._args = self._parse_arguments()
         _exec(self._args, self._start, self.main_view, self.model, self.render)
+
+    @override
+    def _client(self) -> ClientCapabilities:
+        return _terminal_client()
 
 
 #: the backend's applications, for `composeui.core.application.run`

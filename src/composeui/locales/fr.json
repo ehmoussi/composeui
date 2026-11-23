@@ -112,5 +112,8 @@
   "Start": "Début",
   "End": "Fin",
   "From": "De",
-  "To": "À"
+  "To": "À",
+  "Can't open {name} here: the app runs on another computer.": "Impossible d'ouvrir {name} ici : l'application s'exécute sur un autre ordinateur.",
+  "Can't open {name}: it isn't there.": "Impossible d'ouvrir {name} : il n'existe pas.",
+  "Open {url} in your browser.": "Ouvrez {url} dans votre navigateur."
 }

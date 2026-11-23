@@ -226,6 +226,13 @@ class MainRenderer(Renderer[TView, TObject]):
     def download(self, file: DownloadedFile) -> None:
         """Give the user `file`, as `MainView.download` says; don't wait."""
 
+    def open_url(self, url: str) -> bool:
+        """Open `url` in the user's browser its own way, e.g. a new tab; False if it has none.
+
+        Without one, `MainView.open_url` opens it on the desktop.
+        """
+        return False
+
 
 class RendererContainer(Generic[TView]):
     """The renderers of a view shown by several widgets, e.g. a form row's label and field."""

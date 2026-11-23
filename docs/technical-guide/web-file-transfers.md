@@ -172,3 +172,28 @@ tickets for jobs and direct downloads. That alternative would require:
 
 This would save one round trip only for clicks without `in_job`. Locking each read separately
 would still allow the writer to read view values from before and after an edit.
+
+### Pages opened in a new tab
+
+`MainView.open_url` reaches the page the way a download does. A job or a callback can open a
+URL when no click response carries it, and a response can be lost.
+
+1. `WebMainRenderer.open_url` keeps the URL in the session's downloads, as an `OpenedUrl`,
+   under a ticket of its own. It counts in `MAX_DOWNLOADS`, and keeps a session in memory
+   until the page fetches it, as a file does.
+2. `downloads_marker` adds a link per URL in `#cui-downloads`:
+   `/_composeui/open/{ticket}`, hidden, with `target="_blank"` and the URL as its text.
+3. `page.js` opens a blank tab once per ticket, sets its `opener` to `null`, then sends it to
+   the link. The URL's page can't reach the app's page through `window.opener`.
+4. `GET /_composeui/open/{ticket}` marks the ticket as fetched and answers a redirect (303) to
+   the URL. A ticket of another session, or a file's ticket, gives 404, as a URL's ticket does
+   on the download route. Each route takes only its own kind (`Downloads.take`,
+   `Downloads.take_url`): a ticket of the other kind stays as it was, still listed.
+
+The redirect sends the tab only to a URL that the app's code gave: a link of another site
+can't choose the URL. `MainView.open_url` takes only `http` and `https` URLs. Not `mailto`:
+its new tab would stay blank once the mail app opens.
+
+A browser can refuse a tab that no click opened, as after a job: `window.open` then returns
+`null`. The page shows the ticket's link, in a toast, for the user to click. A click opens the
+tab, so `page.js` hides the link again. The next responses no longer list the ticket.

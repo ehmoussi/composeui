@@ -68,7 +68,7 @@ if TYPE_CHECKING:
 
     from composeui.core.model import Model
     from composeui.core.view import DownloadedFile, MainView, Router
-    from composeui.webcore.downloads import Downloads
+    from composeui.webcore.downloads import Downloads, OpenedUrl
     from composeui.webcore.streaming import Stream
     from composeui.webcore.uploads import ReceivedFile
 
@@ -975,6 +975,11 @@ class WebSession(RenderTarget):
         """
         with self.lock:
             return self._downloads.take(ticket, claim=claim)
+
+    def take_url(self, ticket: str) -> OpenedUrl | None:
+        """Get the URL of one of this session's tickets, which `open_url` gave; None if none."""
+        with self.lock:
+            return self._downloads.take_url(ticket)
 
 
 #: a session id, as `SessionStore.get_or_create` makes them: also its saved directory's name

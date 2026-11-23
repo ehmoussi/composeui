@@ -84,7 +84,8 @@ they are built:
   another way, such as a hint that names a mouse action.
 
 Prefer `renders`: its answer stays right when a backend adds a renderer. Both come from
-`composeui.core.application`.
+`composeui.core.application`. To open a folder or show a path, don't test the backend: use
+the actions of [Open folders, files and pages for the user](#open-folders-files-and-pages-for-the-user).
 
 ```python
 from composeui.core.application import current_backend, renders
@@ -114,6 +115,82 @@ assert main_view.table.is_visible
 
 Before an app is built, for example in a test that builds the main view itself,
 `current_backend()` is `None` and `renders` is `False`.
+
+### Open folders, files and pages for the user
+
+The same app can run on the user's computer or on a server that the user reaches from their
+own. The backend alone doesn't tell which. A web server on `localhost` can share the user's
+files, and a Textual app over SSH can't open their file manager. `MainView` has actions that
+adapt to where the app runs:
+
+- **`open_folder(path)`** opens the folder in the user's file manager. In WSL, Windows'
+  Explorer opens it.
+- **`open_file(path)`** opens the file in the app that the user's desktop opens it with. With
+  `download=True`, where the desktop is out of reach, the user gets the file
+  (`MainView.download`) instead.
+- **`open_url(url)`** opens the page in the user's browser, in a new tab on the web. Only
+  `http` and `https` URLs open: another raises `ValueError`.
+- **`display_path(path, roots=())`** gives the text that names a path for the user: the whole
+  path where the user shares the app's files. Elsewhere, a path inside one of `roots` shows
+  from that root, its name first (`results/run-3`), else the name alone.
+
+Where an action can't work, the page tells the user why (`notify`), and the app goes on. A
+folder that isn't there, or a file manager that doesn't start, shows an error the same way.
+Call the actions on the main thread, for example from a button's `clicked` or a job's
+`finished`.
+
+```python
+from pathlib import Path
+
+from composeui.core.view import ButtonView, LabelView, MainView, child, define_view
+
+RUNS = Path("runs")
+
+
+@define_view
+class RunView(MainView):
+    folder: LabelView = child(LabelView)
+    open_button: ButtonView = child(ButtonView, text="Open folder")
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        run_folder = RUNS / "run-3"
+        self.folder.text = self.display_path(run_folder, roots=[RUNS])
+        # a button that can't work is hidden, rather than refused at each click
+        self.open_button.is_visible = self.client.can_open_on_desktop
+        self.open_button.clicked.connect(lambda: self.open_folder(run_folder))
+```
+
+`MainView.client` says what the app can do for its user, a `ClientCapabilities` from
+`composeui.core.client`:
+
+- **`shares_files`**: a path in the app is the same path for the user.
+- **`can_open_on_desktop`**: `open_folder` and `open_file` reach the user's desktop.
+- **`multi_user`**: several people may use this process at once. It says how the app is
+  deployed, not who the user is.
+
+Read it only to hide or change a control, as for `renders`: the actions adapt by themselves.
+It is set before the app builds its main view. Each backend sets it:
+
+| Backend | `shares_files` | `can_open_on_desktop` | `multi_user` |
+| --- | --- | --- | --- |
+| Qt | yes | yes | no |
+| Textual, in a local terminal | yes | yes | no |
+| Textual over SSH or `textual-serve` | yes | no | no |
+| The web (`ClientCapabilities.served()`) | no | no | yes |
+
+On the web, `open_url` opens a new tab, whatever `client` says. A browser can refuse a tab
+that no click opened, for example after a job: the page then shows the URL as a link, which
+the user clicks. Textual served by `textual-serve` opens a tab of the user's browser too. Over
+SSH, Textual shows the URL above the page, for the user to open.
+
+Nothing in a request tells that a web server runs on the user's own computer: a container on
+`localhost` has its own files, and behind a reverse proxy every request comes from
+`127.0.0.1`. So the deployment says it. For a server on the user's computer, outside a
+container, set `WebSettings(client=ClientCapabilities.local())` (see
+[Change the server's limits](#change-the-servers-limits)). `open_folder` then opens their file
+manager, and `display_path` shows the whole path. A main view that no app runs, for example
+in a test, takes `ClientCapabilities.local()`.
 
 ## Reloading the app on a change
 
@@ -329,7 +406,7 @@ Read this section before other people use the app, on a network or behind a reve
   on disk when it stops.
 - **A session stays in memory while it holds what it can't save.** It stays while:
   - a job runs, or a request is in progress;
-  - the page has a file of `MainView.download` to fetch;
+  - the page has a file of `MainView.download` to fetch, or a page of `open_url` to open;
   - a dialog is open;
   - an upload view holds a file;
   - a large table shows a source that the app gave other than on `loaded`, for example from a

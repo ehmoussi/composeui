@@ -37,11 +37,18 @@ from composeui.core.view import (
 )
 from composeui.webcore import downloads as downloads_module
 from composeui.webcore import streaming as streaming_module
-from composeui.webcore.downloads import DOWNLOAD_TTL, FETCHED_TTL, MAX_DOWNLOADS, Downloads
+from composeui.webcore.downloads import (
+    DOWNLOAD_TTL,
+    FETCHED_TTL,
+    MAX_DOWNLOADS,
+    Downloads,
+    OpenedUrl,
+)
 from composeui.webcore.streaming import MAX_QUEUED_BYTES, Stream, StreamFailedError
 from composeui.webcore.webapplication import WebApplication
 from tests.console import RunMainView
 from tests.downloading import ReportMainView
+from tests.opening import HELP_URL, OpeningMainView
 
 if sys.version_info >= (3, 11):
     import httpx2 as httpx
@@ -119,6 +126,9 @@ def test_an_app_s_file_is_named_until_the_page_of_its_session_fetches_it(tmp_pat
         assert links(client.get(f"/_composeui/widget/{export_id}").text) == [(address, name)]
         assert links(client.get("/").text) == [(address, name)]
         stolen = other.get(address)  # the ticket is its session's alone
+        as_url = client.get(address.replace("/download/", "/open/"), follow_redirects=False)
+        assert as_url.status_code == 404  # a file, not a URL: still to fetch
+        assert links(client.get("/").text) == [(address, name)]
         head = client.head(address)
         fetched = client.get(address)
         again = client.get(address)  # e.g. a download manager's: no longer named, still kept
@@ -219,6 +229,49 @@ def test_a_file_made_in_a_job_is_named_by_the_jobs_poll_the_button_disabled_mean
     assert 'id="cui-downloads"' not in failed
 
 
+def test_a_url_the_app_opens_is_named_until_the_page_of_its_session_opens_its_tab() -> None:
+    views: list[OpeningMainView] = []
+
+    class OpeningApp(WebApplication[OpeningMainView]):
+        @override
+        def setup_session(self, main_view: OpeningMainView) -> None:
+            views.append(main_view)
+
+    def tabs(markup: str) -> tuple[list[str], str]:
+        """Get the address of each link the page opens in a new tab, and their text."""
+        marker = _element(markup, "cui-downloads")
+        found = [
+            a["href"] or ""
+            for tag, a in marker.descendants
+            if tag == "a" and "data-open" in a and a["target"] == "_blank"
+        ]
+        return found, marker.text.strip()
+
+    starlette_app = OpeningApp(build_main_view=OpeningMainView).create_starlette_app()
+    with _Browser(starlette_app) as client, _Browser(starlette_app) as other:
+        client.get("/")
+        other.get("/")
+        help_id = _widget_id(views[0].help.renderer)
+
+        body = client.post(f"/_composeui/widget/{help_id}", data={"event": "click"}).text
+        (address,), text = tabs(body)
+        assert text == HELP_URL  # shown if the browser refuses the tab
+        assert tabs(client.get("/").text) == ([address], text)  # until the tab follows it
+        ticket = address.rsplit("/", 1)[-1]
+        stolen = other.get(address, follow_redirects=False)  # its session's alone
+        as_file = client.get(f"/_composeui/download/{ticket}")  # a URL, not a file
+        assert tabs(client.get("/").text) == ([address], text)  # still to open
+        followed = client.get(address, follow_redirects=False)
+        after = client.get("/").text
+
+    assert stolen.status_code == as_file.status_code == 404
+    assert followed.status_code == 303
+    assert followed.headers["location"] == HELP_URL
+    assert followed.headers["cache-control"] == "no-store"
+    assert tabs(after) == ([], "")
+    assert views[0].notification.message == ""  # the browser opens it: nothing to tell
+
+
 def test_a_session_keeps_its_newest_files_within_its_limits(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -237,9 +290,13 @@ def test_a_session_keeps_its_newest_files_within_its_limits(
     assert kept.tickets() == []
     monkeypatch.setattr(downloads_module, "MAX_DOWNLOAD_BYTES", 4)
     kept.add(DownloadedFile("a", b"ab", "text/plain"))
-    kept.add(DownloadedFile("b", b"ab", "text/plain"))
-    kept.add(DownloadedFile("c", b"a", "text/plain"))  # 5 bytes: the oldest goes
-    assert [name for _, name in kept.tickets()] == ["b", "c"]
+    url = OpenedUrl("https://example.org")  # no bytes
+    kept.add(url)
+    b = DownloadedFile("b", b"ab", "text/plain")
+    kept.add(b)
+    c = DownloadedFile("c", b"a", "text/plain")
+    kept.add(c)  # 5 bytes: the oldest goes
+    assert [kept for _, kept in kept.tickets()] == [url, b, c]
 
 
 class _ReportApp(WebApplication[ReportMainView]):

@@ -25,6 +25,7 @@ from composeui.textualcore.textualrenderer import TextualWidgetRenderer
 from composeui.textualcore.widgets.composesidebar import ComposeSidebar
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbarButton
 from tests.downloading import ReportMainView
+from tests.opening import HELP_URL, OpeningMainView
 from tests.pages import PagesMainView
 from tests.sidebar import SidebarMainView
 from tests.textualcore.support import _names, _widget
@@ -191,3 +192,30 @@ async def test_an_app_s_files_are_saved_where_the_user_picks_one_dialog_at_a_tim
     assert saved == "Saved a.csv."
     assert view.status_bar.message == "Saved b.csv."
     assert (tmp_path / "b.csv").read_bytes() == b"streamed"
+
+
+@pytest.mark.parametrize("is_web", [False, True])
+@pytest.mark.asyncio
+async def test_a_url_opens_in_textual_serve_s_browser_else_on_the_desktop(
+    monkeypatch: pytest.MonkeyPatch, *, is_web: bool
+) -> None:
+    launched: list[str] = []
+    monkeypatch.setattr("composeui.core._views.main.launch", launched.append)
+    monkeypatch.setattr("composeui.core.client._Current.capabilities", None)  # local
+    view = OpeningMainView()
+    _add_reference_to_signals(view, None)  # as the app does
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    tabs: list[str] = []
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        # what textual-serve's driver tells: the app shows in the user's browser
+        monkeypatch.setattr(type(app._driver), "is_web", is_web)  # noqa: SLF001 (Textual's driver)
+        monkeypatch.setattr(app, "open_url", lambda url, **_kw: tabs.append(url))
+        await pilot.click(_widget(view.help))
+        await pilot.pause()
+
+    assert (tabs, launched) == (([HELP_URL], []) if is_web else ([], [HELP_URL]))

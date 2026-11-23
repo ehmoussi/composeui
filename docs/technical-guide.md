@@ -46,6 +46,7 @@ This guide explains how ComposeUI works and how to contribute to it. To build an
     - [Ticket lifetime and limits](technical-guide/web-file-transfers.md#ticket-lifetime-and-limits)
     - [Streaming](technical-guide/web-file-transfers.md#streaming)
     - [Why use POST and GET](technical-guide/web-file-transfers.md#why-use-post-and-get)
+    - [Pages opened in a new tab](technical-guide/web-file-transfers.md#pages-opened-in-a-new-tab)
 - <a id="reloading-on-a-change" name="reloading-on-a-change"></a>
   [Reloading on a change](technical-guide/reloading.md)
   - [Reloading on Qt](technical-guide/reloading.md#reloading-on-qt)

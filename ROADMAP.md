@@ -224,8 +224,8 @@ The SQLite model is complete otherwise: do not rebuild it.
   Linux, Windows and macOS, and a section on Textual apps installed as commands.
 - **A desktop web backend** (Next). The web renderers in a native window through pywebview,
   with a local server that only the window can reach.
-- **Folders on the user's computer** (Next). Open a folder, convert Windows paths in WSL, and
-  refuse the browser's `C:\fakepath`.
+- **The browser's fake paths** (Next). Refuse the browser's `C:\fakepath` in a path typed on
+  the web.
 - **Recent folders** (Next). The picker of the server's files opens at the last folder, with a
   short history inside the allowed roots.
 - **Save in the unsaved-changes question** (Next). Save, Discard and Cancel before New, Open

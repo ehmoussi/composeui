@@ -127,7 +127,7 @@ class _SolverView(MainView):
         factory=lambda: InputView(text="study.comm"), metadata={OMIT: True}
     )
     study: InputView = child(InputView)
-    open_file: ButtonView = child(ButtonView)
+    open_button: ButtonView = child(ButtonView)
     stop: ButtonView = child(ButtonView)
 
     @override
@@ -136,7 +136,7 @@ class _SolverView(MainView):
         self.release = threading.Event()
         self.solver = self.jobs.task(self._solve)
         self.solver.disables(self.study)
-        self.solver.disables(self.open_file, enabled_if=lambda: self.path.text != "")
+        self.solver.disables(self.open_button, enabled_if=lambda: self.path.text != "")
         self.solver.cancel_with(self.stop)
 
     def _solve(self, _job: Job[None]) -> None:
@@ -1039,7 +1039,7 @@ def test_opening_a_study_saved_during_a_run_enables_the_task_s_views_as_no_run_g
         view.jobs.wait()
     view.load_state(tmp_path / "study.json")
     assert not view.solver.is_running
-    assert (view.study.is_enabled, view.open_file.is_enabled, view.stop.is_enabled) == (
+    assert (view.study.is_enabled, view.open_button.is_enabled, view.stop.is_enabled) == (
         True,
         True,
         False,
@@ -1049,11 +1049,11 @@ def test_opening_a_study_saved_during_a_run_enables_the_task_s_views_as_no_run_g
 def test_new_keeps_the_condition_of_a_view_on_a_field_that_the_study_doesn_t_hold() -> None:
     view = _SolverView()
     view.path.text = ""
-    assert not view.open_file.is_enabled
+    assert not view.open_button.is_enabled
     view.reset_state()
     assert view.path.text == ""
     # a newly built main view, whose path is filled, enables it
-    assert not view.open_file.is_enabled
+    assert not view.open_button.is_enabled
 
 
 def test_canceling_a_task_at_startup_leaves_other_jobs_running() -> None:

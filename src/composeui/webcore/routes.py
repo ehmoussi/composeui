@@ -383,6 +383,23 @@ async def download(request: Request) -> Response:
     return FileResponse(found.content, media_type=found.media_type, headers=headers)
 
 
+async def open_url(request: Request) -> Response:
+    """Send the page's new tab to a URL that the app opens (`MainView.open_url`).
+
+    The ticket names the URL, which only the app's code gave: a link can't send the tab
+    anywhere else. It runs none of the app's code, and the answers stop naming the ticket.
+    """
+    session = await _session_off_loop(request)
+    found = (
+        None
+        if session is None
+        else await run_in_threadpool(session.take_url, request.path_params["ticket"])
+    )
+    if found is None:
+        return PlainTextResponse("Not Found", status_code=404, headers=_NO_STORE)
+    return RedirectResponse(found.url, status_code=303, headers=_NO_STORE)
+
+
 def console_text(request: Request) -> Response:
     """Download a console's text, as a plain link does: it only reads."""
     session = _session(request)

@@ -300,6 +300,15 @@ class TextualMainRenderer(MainRenderer[MainView, _ComposeUIApp]):
         # from a file action's worker too (`_ComposeUIApp.trigger`)
         self.call_on_main_thread(functools.partial(self._queue_download, file))
 
+    @override
+    def open_url(self, url: str) -> bool:
+        app = self._rendered_object
+        if app is None or not app.is_web:
+            return False  # in a terminal, the desktop's browser, if the app reaches it
+        # in a browser (``textual-serve``), a new tab of it
+        self.call_on_main_thread(functools.partial(app.open_url, url))
+        return True
+
     def _queue_download(self, file: DownloadedFile) -> None:
         self._downloads.append(file)
         if not self._is_asking:

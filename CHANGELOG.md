@@ -11,6 +11,16 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `MainView.open_folder`, `open_file` and `open_url` open a folder, a file or a page for the
+  user, and `display_path` names a path for them. Each one adapts to where the app runs for
+  its user: the file manager and the browser of their desktop on Qt and in a local terminal
+  (Windows' in WSL), a new tab on the web. Where an action can't work, the page tells the user
+  why. `MainView.client`, a `ClientCapabilities` of `composeui.core.client`, says whether the
+  user shares the app's files (`shares_files`), whether their desktop is in reach
+  (`can_open_on_desktop`), and whether several people use the process (`multi_user`). Textual
+  over SSH or `textual-serve` doesn't reach the desktop. A web server on the user's computer
+  sets `WebSettings(client=ClientCapabilities.local())`.
+
 - `shared(Database)` declares a database of a `DatabaseModel` that every session of the
   process reads and writes, outside the study. A commit in one session emits the tables'
   `changed` in the others, each on its own main thread. With `location`, the database is kept

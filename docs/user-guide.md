@@ -165,6 +165,7 @@ not in the package: run them from a clone of the repository (see
   - [Backends](user-guide/running-the-app.md#backends)
     - [The composeui command](user-guide/running-the-app.md#the-composeui-command)
     - [Adapt the views to the backend](user-guide/running-the-app.md#adapt-the-views-to-the-backend)
+    - [Open folders, files and pages for the user](user-guide/running-the-app.md#open-folders-files-and-pages-for-the-user)
   - [Reloading the app on a change](user-guide/running-the-app.md#reloading-the-app-on-a-change)
   - [Logging](user-guide/running-the-app.md#logging)
   - [Web backend](user-guide/running-the-app.md#web-backend)

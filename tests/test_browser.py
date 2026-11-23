@@ -73,6 +73,7 @@ from tests.horizontal import ButtonsMainView, HorizontalMainView, ManyButtonsMai
 from tests.listview import PIPES, PipesMainView
 from tests.maps import AutoMapMainView, MapMainView
 from tests.markdown import HelpMainView
+from tests.opening import OpeningMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.ranges import RangesMainView
 from tests.sidebar import SidebarMainView
@@ -988,6 +989,44 @@ def test_a_file_the_app_gives_downloads_once_and_the_page_stays(browser: Browser
         expect(export).to_be_visible()  # the page stays
         context.close()
     assert len(fetched) == len(set(fetched)) == 3
+
+
+def test_a_url_the_app_opens_shows_in_a_new_tab_or_as_a_link_if_the_browser_refuses_it(
+    browser: Browser,
+) -> None:
+    help_site = Starlette(routes=[StarletteRoute("/help", lambda _: HTMLResponse("<p>Help</p>"))])
+    with _serve(help_site) as help_base:
+        help_url = f"{help_base}/help?topic=runs&lang=en"
+
+        class HelpApp(WebApplication[OpeningMainView]):
+            @override
+            def setup_session(self, main_view: OpeningMainView) -> None:
+                main_view.help_url = help_url
+
+        app = HelpApp(build_main_view=OpeningMainView).create_starlette_app()
+        with _serve(app) as url, browser.new_context(base_url=url) as context:
+            page = context.new_page()
+            page.goto("/")
+            with context.expect_page() as opened:
+                page.get_by_role("button", name="Help").click()
+            tab = opened.value
+            tab.wait_for_url(help_url)
+            expect(tab.get_by_text("Help")).to_be_visible()
+            assert tab.evaluate("window.opener") is None  # its page can't reach the app's
+            expect(page.get_by_role("link", name=help_url)).to_have_count(0)
+
+            # a browser refuses a tab that no click opened, as after a job: the page then
+            # shows the link, which a click opens
+            refusing = context.new_page()
+            refusing.add_init_script("window.open = function () { return null; };")
+            refusing.goto("/")
+            refusing.get_by_role("button", name="Help").click()
+            link = refusing.get_by_role("link", name=help_url)
+            expect(link).to_be_visible()
+            with context.expect_page() as clicked:
+                link.click()
+            clicked.value.wait_for_url(help_url)
+            expect(link).to_have_count(0)
 
 
 def test_a_stream_downloads_as_it_s_written_and_one_cut_midway_fails(browser: Browser) -> None:

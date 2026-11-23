@@ -186,6 +186,14 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   `UploadedFile`, and read its `path`. On the web, that copy stays for a job that reads it, until
   the session's end at the latest; `MainView.max_upload_size` sets the largest file. With
   `multiple=True`, connect `files_uploaded`, which gives the files of one choice together.
+- **Open a folder, a file or a page with `main_view.open_folder(path)`, `open_file(path)` and
+  `open_url(url)`,** not a program of your own: on the web, that program would start on the
+  server. Show a path with `main_view.display_path(path, roots=...)`. Each one adapts to where
+  the app runs for its user, and tells the user why when it can't work. To hide a control that
+  can't work, read `main_view.client` (`can_open_on_desktop`, `shares_files`, `multi_user`),
+  not the backend: a web server on the user's computer sets
+  `WebSettings(client=ClientCapabilities.local())`.
+  See https://ehmoussi.github.io/composeui/user-guide/running-the-app.html#open-folders-files-and-pages-for-the-user
 - **Give the user a file with `DownloadView`**, or `main_view.download(...)` from a callback,
   not a `SavePathInputView`: on the web, a save path writes a file on the server, not on the
   user's computer. Its `content` returns the bytes, or a `DownloadedFile(filename, content,

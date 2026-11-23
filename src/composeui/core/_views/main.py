@@ -9,9 +9,10 @@ import hashlib
 import json
 import mimetypes
 import re
+import subprocess
 from collections import deque
 from collections.abc import Callable, Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -61,9 +62,11 @@ from composeui.core._views.files import (
     StreamContent,
     _partial_path,
     _publish,
+    is_within_roots,
 )
 from composeui.core._views.tables import RecordTableView, SourceTableView, TableMixin
 from composeui.core.autosave import Autosave
+from composeui.core.client import check_url, current_client, launch
 from composeui.core.jobs import Jobs, _check_main_thread
 from composeui.core.model import InvalidStateError, Model
 from composeui.core.reactivity import (
@@ -78,10 +81,11 @@ from composeui.core.translation import (
 
 if TYPE_CHECKING:
     import argparse
-    from collections.abc import Iterator
+    from collections.abc import Iterable, Iterator
 
     from attrs import AttrsInstance
 
+    from composeui.core.client import ClientCapabilities
     from composeui.core.registry import RendererType
 
 
@@ -747,6 +751,93 @@ class MainView(View):
     def clear_notification(self) -> None:
         """Remove the message that `notify` shows, if any."""
         self.notification.clear()
+
+    @property
+    def client(self) -> ClientCapabilities:
+        """Get what the app can do for its user, from where it runs for them.
+
+        Each backend sets it, and `WebSettings.client` on the web. Read it only to hide or
+        change a control, such as an "Open folder" button where `can_open_on_desktop` is
+        False: `open_folder`, `open_file`, `open_url` and `display_path` adapt by
+        themselves. It is set before the app builds its main view.
+        """
+        return current_client()
+
+    def open_folder(self, path: Path) -> None:
+        """Open the folder `path` in the user's file manager: Windows' Explorer in WSL.
+
+        Where the app can't reach the user's desktop (`client`), e.g. on a web server, the
+        page says so above it (`notify`). So it does for a folder that isn't there, or a
+        file manager that doesn't start. Call it on the main thread.
+        """
+        _check_main_thread("MainView.open_folder")
+        self._open_on_desktop(path, is_folder=True, download=False)
+
+    def open_file(self, path: Path, *, download: bool = False) -> None:
+        """Open the file `path` in the app that the user's desktop opens it with.
+
+        Where the app can't reach the user's desktop (`client`), the page says so above it
+        (`notify`), or with `download` gives the user the file (`MainView.download`), e.g.
+        a report. So it does for a file that isn't there, or an app that doesn't start.
+        Call it on the main thread.
+        """
+        _check_main_thread("MainView.open_file")
+        self._open_on_desktop(path, is_folder=False, download=download)
+
+    def open_url(self, url: str) -> None:
+        """Open `url` in the user's browser: in a new tab on the web.
+
+        Only ``http`` and ``https`` URLs open: another raises `ValueError`.
+        Where the app reaches neither the browser nor the desktop, e.g. Textual over SSH,
+        the page shows the URL for the user to open. Call it on the main thread.
+        """
+        _check_main_thread("MainView.open_url")
+        check_url(url)
+        if isinstance(self.renderer, MainRenderer) and self.renderer.open_url(url):
+            return
+        if self.client.can_open_on_desktop:
+            self._launch(url, url)
+        else:
+            self.notify(self.tr("Open {url} in your browser.").format(url=url), LogType.WARNING)
+
+    def display_path(self, path: Path, roots: Iterable[Path] = ()) -> str:
+        """Get the text that names `path` for the user.
+
+        The whole path where the user shares the app's files (`client`). Elsewhere, a
+        server's path means nothing to the user: inside one of `roots`, e.g. a field's
+        `server_roots`, the path from that root, its name first (``results/run-3``); else
+        the name alone.
+        """
+        if self.client.shares_files:
+            return str(path)
+        for root in roots:
+            if is_within_roots(path, (root,)):
+                folder = root.expanduser().resolve()
+                inside = path.expanduser().resolve().relative_to(folder)
+                return PurePosixPath(folder.name, *inside.parts).as_posix()
+        return path.name
+
+    def _open_on_desktop(self, path: Path, *, is_folder: bool, download: bool) -> None:
+        name = self.display_path(path)
+        on_desktop = self.client.can_open_on_desktop
+        if not on_desktop and not download:
+            elsewhere = self.tr("Can't open {name} here: the app runs on another computer.")
+            self.notify(elsewhere.format(name=name), LogType.WARNING)
+        elif not (path.is_dir() if is_folder else path.is_file()):
+            missing = self.tr("Can't open {name}: it isn't there.")
+            self.notify(missing.format(name=name), LogType.ERROR)
+        elif on_desktop:
+            self._launch(str(path), name)
+        else:
+            self.download(path.name, path)
+
+    def _launch(self, target: str, name: str) -> None:
+        """Open `target` on the desktop; say why above the page if it can't."""
+        try:
+            launch(target)
+        except (OSError, subprocess.SubprocessError) as error:
+            failed = self.tr("Can't open {name}: {error}.")
+            self.notify(failed.format(name=name, error=error), LogType.ERROR)
 
     def ask_discard_changes(self, proceed: Callable[[], object]) -> None:
         """Call `proceed()` now if the study has no unsaved changes, else once the user agrees.
