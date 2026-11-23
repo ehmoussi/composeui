@@ -121,6 +121,10 @@ backends' modules included, can change in any release without an entry here.
   after a `timeout`, when a callback raises, and when the app exits. On Linux and macOS, it
   also stops the programs that the program started. On Windows, it stops only the program
   itself.
+- The search of a table's filter bar has a button that empties it, shown while the search
+  holds text: Textual and the web now have one, as Qt had. On Qt and Textual, Escape in the
+  search also empties it, as it already did on the web in browsers such as Chrome. When the
+  search is already empty, Escape works as before, for example to close a dialog.
 
 ### Changed
 

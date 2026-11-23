@@ -14,6 +14,7 @@
   "Save Image": "Enregistrer l'image",
   "{header}: \"{text}\" isn't a valid value": "{header} : « {text} » n'est pas une valeur valide",
   "Search": "Rechercher",
+  "Clear the search": "Effacer la recherche",
   "+ Filter": "+ Filtre",
   "Column": "Colonne",
   "Value": "Valeur",

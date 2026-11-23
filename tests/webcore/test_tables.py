@@ -1003,6 +1003,23 @@ def test_the_search_swaps_the_body_and_the_count_never_its_field(
     assert "No rows match the filters" in body
 
 
+def test_the_search_s_clear_button_shows_while_the_search_holds_text(
+    sorted_rooms: _SortedRooms,
+) -> None:
+    def clear_button() -> dict[str, str | None]:
+        bar = _element(sorted_rooms.client.get("/").text, f"{sorted_rooms.table_id}-bar")
+        (button,) = [
+            attributes
+            for tag, attributes in bar.descendants
+            if tag == "button" and attributes.get("aria-label") == "Clear the search"
+        ]
+        return button
+
+    assert "hidden" in clear_button()
+    sorted_rooms.view.rooms.search = "kit"  # e.g. set by the app
+    assert "hidden" not in clear_button()
+
+
 def test_a_table_sorted_without_a_filter_bar_swaps_no_count(
     sorted_rooms: _SortedRooms,
 ) -> None:

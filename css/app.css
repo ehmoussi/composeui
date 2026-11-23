@@ -102,6 +102,12 @@ body {
   grid-column: 1 / -1;
 }
 
+/* a table's search: its own clear button (`WebFilterBarRenderer`), the same in every
+   browser, rather than the browser's, which Firefox doesn't draw */
+[data-table-search]::-webkit-search-cancel-button {
+  display: none;
+}
+
 /* a field's help, its arrow pointing at its "?" button: on its left side, or on its
    top above the button (`--arrow-x`, set by the page's script with `data-side`) */
 .cui-help {

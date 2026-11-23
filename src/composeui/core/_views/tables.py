@@ -721,6 +721,7 @@ SEARCH_DELAY_MS = 300
 #: the text of a table's filter bar, which the renderers show
 FILTER_TEXTS: Mapping[str, str] = {
     "search": T("Search"),
+    "clear_search": T("Clear the search"),
     "add_filter": T("+ Filter"),
     "column": T("Column"),
     "value": T("Value"),

@@ -73,6 +73,28 @@
     swapped.setAttribute("value", field.value);
     swapped.dataset.typed = "";
   });
+  /* a table's search shows its clear button while it holds text (see
+     `WebFilterBarRenderer`); the button empties it, and its `search` event posts it at
+     once, as Escape does in the browsers that clear the field on it */
+  document.addEventListener("input", function (event) {
+    var target = /** @type {HTMLInputElement} */ (event.target);
+    if (!("tableSearch" in target.dataset)) return;
+    var button = /** @type {HTMLElement | null} */ (
+      target.parentElement && target.parentElement.querySelector("[data-clear-search]")
+    );
+    if (button !== null) button.hidden = target.value === "";
+  });
+  document.addEventListener("click", function (event) {
+    var button = /** @type {Element} */ (event.target).closest("[data-clear-search]");
+    if (button === null) return;
+    var field = /** @type {HTMLInputElement} */ (
+      /** @type {HTMLElement} */ (button.parentElement).querySelector("[data-table-search]")
+    );
+    field.value = "";
+    /** @type {HTMLElement} */ (button).hidden = true;
+    field.focus();
+    field.dispatchEvent(new Event("search"));
+  });
   /* a table's check-all box while some of its rows are checked: only a script shows a
      box partly checked */
   document.addEventListener("htmx:load", function (event) {

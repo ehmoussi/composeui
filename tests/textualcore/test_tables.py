@@ -8,14 +8,17 @@ pytest.importorskip("textual")
 pytest.importorskip("textual_fspicker")
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, ClassVar, Optional
 
 from attrs import Factory
+from textual.app import App
+from textual.binding import Binding
 from textual.coordinate import Coordinate
 from textual.widgets import (
     Input,
 )
 from textual_fspicker.parts import DirectoryNavigation
+from typing_extensions import override
 
 from composeui.core._views.tables import SOURCE_TABLE_WINDOW
 from composeui.core.application import _add_reference_to_signals
@@ -72,7 +75,8 @@ from tests.tables import (
 )
 
 if TYPE_CHECKING:
-    from textual.app import App
+    from textual.app import ComposeResult
+    from textual.binding import BindingType
     from textual.pilot import Pilot
     from textual.screen import Screen
 
@@ -1129,6 +1133,68 @@ async def test_a_header_s_click_sorts_or_checks_only_a_column_that_allows_it() -
         assert [row[0] for row in view.variables.rows] == ["True", "false"]
 
 
+class _EscapeApp(App[None]):
+    """A filter bar in an app counting the Escapes that reach it."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "escaped")]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.bar = ComposeFilterBar()
+        self.escapes = 0
+
+    @override
+    def compose(self) -> ComposeResult:
+        yield self.bar
+
+    def action_escaped(self) -> None:
+        self.escapes += 1
+
+
+@pytest.mark.asyncio
+async def test_the_search_s_button_or_escape_empties_it_then_escape_goes_on() -> None:
+    app = _EscapeApp()
+    bar = app.bar
+    searched: list[str] = []
+    bar.search_edited.connect(searched.append)
+
+    async with app.run_test() as pilot:
+        assert not bar.clear_search.display
+        await pilot.click(bar.search)
+        await pilot.press(*"kit")
+        assert bar.clear_search.display
+        # the search is empty at once, not after the delay of typing, the focus kept
+        await pilot.click(bar.clear_search)
+        assert (bar.search.value, searched[-1:], bar.clear_search.display) == ("", [""], False)
+        assert app.focused is bar.search
+
+        searched.clear()
+        await pilot.press(*"kit", "escape")
+        assert (bar.search.value, searched[-1:], app.escapes) == ("", [""], 0)
+        await pilot.press("escape")
+        assert app.escapes == 1
+
+
+@pytest.mark.asyncio
+async def test_the_search_s_button_shows_a_search_the_app_sets_before_a_user_s_edit_arrives() -> (
+    None
+):
+    view, app, box = _sorted_rooms()
+    bar = box.bar
+
+    async with app.run_test(size=(160, 40)) as pilot:
+        await pilot.click(bar.search)
+        await pilot.press(*"kit", "enter")
+        # the user empties the search, as its button does: Textual reports it later, after
+        # the app sets another search
+        bar.search.value = ""
+        view.rooms.search = "hall"
+        await pilot.pause()
+
+        assert (bar.search.value, view.rooms.search) == ("hall", "hall")
+        assert bar.clear_search.display
+
+
 @pytest.mark.asyncio
 async def test_the_filter_bar_clears_its_filters_and_shows_a_search_set_in_code() -> None:
     view = SortedRoomsMainView()
@@ -1144,6 +1210,7 @@ async def test_the_filter_bar_clears_its_filters_and_shows_a_search_set_in_code(
 
         assert view.rooms.filters == {}
         assert box.bar.search.value == "kit"
+        assert box.bar.clear_search.display
 
 
 @pytest.mark.asyncio

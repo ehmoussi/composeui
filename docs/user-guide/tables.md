@@ -50,7 +50,10 @@ the app's order.
 While a column is filterable, a bar above the table has:
 
 - a search over the text of the filterable columns, once the user stops typing for
-  `SEARCH_DELAY_MS` (300 ms), or presses Enter;
+  `SEARCH_DELAY_MS` (300 ms), or presses Enter. While the search holds text, a clear button
+  empties it. Escape empties it too on Qt and Textual, and on the web in the browsers that
+  clear a search field on Escape, such as Chrome. In an empty search, Escape works as it does
+  elsewhere, for example to close a dialog;
 - "+ Filter", which adds a filter on a column. The filter shows as a chip. A click on the
   chip opens it for editing, and so does Enter, since the focus lands on the chip.
 
