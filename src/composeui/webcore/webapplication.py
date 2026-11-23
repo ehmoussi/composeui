@@ -52,7 +52,7 @@ from composeui.core.registry import RendererType
 from composeui.core.reload import has_change_events
 from composeui.core.study import open_study
 from composeui.core.view import View
-from composeui.webcore._renderers.navigation import check_routes
+from composeui.webcore._renderers.navigation import INTERNAL_ROUTE, check_routes
 from composeui.webcore.headers import SecurityHeadersMiddleware
 from composeui.webcore.limits import BodySizeLimitMiddleware
 from composeui.webcore.order import DuplicatePostError
@@ -171,26 +171,32 @@ def create_starlette_app(  # noqa: PLR0913 (each sets a part of the server)
     app = Starlette(
         routes=[
             Route("/", homepage),
-            Route("/reload", reload_poll),
-            Route("/widget/{widget_id}", widget_event, methods=["POST"]),
-            Route("/widget/{widget_id}", widget_fragment, methods=["GET"]),
-            Route("/widget/{widget_id}/image", chart_image, methods=["GET"]),
-            Route("/widget/{widget_id}/picture", picture, methods=["GET"]),
-            Route("/widget/{widget_id}/file", widget_file, methods=["POST"]),
-            Route("/widget/{widget_id}/csv", table_csv, methods=["GET"]),
-            Route("/widget/{widget_id}/text", console_text, methods=["GET"]),
-            Route("/download/{ticket}", download, methods=["GET"]),
-            Route("/state", state_download, methods=["GET"]),
-            Route("/state", state_upload, methods=["POST"]),
-            Route("/state/download", state_save, methods=["POST"]),
-            Route("/icon/{name}", icon),
-            Route("/jobs", jobs_poll),
-            Route("/style/theme.css", theme, methods=["GET"]),
-            Route("/style/files/{name:path}", style_file, methods=["GET"]),
+            # the backend's own addresses, under one segment that no page takes
             Mount(
-                "/static",
-                app=StaticFiles(directory=Path(__file__).parent / "static"),
-                name="static",
+                f"/{INTERNAL_ROUTE}",
+                routes=[
+                    Route("/reload", reload_poll),
+                    Route("/widget/{widget_id}", widget_event, methods=["POST"]),
+                    Route("/widget/{widget_id}", widget_fragment, methods=["GET"]),
+                    Route("/widget/{widget_id}/image", chart_image, methods=["GET"]),
+                    Route("/widget/{widget_id}/picture", picture, methods=["GET"]),
+                    Route("/widget/{widget_id}/file", widget_file, methods=["POST"]),
+                    Route("/widget/{widget_id}/csv", table_csv, methods=["GET"]),
+                    Route("/widget/{widget_id}/text", console_text, methods=["GET"]),
+                    Route("/download/{ticket}", download, methods=["GET"]),
+                    Route("/state", state_download, methods=["GET"]),
+                    Route("/state", state_upload, methods=["POST"]),
+                    Route("/state/download", state_save, methods=["POST"]),
+                    Route("/icon/{name}", icon),
+                    Route("/jobs", jobs_poll),
+                    Route("/style/theme.css", theme, methods=["GET"]),
+                    Route("/style/files/{name:path}", style_file, methods=["GET"]),
+                    Mount(
+                        "/static",
+                        app=StaticFiles(directory=Path(__file__).parent / "static"),
+                        name="static",
+                    ),
+                ],
             ),
             # last: a page's address takes any first segment the others leave
             Route("/{route}", page),
@@ -299,7 +305,9 @@ class _SessionMiddleware(SessionMiddleware):
 
 
 class _GZipMiddleware(GZipMiddleware):
-    """Compress the answers but the app's downloads (`/download/{ticket}`), sent as they are.
+    """Compress the answers but the app's downloads, sent as they are.
+
+    The downloads are at `/_composeui/download/{ticket}`.
 
     A download can be large, or written as it's sent (`StreamContent`): compressing it would
     take the event loop's time, which every session shares, piece after piece.
@@ -307,7 +315,7 @@ class _GZipMiddleware(GZipMiddleware):
 
     @override
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http" and scope["path"].startswith("/download/"):
+        if scope["type"] == "http" and scope["path"].startswith("/_composeui/download/"):
             await self.app(scope, receive, send)
         else:
             await super().__call__(scope, receive, send)
@@ -328,7 +336,7 @@ def _is_logged(record: logging.LogRecord) -> bool:
         return True
     path = str(args[_ACCESS_FIELDS.index("path")])
     status = args[_ACCESS_FIELDS.index("status")]
-    return path.split("?", maxsplit=1)[0] != "/reload" or status != HTTPStatus.NO_CONTENT
+    return path.split("?", maxsplit=1)[0] != "/_composeui/reload" or status != HTTPStatus.NO_CONTENT
 
 
 def _hide_reload_polls() -> None:

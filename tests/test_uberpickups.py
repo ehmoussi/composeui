@@ -259,7 +259,7 @@ def test_on_the_web_the_rows_read_after_the_page_shows_the_chart_and_the_map(
 
         view.loader.changed.connect(finished, now=True)
         assert done.wait(10)
-        response = client.get("/jobs")
+        response = client.get("/_composeui/jobs")
         visibility = _VisibilityParser()
         visibility.feed(response.text)
 

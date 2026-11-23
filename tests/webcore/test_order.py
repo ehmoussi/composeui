@@ -45,7 +45,7 @@ def test_a_field_s_post_waits_for_the_one_its_page_sent_before_it(
 
     # the page's second post, numbered in its headers: the first never comes
     response = client.post(
-        f"/widget/{_field_id(main_view.form.name)}",
+        f"/_composeui/widget/{_field_id(main_view.form.name)}",
         data={"value": "Ada", "event": "input"},
         headers={PAGE_HEADER: _PAGE, POST_HEADER: "2"},
     )
@@ -64,7 +64,7 @@ def test_save_s_form_waits_for_the_post_its_page_sent_before_it(
     started = time.monotonic()
 
     # the page's second post, numbered in its form's fields, as headers can't be
-    response = client.post("/state/download", data=save)
+    response = client.post("/_composeui/state/download", data=save)
 
     assert time.monotonic() - started >= 0.3 / 2
     assert json.loads(response.text)["views"]["form"]["name"]["text"] == "Bob"
@@ -175,10 +175,12 @@ def test_a_duplicate_post_gets_an_empty_answer_and_changes_nothing(
     age_id = _field_id(main_view.form.age)
     headers = {PAGE_HEADER: _PAGE, POST_HEADER: "1"}
     data = {"value": "3", "event": "input"}
-    assert client.post(f"/widget/{age_id}", data=data, headers=headers).status_code == 200
+    assert (
+        client.post(f"/_composeui/widget/{age_id}", data=data, headers=headers).status_code == 200
+    )
     main_view.form.age.value = 9.0
 
-    response = client.post(f"/widget/{age_id}", data=data, headers=headers)
+    response = client.post(f"/_composeui/widget/{age_id}", data=data, headers=headers)
 
     assert (response.status_code, response.text) == (204, "")
     assert main_view.form.age.value == 9.0

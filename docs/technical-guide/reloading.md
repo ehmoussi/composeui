@@ -77,6 +77,6 @@ variables. Each process takes the key out of its environment before it runs the 
 the programs that the app starts don't inherit it. Each process saves its sessions as it stops, in
 its lifespan's end (`SessionStore.save_all`, with `save_reloaded_state`). The next takes them as
 sessions on disk, and opens one when its cookie comes back, under the same id, as it wakes an idle
-session (see [Order and sessions](web-backend.md#order-and-sessions)). Its pages ask `GET /reload`
-every second, naming the process that served them (`reload_poller`): another process answers with
-`HX-Refresh`.
+session (see [Order and sessions](web-backend.md#order-and-sessions)). Its pages ask
+`GET /_composeui/reload` every second, naming the process that served them (`reload_poller`):
+another process answers with `HX-Refresh`.

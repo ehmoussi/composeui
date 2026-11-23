@@ -177,7 +177,7 @@ def test_toggling_the_checkbox_enables_its_row_without_swapping_the_box(
 
     def toggle(**checked: str) -> str:
         response: httpx.Response = pipe_client.post(
-            f"/widget/{field_id}", data={"event": "change", **checked}
+            f"/_composeui/widget/{field_id}", data={"event": "change", **checked}
         )
         return response.text
 
@@ -221,12 +221,14 @@ def test_the_progress_bar_swaps_in_its_count_and_its_unknown_length(
         progress.value = 250
 
     submit.clicked.connect(advance)
-    response = pages_client.post(f"/widget/{_widget_id(submit.renderer)}", data={"event": "click"})
+    response = pages_client.post(
+        f"/_composeui/widget/{_widget_id(submit.renderer)}", data={"event": "click"}
+    )
     bar = _swapped(response.text, bar_id)
     assert (bar.attributes["value"], bar.attributes["max"]) == ("100", "100")  # clamped
 
     progress.maximum = None
-    bar = _element(pages_client.get(f"/widget/{bar_id}").text, bar_id)
+    bar = _element(pages_client.get(f"/_composeui/widget/{bar_id}").text, bar_id)
     # no value: the browser's own bar for a task of unknown length
     assert "value" not in bar.attributes
     assert "max" not in bar.attributes

@@ -113,9 +113,9 @@ def test_the_browser_never_shows_a_stale_copy_of_the_page(
     assert len(controls) >= 4  # name, age, two radios, colour
     assert all('autocomplete="off"' in control for control in controls)
     assert page.headers["cache-control"] == "no-store"
-    event = client.post(f"/widget/{input_id}", data={"value": "Bob", "event": "input"})
+    event = client.post(f"/_composeui/widget/{input_id}", data={"value": "Bob", "event": "input"})
     assert event.headers["cache-control"] == "no-store"
-    assert client.get(f"/widget/{status_bar_id}").headers["cache-control"] == "no-store"
+    assert client.get(f"/_composeui/widget/{status_bar_id}").headers["cache-control"] == "no-store"
 
 
 def test_the_page_loads_nothing_from_another_host(client: TestClient) -> None:
@@ -123,7 +123,7 @@ def test_the_page_loads_nothing_from_another_host(client: TestClient) -> None:
     page = client.get("/").text
 
     assert re.findall(r'(?:src|href)="(?:https?:)?//[^"]*"', page) == []
-    assert client.get("/static/app.css").status_code == 200
+    assert client.get("/_composeui/static/app.css").status_code == 200
 
 
 def test_the_page_has_no_inline_script(client: TestClient) -> None:
@@ -137,18 +137,18 @@ def test_the_page_names_each_static_file_by_its_content(client: TestClient) -> N
     """A new stylesheet or script has a new address: a browser can't keep an older copy."""
     page = client.get("/").text
 
-    addresses = re.findall(r'(?:src|href|data-[a-z]+)="(/static/[^"]*)"', page)
+    addresses = re.findall(r'(?:src|href|data-[a-z]+)="(/_composeui/static/[^"]*)"', page)
 
     assert sorted(address.split("?")[0] for address in addresses) == [
-        "/static/app.css",
-        "/static/cally.js",
-        "/static/charts.js",
-        "/static/deckgl.min.js",
-        "/static/htmx.min.js",
-        "/static/maps.js",
-        "/static/page.js",
-        "/static/tables.js",
-        "/static/uPlot.iife.min.js",
+        "/_composeui/static/app.css",
+        "/_composeui/static/cally.js",
+        "/_composeui/static/charts.js",
+        "/_composeui/static/deckgl.min.js",
+        "/_composeui/static/htmx.min.js",
+        "/_composeui/static/maps.js",
+        "/_composeui/static/page.js",
+        "/_composeui/static/tables.js",
+        "/_composeui/static/uPlot.iife.min.js",
     ]
     for address in addresses:
         body = client.get(address).content
@@ -186,7 +186,7 @@ def test_every_class_the_renderers_use_is_in_the_built_stylesheet(
         for value in re.findall(r'class="([^"]*)"', page)
         for name in value.split()
     }
-    stylesheet = client.get("/static/app.css").text
+    stylesheet = client.get("/_composeui/static/app.css").text
 
     def selector(name: str) -> str:
         # all but letters, digits, `_` and `-` is escaped in its selector, e.g.
@@ -253,7 +253,7 @@ def test_the_page_is_in_the_app_s_source_language_until_set(
     assert (marker["data-language"], marker["data-title"]) == ("en", "Pipe Form")
     # an event leaving the language alone doesn't send it again
     response = pipe_client.post(
-        f"/widget/{_action_id(pipe_main_view.language_menu.action('en'))}",
+        f"/_composeui/widget/{_action_id(pipe_main_view.language_menu.action('en'))}",
         data={"event": "triggered"},
     )
     assert _find(response.text, "cui-page") is None

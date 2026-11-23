@@ -279,7 +279,7 @@ def test_a_reloaded_process_fails_on_a_program_without_an_app(
 
 def _reload_instance(page: str) -> str:
     """Get the server process a page names in its reload poller."""
-    found = re.search(r'id="cui-reload" hx-get="/reload\?instance=([^"]+)"', page)
+    found = re.search(r'id="cui-reload" hx-get="/_composeui/reload\?instance=([^"]+)"', page)
     assert found is not None
     return found[1]
 
@@ -296,16 +296,16 @@ def test_a_reload_server_s_next_process_keeps_the_sessions_and_reloads_their_pag
         page = before.get("/").text
         _type_name(before, app.session_views[0], "Bob")
         instance = _reload_instance(page)
-        unchanged = before.get(f"/reload?instance={instance}")
+        unchanged = before.get(f"/_composeui/reload?instance={instance}")
         cookies = before.cookies
     # leaving the client stopped the server, which saved the session
     (saved,) = tmp_path.iterdir()
     with _Browser(serve()) as after:
         after.cookies = cookies
-        restarted = after.get(f"/reload?instance={instance}")
+        restarted = after.get(f"/_composeui/reload?instance={instance}")
         page = after.get("/").text
         opened = not saved.exists()
-        polled = after.get(f"/reload?instance={_reload_instance(page)}")
+        polled = after.get(f"/_composeui/reload?instance={_reload_instance(page)}")
 
     assert unchanged.status_code == 204
     assert restarted.headers["hx-refresh"] == "true"  # the page reloads, with the new code
@@ -329,16 +329,16 @@ def test_a_reload_server_logs_its_pages_asks_only_once_it_restarted(
     with caplog.at_level(logging.INFO, logger="uvicorn.access"):
         # as uvicorn logs each request: client, method, path, HTTP version, status
         for path, status in [
-            ("/reload?instance=any", 204),  # not restarted
-            ("/reload?instance=any", 200),  # restarted: the page reloads
-            ("/widget/1", 204),
+            ("/_composeui/reload?instance=any", 204),  # not restarted
+            ("/_composeui/reload?instance=any", 200),  # restarted: the page reloads
+            ("/_composeui/widget/1", 204),
         ]:
             access.info('%s - "%s %s HTTP/%s" %d', "127.0.0.1:50000", "GET", path, "1.1", status)
         access.info("not a request")  # e.g. a handler of the program's own
 
     assert [record.getMessage() for record in caplog.records] == [
-        '127.0.0.1:50000 - "GET /reload?instance=any HTTP/1.1" 200',
-        '127.0.0.1:50000 - "GET /widget/1 HTTP/1.1" 204',
+        '127.0.0.1:50000 - "GET /_composeui/reload?instance=any HTTP/1.1" 200',
+        '127.0.0.1:50000 - "GET /_composeui/widget/1 HTTP/1.1" 204',
         "not a request",
     ]
 
@@ -349,7 +349,7 @@ def test_another_server_s_pages_ask_nothing_a_reload_server_s_reloading_once(
     with _Browser(app.create_starlette_app()) as browser:
         page = browser.get("/").text
         # a tab a `--reload` server served, still open once another server took its port
-        poll = browser.get("/reload?instance=any")
+        poll = browser.get("/_composeui/reload?instance=any")
 
     assert 'id="cui-reload"' not in page
     assert poll.headers["hx-refresh"] == "true"  # into a page that asks nothing

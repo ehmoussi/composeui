@@ -80,7 +80,7 @@ class _WebValuesRenderer(WebRenderer[ValuesViewLike[TValue]], Generic[TValue]):
 
     def _htmx_attributes(self) -> Markup:
         return Markup(
-            ' name="{}" hx-post="/widget/{}" hx-trigger="change"'
+            ' name="{}" hx-post="/_composeui/widget/{}" hx-trigger="change"'
             ' hx-vals=\'{{"event": "change"}}\' hx-swap="none"'
         ).format(self.widget_id, self.widget_id)
 
@@ -240,7 +240,7 @@ class WebCheckListRenderer(WebRenderer[MultiValuesViewLike]):
 
     def _post(self, values: Mapping[str, str]) -> Markup:
         """Get the attributes posting an event of the view, without swapping its element back."""
-        return Markup(' hx-post="/widget/{}" hx-vals=\'{}\' hx-swap="none"').format(
+        return Markup(' hx-post="/_composeui/widget/{}" hx-vals=\'{}\' hx-swap="none"').format(
             self.widget_id, json.dumps(values)
         )
 
@@ -534,7 +534,7 @@ class WebTreeRenderer(WebRenderer[TreeView]):
         if event == "toggle":
             values["expanded"] = str(expanded).lower()
         return Markup(
-            """ hx-post="/widget/{}" hx-vals='{}'"""
+            """ hx-post="/_composeui/widget/{}" hx-vals='{}'"""
             ' hx-swap="none"'
         ).format(self.widget_id, json.dumps(values))
 

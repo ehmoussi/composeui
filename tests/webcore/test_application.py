@@ -96,7 +96,9 @@ def test_app_connect_reacts_in_each_browser_on_its_own_views(app: _HelloApp) -> 
         def type_name(client: TestClient, view: HelloMainView, text: str) -> str:
             """Type `text` as the name; return the summary as swapped into the page."""
             field_id = _field_id(view.form.name)
-            response = client.post(f"/widget/{field_id}", data={"value": text, "event": "input"})
+            response = client.post(
+                f"/_composeui/widget/{field_id}", data={"value": text, "event": "input"}
+            )
             assert response.status_code == 200
             return _swapped(response.text, _widget_id(view.summary.renderer)).text
 
@@ -156,7 +158,9 @@ def test_a_saved_study_brings_its_database_to_another_browser() -> None:
 
     def sign_as(client: TestClient, view: HelloMainView, text: str) -> None:
         field_id = _field_id(view.form.name)
-        response = client.post(f"/widget/{field_id}", data={"value": text, "event": "change"})
+        response = client.post(
+            f"/_composeui/widget/{field_id}", data={"value": text, "event": "change"}
+        )
         assert response.status_code == 200
 
     web = app.create_starlette_app()
@@ -166,10 +170,10 @@ def test_a_saved_study_brings_its_database_to_another_browser() -> None:
         alice_view, bob_view = views
         sign_as(alice, alice_view, "Alice")
         sign_as(alice, alice_view, "Ada")
-        saved = alice.get("/state")
+        saved = alice.get("/_composeui/state")
         assert saved.headers["content-type"] == "application/zip"
 
-        response = bob.post("/state", files={"file": ("study.hello", saved.content)})
+        response = bob.post("/_composeui/state", files={"file": ("study.hello", saved.content)})
 
         assert response.headers["hx-refresh"] == "true"
         assert bob_view.form.name.text == "Ada"
@@ -178,10 +182,10 @@ def test_a_saved_study_brings_its_database_to_another_browser() -> None:
         assert bob_view.summary.text == "Alice, Ada, Bob"
         # the views' state alone isn't a study of this app: it would lose the signatures
         views_only = json.dumps(HelloMainView().state_data()).encode()
-        bob.post("/state", files={"file": ("study.hello", views_only)})
+        bob.post("/_composeui/state", files={"file": ("study.hello", views_only)})
         # Bob's signature is unsaved: opened once he agrees to discard it
         discard_id = _widget_id(bob_view.discard_changes.renderer)
-        response = bob.post(f"/widget/{discard_id}", data={"event": "accept"})
+        response = bob.post(f"/_composeui/widget/{discard_id}", data={"event": "accept"})
         assert "isn&#39;t a valid .hello file" in response.text
         sign_as(bob, bob_view, "Eve")
         assert bob_view.summary.text == "Alice, Ada, Bob, Eve"

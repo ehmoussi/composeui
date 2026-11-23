@@ -27,7 +27,8 @@ report the differences between the workloads rather than credit every gap to the
 model.
 
 The hour move's budget is measured as `uber.py` measures it, with the 200 ms debounce of the
-map's job. A browser can get the map's points up to 300 ms later, at its next poll of `/jobs`.
+map's job. A browser can get the map's points up to 300 ms later, at its next poll of
+`/_composeui/jobs`.
 
 ## The Uber pickups benchmark
 
@@ -135,7 +136,7 @@ an hour move does more work.
 | Scroll | | | 13 ms | 13 ms |
 | Close | 11 ms | 10 ms | | |
 
-On the web, a step lasts until no job runs after a poll of `/jobs`. On main, the SQLite
+On the web, a step lasts until no job runs after a poll of `/_composeui/jobs`. On main, the SQLite
 example's hour move therefore includes the job that samples the map's points. A browser polls
 every 300 ms (`JOBS_POLL_MS`), so it gets the points up to 300 ms later.
 
@@ -213,8 +214,8 @@ again.
 - **The debounce is about 200 ms of each move.** `start_latest` waits 200 ms before it samples
   the map's points. A profile of one run on the core gives 19 to 49 ms for the points' queries,
   and 8 to 47 ms for the rest of the move.
-- **A browser can get the points later.** The times above stop after a poll of `/jobs`, sent
-  as soon as the job ends. A browser polls every 300 ms.
+- **A browser can get the points later.** The times above stop after a poll of
+  `/_composeui/jobs`, sent as soon as the job ends. A browser polls every 300 ms.
 - **A study costs more.** In one separate measurement, the saved database grows from 51.6 to
   62.4 MiB, and opening a study takes 1.64 s instead of 0.35 s. `benchmarks/uber.py` does not
   measure this.
@@ -338,8 +339,8 @@ Sessions at once, with medians:
 At `3c647a3`, before `shared_data`, the Polars peak was 292, 523 and 1,012 MiB for 1, 2 and 4
 sessions, and 1,922 MiB for 8. The SQLite example then took 1,083 s to load with 8 sessions.
 
-A move lasts until a poll of `/jobs` shows that no job runs. The benchmark polls every 50 ms
-during a move, and every 300 ms during a load.
+A move lasts until a poll of `/_composeui/jobs` shows that no job runs. The benchmark polls
+every 50 ms during a move, and every 300 ms during a load.
 
 A session left during a SQLite load, in 3 runs at each moment. At `b9995b8`, one run at each
 moment is clean too.

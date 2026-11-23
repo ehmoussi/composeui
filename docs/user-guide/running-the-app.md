@@ -280,9 +280,9 @@ For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhel
 - **Pages have their own address.** With a router (see [Pages](organizing-the-window.md#pages)),
   each page is at `/<route>`, and `/` sends the browser to the first page. The toolbar of the pages
   is in the header. When the user changes pages, the browser's history gets the new address. So
-  back, forward, bookmarks, and reloads land on that page. A route cannot be `icon`, `jobs`,
-  `reload`, `state`, `static`, or `widget`, because the backend uses these addresses. An
-  address that is no page's gives a 404 error, not the first page.
+  back, forward, bookmarks, and reloads land on that page. A route cannot be `_composeui`:
+  the backend serves its own addresses under `/_composeui/`. An address that is no page's
+  gives a 404 error, not the first page.
 - **Icons** are the image files that actions name (`action.icon = "icons/run.svg"`, the
   path that Qt reads). The backend serves them. An SVG icon is drawn in the color of the
   text, so it follows the light and dark themes: only its shape counts, as with a Lucide or
@@ -475,8 +475,8 @@ if __name__ == "__main__":
   ComposeUI's color is used for it. A pair below 4.5:1 raises `ValueError` and names the two
   colors.
 - **The stylesheets.** The page loads them after ComposeUI's stylesheet and the theme, in their
-  order, so their rules win. The server serves `folder` at `/style/files/`. A stylesheet names a
-  font or an image of the folder by its relative path, such as `url("fonts/inter.woff2")` in an
+  order, so their rules win. The server serves `folder` at `/_composeui/style/files/`. A
+  stylesheet names a font or an image of the folder by its relative path, such as `url("fonts/inter.woff2")` in an
   `@font-face` rule. The server serves no hidden file, no file outside the folder, and only
   stylesheets, fonts, and images.
 - **The checks at start.** The page's policy blocks files from other addresses. So the server

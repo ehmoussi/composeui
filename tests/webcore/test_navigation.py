@@ -23,7 +23,7 @@ from composeui.core.view import (
     define_view,
 )
 from composeui.webcore._renderers.actions import WebActionRenderer
-from composeui.webcore._renderers.navigation import RESERVED_ROUTES, WebMainRenderer
+from composeui.webcore._renderers.navigation import INTERNAL_ROUTE, WebMainRenderer
 from composeui.webcore.changes import collect_dirty
 from composeui.webcore.webapplication import WebApplication
 from composeui.webcore.webrenderer import (
@@ -78,30 +78,58 @@ def test_each_page_has_its_own_address(
     assert main_view.router.current_route == "results"
 
 
-@pytest.mark.parametrize("reserved", sorted(RESERVED_ROUTES))
-def test_a_page_on_an_address_the_backend_uses_stops_the_app_before_serving(
-    reserved: str,
-) -> None:
-    @define_view
-    class Page(PageView):
-        route = reserved
+@define_view
+class _StatePage(InputsPage):
+    # the name of a route of the backend's own, which a page may take: they are apart
+    route = "state"
 
-    @define_view
-    class Pages(Router):
-        reserved_page: Page = Factory(Page)
 
-    @define_view
-    class ReservedMainView(MainView):
-        app_title = "Reserved"
-        extension = ".reserved"
+@define_view
+class _StateRouter(Router):
+    state: _StatePage = Factory(_StatePage)
 
-        pages: Pages = Factory(Pages)
 
-    message = re.escape(f"the routes [{reserved!r}]: rename them")
+@define_view
+class _StateMainView(MainView):
+    app_title = "State"
+    extension = ".state"
+
+    router: _StateRouter = Factory(_StateRouter)
+
+
+def test_a_page_takes_the_name_of_a_route_of_the_backend_without_hiding_it() -> None:
+    app = WebApplication(build_main_view=_StateMainView)
+    with _Browser(app.create_starlette_app()) as browser:
+        assert _shown_routes(browser.get("/state").text) == ["state"]
+        study = browser.get("/_composeui/state")
+    assert study.status_code == 200
+    assert study.headers["content-disposition"].startswith("attachment;")
+
+
+@define_view
+class _InternalPage(PageView):
+    route = INTERNAL_ROUTE
+
+
+@define_view
+class _InternalPages(Router):
+    internal_page: _InternalPage = Factory(_InternalPage)
+
+
+@define_view
+class _InternalMainView(MainView):
+    app_title = "Internal"
+    extension = ".internal"
+
+    pages: _InternalPages = Factory(_InternalPages)
+
+
+def test_a_page_on_the_address_the_backend_uses_stops_the_app_before_serving() -> None:
+    message = re.escape(f"the route {INTERNAL_ROUTE!r}: rename it")
     with pytest.raises(ValueError, match=message):
-        WebApplication(build_main_view=ReservedMainView).create_starlette_app()
+        WebApplication(build_main_view=_InternalMainView).create_starlette_app()
     with pytest.raises(ValueError, match=message):  # rendered without the app
-        ReservedMainView().render(RendererType.WEB)
+        _InternalMainView().render(RendererType.WEB)
 
 
 def test_a_toolbar_link_shows_its_page_and_puts_its_address_in_the_history(
@@ -111,7 +139,7 @@ def test_a_toolbar_link_shows_its_page_and_puts_its_address_in_the_history(
     (main_view,) = pages_views
     results = _widget_id(main_view.router.results.action.renderer)
 
-    response = pages_client.post(f"/widget/{results}", data={"event": "triggered"})
+    response = pages_client.post(f"/_composeui/widget/{results}", data={"event": "triggered"})
     assert main_view.router.current_route == "results"
     assert response.headers["HX-Push-Url"] == "/results"
     router = _swapped(response.text, _widget_id(main_view.router.renderer))
@@ -126,7 +154,7 @@ def test_a_toolbar_link_shows_its_page_and_puts_its_address_in_the_history(
     assert "aria-current" not in inputs.attributes
 
     # the shown page's link again: no navigation, so nothing new in the history
-    again = pages_client.post(f"/widget/{results}", data={"event": "triggered"})
+    again = pages_client.post(f"/_composeui/widget/{results}", data={"event": "triggered"})
     assert "HX-Push-Url" not in again.headers
 
 
@@ -192,7 +220,10 @@ def test_a_sidebar_is_retracted_by_its_button_never_swapped_back(
     toggles: list[bool] = []
     view.sidebar.toggled.connect(toggles.append)
     toggle = _element(client.get("/").text, f"{aside_id}-toggle").attributes
-    assert (toggle["hx-post"], toggle["aria-expanded"]) == (f"/widget/{aside_id}", "true")
+    assert (toggle["hx-post"], toggle["aria-expanded"]) == (
+        f"/_composeui/widget/{aside_id}",
+        "true",
+    )
 
     fragments = handle_event(renderer, "toggle", {"expanded": "false"})
     assert (view.sidebar.is_expanded, toggles) == (False, [False])
@@ -205,42 +236,21 @@ def test_a_sidebar_is_retracted_by_its_button_never_swapped_back(
     assert _element(page, f"{aside_id}-toggle").attributes["aria-expanded"] == "false"
 
 
-@define_view
-class _StatePage(InputsPage):
-    route = "state"
-
-
-@define_view
-class _StateRouter(Router):
-    state: _StatePage = Factory(_StatePage)
-
-
-@define_view
-class _StateMainView(MainView):
-    app_title = "State"
-    extension = ".state"
-
-    router: _StateRouter = Factory(_StateRouter)
-
-
-def test_a_route_cannot_take_an_address_of_the_backend() -> None:
-    with pytest.raises(ValueError, match="'state'"):
-        _StateMainView().render(RendererType.WEB)
-
-
 def test_disabling_a_router_disables_its_pages_but_not_their_links(
     notes: tuple[TestClient, _NoteMainView],
 ) -> None:
     client, main_view = notes
     submit_id = _disable_on_submit(main_view, main_view.pages)
-    body = client.post(f"/widget/{submit_id}", data={"event": "click"}).text
+    body = client.post(f"/_composeui/widget/{submit_id}", data={"event": "click"}).text
 
     router = _swapped(body, _widget_id(main_view.pages.renderer))
     (submit,) = [
         attributes for _, attributes in router.descendants if attributes.get("id") == submit_id
     ]
     assert "disabled" in submit
-    assert client.post(f"/widget/{submit_id}", data={"event": "click"}).status_code == 400
+    assert (
+        client.post(f"/_composeui/widget/{submit_id}", data={"event": "click"}).status_code == 400
+    )
     # as Qt's toolbar, apart from the stack of pages: the pages can still be switched
     page = client.get("/").text
     for routed in (main_view.pages.first, main_view.pages.note):
@@ -320,7 +330,9 @@ def test_a_header_button_shows_its_own_icon_and_a_disabled_page_tab_no_link(
 
     save = _element(html, _widget_id(view.file_menu.save.renderer))
     # its own icon, drawn in the text's color, rather than the built-in one
-    assert any("/icon/" in (attributes.get("style") or "") for _, attributes in save.descendants)
+    assert any(
+        "/_composeui/icon/" in (attributes.get("style") or "") for _, attributes in save.descendants
+    )
     tab = _element(html, _widget_id(page.action.renderer))
     assert (tab.tag, tab.attributes.get("aria-disabled"), "href" in tab.attributes) == (
         "a",

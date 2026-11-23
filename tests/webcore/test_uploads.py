@@ -84,7 +84,7 @@ def test_a_main_view_sets_the_largest_file_a_user_can_upload(
     with _Browser(UploadApp(build_main_view=_UploadMainView).create_starlette_app()) as client:
         client.get("/")
         (main_view,) = views
-        url = f"/widget/{_widget_id(main_view.field.renderer)}/file"
+        url = f"/_composeui/widget/{_widget_id(main_view.field.renderer)}/file"
 
         client.post(url, files={"file": ("large.csv", b"#" * limit)})
         assert main_view.field.path is not None
@@ -254,7 +254,7 @@ def test_a_full_disk_says_so_and_never_hands_over_a_cut_file(
         fill_the_disk(monkeypatch)
 
         response = client.post(
-            f"/widget/{_part(dataset, 'field').widget_id}/file",
+            f"/_composeui/widget/{_part(dataset, 'field').widget_id}/file",
             files={"file": ("small.csv", b"1,2")},  # small: it all stays in the buffer
         )
 
@@ -280,7 +280,7 @@ def test_a_file_that_would_fill_the_disk_is_refused_and_keeps_the_field_s_file(
         client.get("/")
         (main_view,) = views
         dataset = main_view.form.dataset
-        url = f"/widget/{_part(dataset, 'field').widget_id}/file"
+        url = f"/_composeui/widget/{_part(dataset, 'field').widget_id}/file"
         client.post(url, files={"file": ("kept.csv", b"1")})
         kept = dataset.file
         assert kept is not None
@@ -350,7 +350,7 @@ def test_a_malformed_upload_hands_nothing_over_and_leaves_no_file(
     monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
 
     response = help_client.post(
-        f"/widget/{_widget_id(action.renderer)}/file",
+        f"/_composeui/widget/{_widget_id(action.renderer)}/file",
         content=body,
         headers={"Content-Type": "multipart/form-data; boundary=b"},
     )
@@ -372,7 +372,7 @@ def test_a_server_that_stops_removes_the_uploads_of_its_sessions() -> None:
         client.get("/")
         (main_view,) = views
         field = _part(main_view.form.dataset, "field")
-        client.post(f"/widget/{field.widget_id}/file", files={"file": ("a.csv", b"1")})
+        client.post(f"/_composeui/widget/{field.widget_id}/file", files={"file": ("a.csv", b"1")})
         upload = main_view.form.dataset.file
         assert upload is not None
         assert upload.path.exists()
@@ -431,7 +431,7 @@ def test_a_form_without_a_boundary_is_refused(
     help_client.get("/")
     (main_view,) = help_views
     response = help_client.post(
-        f"/widget/{_widget_id(main_view.help_menu.open_help.renderer)}/file",
+        f"/_composeui/widget/{_widget_id(main_view.help_menu.open_help.renderer)}/file",
         content=b"",
         headers={"Content-Type": "multipart/form-data"},
     )
@@ -459,7 +459,7 @@ def test_an_upload_is_one_file_on_the_disk_as_its_callbacks_run(
         dataset.uploaded.connect(
             lambda _file: files.append([p for p in tmp_path.rglob("*") if p.is_file()])
         )
-        url = f"/widget/{field.widget_id}/file"
+        url = f"/_composeui/widget/{field.widget_id}/file"
 
         client.post(url, files={"file": ("é.csv", b"x" * (2 * 1024 * 1024), "text/csv")})
 
@@ -479,14 +479,18 @@ def test_a_file_the_page_kept_for_its_size_is_refused_by_name(
     action.file_picked.connect(picked.append)
     too_large = {"too_large": (None, "huge.md")}
 
-    response = help_client.post(f"/widget/{_widget_id(action.renderer)}/file", files=too_large)
+    response = help_client.post(
+        f"/_composeui/widget/{_widget_id(action.renderer)}/file", files=too_large
+    )
 
     status = _swapped(response.text, _widget_id(main_view.notification.renderer))
     assert status.text == "Can't open 'huge.md': the file is larger than 5 MiB."
     assert picked == []
     # a widget that takes no file has nothing to refuse
     status_id = _widget_id(main_view.status_bar.renderer)
-    assert help_client.post(f"/widget/{status_id}/file", files=too_large).status_code == 404
+    assert (
+        help_client.post(f"/_composeui/widget/{status_id}/file", files=too_large).status_code == 404
+    )
 
 
 def _store_of_data_files(saved: Path) -> SessionStore:
@@ -747,13 +751,15 @@ def test_a_body_larger_than_any_upload_is_refused_before_it_is_read(
     # without a length (chunked), the body is cut once it passes the limit
     content = iter([body[:1024], body[1024:]]) if chunked else body
 
-    response = client.post("/state", content=content, headers=headers)
+    response = client.post("/_composeui/state", content=content, headers=headers)
 
     assert response.status_code == 413
     assert main_view.notification.message == ""  # the route never ran
 
 
-@pytest.mark.parametrize("path", ["/state", "/widget/{}", "/state/download"])
+@pytest.mark.parametrize(
+    "path", ["/_composeui/state", "/_composeui/widget/{}", "/_composeui/state/download"]
+)
 def test_the_app_s_upload_limit_reaches_no_other_route(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, path: str
 ) -> None:

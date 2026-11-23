@@ -77,13 +77,14 @@ def test_a_pick_file_action_uploads_the_file_and_hands_it_over(
     (picker,) = [a for tag, a in _element(page, action_id).descendants if tag == "input"]
     assert picker["type"] == "file"
     assert picker["accept"] == ".md,.markdown"
-    assert picker["hx-post"] == f"/widget/{action_id}/file"
+    assert picker["hx-post"] == f"/_composeui/widget/{action_id}/file"
     picked: list[tuple[Path, bool]] = []
     action.file_picked.connect(lambda path: picked.append((path, path.is_file())))
     help_id = _widget_id(main_view.help.renderer)
 
     response = help_client.post(
-        f"/widget/{action_id}/file", files={"file": ("notes.md", b"# Notes", "text/markdown")}
+        f"/_composeui/widget/{action_id}/file",
+        files={"file": ("notes.md", b"# Notes", "text/markdown")},
     )
     assert response.status_code == 200
     assert _swapped(response.text, help_id).text == "Notes\n"
@@ -95,24 +96,25 @@ def test_a_pick_file_action_uploads_the_file_and_hands_it_over(
 
     # refused: another type, or no file at all
     response = help_client.post(
-        f"/widget/{action_id}/file", files={"file": ("notes.txt", b"plain", "text/plain")}
+        f"/_composeui/widget/{action_id}/file",
+        files={"file": ("notes.txt", b"plain", "text/plain")},
     )
     status = _swapped(response.text, _widget_id(main_view.notification.renderer))
     assert status.text == "Can't open 'notes.txt': expected a .md or .markdown file."
     assert main_view.help.text == "# Notes"
-    assert help_client.post(f"/widget/{action_id}/file").status_code == 400
+    assert help_client.post(f"/_composeui/widget/{action_id}/file").status_code == 400
     # another action takes no file, and an unknown widget is none of the session's
     open_id = _widget_id(main_view.file_menu.open_file.renderer)
     files = {"file": ("notes.md", b"# Other", "text/markdown")}
-    assert help_client.post(f"/widget/{open_id}/file", files=files).status_code == 400
-    assert help_client.post("/widget/cui-0/file", files=files).status_code == 404
+    assert help_client.post(f"/_composeui/widget/{open_id}/file", files=files).status_code == 400
+    assert help_client.post("/_composeui/widget/cui-0/file", files=files).status_code == 404
     assert len(picked) == 1
 
 
 def test_saving_downloads_the_session_state(main_view: HelloMainView, client: TestClient) -> None:
     _type_name(client, main_view, "Bob")
 
-    response = client.get("/state")
+    response = client.get("/_composeui/state")
 
     assert response.status_code == 200
     assert response.headers["content-disposition"] == (
@@ -130,10 +132,10 @@ def test_a_saved_state_opens_in_another_browser(app: _HelloApp) -> None:
         alice_view, bob_view = app.session_views
         _type_name(alice, alice_view, "Alice")
         style_id = _field_id(alice_view.form.style)
-        alice.post(f"/widget/{style_id}", data={style_id: "FORMAL", "event": "change"})
-        saved = alice.get("/state").content
+        alice.post(f"/_composeui/widget/{style_id}", data={style_id: "FORMAL", "event": "change"})
+        saved = alice.get("/_composeui/state").content
 
-        response = bob.post("/state", files={"file": ("study.hello", saved)})
+        response = bob.post("/_composeui/state", files={"file": ("study.hello", saved)})
 
         # a load can change anything: the page reloads instead of swapping fragments
         assert response.headers["hx-refresh"] == "true"
@@ -141,7 +143,9 @@ def test_a_saved_state_opens_in_another_browser(app: _HelloApp) -> None:
         assert bob_view.form.style.value is GreetingStyle.FORMAL
         assert 'value="Alice"' in bob.get("/").text
         # the next save offers the name the state was opened from
-        assert 'filename="study.hello"' in bob.get("/state").headers["content-disposition"]
+        assert (
+            'filename="study.hello"' in bob.get("/_composeui/state").headers["content-disposition"]
+        )
 
 
 def _read_name(job: object) -> str:
@@ -163,11 +167,11 @@ def test_what_a_session_s_start_jobs_give_is_no_unsaved_change() -> None:
         client.get("/")
         (main_view,) = app.session_views
         for _ in range(200):  # the job's result, handed to the session after a request
-            client.get("/jobs")
+            client.get("/_composeui/jobs")
             if main_view.form.name.text == "Ada":
                 break
             time.sleep(0.05)
-        client.get("/jobs")  # after the job's callbacks, which hold the session's lock
+        client.get("/_composeui/jobs")  # after the job's callbacks, which hold the session's lock
 
         assert main_view.form.name.text == "Ada"
         assert not main_view.has_unsaved_changes()
@@ -197,7 +201,7 @@ def test_a_rejected_state_file_changes_nothing_and_says_why(
     _type_name(client, main_view, "Bob")
     main_view._mark_saved()  # noqa: SLF001 (as Save does: opened without asking to discard Bob)
 
-    response = client.post("/state", files={"file": (filename, content)})
+    response = client.post("/_composeui/state", files={"file": (filename, content)})
 
     assert "hx-refresh" not in response.headers
     notification_id = _widget_id(main_view.notification.renderer)
@@ -219,16 +223,16 @@ def test_an_upload_over_unsaved_changes_opens_once_the_user_discards_them(
     discard_id = _widget_id(main_view.discard_changes.renderer)
 
     # refused before the question: nothing to discard for
-    response = client.post("/state", files={"file": ("study.pipe", b"{}")})
+    response = client.post("/_composeui/state", files={"file": ("study.pipe", b"{}")})
     assert "expected a .hello file" in response.text
     assert not main_view.discard_changes.is_visible
-    response = client.post("/state", files={"file": ("alice.hello", study("Alice"))})
+    response = client.post("/_composeui/state", files={"file": ("alice.hello", study("Alice"))})
     assert f'id="{discard_id}" hx-swap-oob="true"' in response.text
     # picked again before the answer: the last file is the one to open
-    client.post("/state", files={"file": ("ada.hello", study("Ada"))})
+    client.post("/_composeui/state", files={"file": ("ada.hello", study("Ada"))})
     assert main_view.form.name.text == "Bob"
 
-    response = client.post(f"/widget/{discard_id}", data={"event": "accept"})
+    response = client.post(f"/_composeui/widget/{discard_id}", data={"event": "accept"})
 
     assert main_view.form.name.text == "Ada"
     assert main_view.state_filepath == Path("ada.hello")
@@ -241,9 +245,13 @@ def test_save_s_post_saves_the_study_and_a_link_s_download_does_not(
 ) -> None:
     _type_name(client, main_view, "Bob")
 
-    client.get("/state")  # e.g. a link from another site: the user may never get the file
+    client.get(
+        "/_composeui/state"
+    )  # e.g. a link from another site: the user may never get the file
     assert main_view.has_unsaved_changes()
-    client.post("/state/download", data={"trigger": _action_id(main_view.file_menu.save)})
+    client.post(
+        "/_composeui/state/download", data={"trigger": _action_id(main_view.file_menu.save)}
+    )
     assert not main_view.has_unsaved_changes()
 
 
@@ -254,7 +262,7 @@ def test_save_downloads_a_study_opened_from_a_file_and_writes_none_on_the_server
     main_view.state_filepath = Path("ada.hello")  # as an Open names the study: the user's file
 
     response = client.post(
-        "/state/download", data={"trigger": _action_id(main_view.file_menu.save)}
+        "/_composeui/state/download", data={"trigger": _action_id(main_view.file_menu.save)}
     )
 
     assert response.status_code == 200
@@ -273,7 +281,7 @@ def test_the_file_menu_is_buttons_in_the_header(
     header = page[page.index("<header") : page.index("</header>")]
     assert _element(header, _widget_id(menu.renderer)).tag == "div"
     new = _element(header, _action_id(menu.new))
-    assert new.attributes["hx-post"] == f"/widget/{_action_id(menu.new)}"
+    assert new.attributes["hx-post"] == f"/_composeui/widget/{_action_id(menu.new)}"
     open_file = _element(header, _action_id(menu.open_file))
     assert ("input", "file") in [(tag, attrs.get("type")) for tag, attrs in open_file.descendants]
     save = _element(header, _action_id(menu.save))
@@ -282,7 +290,7 @@ def test_the_file_menu_is_buttons_in_the_header(
         "cui-save",
         _action_id(menu.save),
     )
-    assert '<form id="cui-save" method="post" action="/state/download" hidden>' in page
+    assert '<form id="cui-save" method="post" action="/_composeui/state/download" hidden>' in page
     # nothing left for a dropdown: the separator only set Exit apart
     menu_html = header[header.index(f'id="{_widget_id(menu.renderer)}"') :]
     assert "<ul" not in menu_html[: menu_html.index(f'id="{_action_id(menu.save)}"')]
@@ -302,7 +310,7 @@ def test_an_app_without_studies_has_no_file_buttons() -> None:
         page = client.get("/").text
     header = page[page.index("<header") : page.index("</header>")]
     assert "Open Help" in header
-    assert not any(text in header for text in (">New<", ">Open<", ">Save<", "/state"))
+    assert not any(text in header for text in (">New<", ">Open<", ">Save<", "/_composeui/state"))
     (main_view,) = views
     assert main_view.file_menu.renderer is None  # never rendered
 
@@ -398,11 +406,12 @@ def test_exit_ends_the_session(
     field_id = _field_id(main_view.form.name)
 
     response = client.post(
-        f"/widget/{_action_id(main_view.file_menu.exit_app)}", data={"event": "triggered"}
+        f"/_composeui/widget/{_action_id(main_view.file_menu.exit_app)}",
+        data={"event": "triggered"},
     )
 
     assert response.headers["hx-redirect"] == "/"
-    stale = client.post(f"/widget/{field_id}", data={"value": "x", "event": "input"})
+    stale = client.post(f"/_composeui/widget/{field_id}", data={"value": "x", "event": "input"})
     assert stale.headers["hx-refresh"] == "true"
     client.get("/")
     assert len(app.session_views) == 2  # the redirect lands on a fresh session
@@ -416,7 +425,7 @@ def test_a_save_post_fires_its_action_then_downloads(
     triggered = _count(save.triggered)
     _type_name(client, main_view, "Bob")
 
-    response = client.post("/state/download", data={"trigger": _action_id(save)})
+    response = client.post("/_composeui/state/download", data={"trigger": _action_id(save)})
 
     assert len(triggered) == 1
     assert "attachment" in response.headers["content-disposition"]
@@ -430,14 +439,14 @@ def test_a_save_post_without_its_action_only_downloads(
     menu = main_view.file_menu
     saves = [_count(menu.save.triggered), _count(menu.save_as.triggered)]
 
-    response = client.post("/state/download", data=data)
+    response = client.post("/_composeui/state/download", data=data)
 
     assert "attachment" in response.headers["content-disposition"]
     assert saves == [[], []]
 
 
 def test_an_open_post_without_a_file_is_refused(client: TestClient) -> None:
-    response = client.post("/state", data={"trigger": "none"})
+    response = client.post("/_composeui/state", data={"trigger": "none"})
 
     assert (response.status_code, response.text) == (400, "No file uploaded")
 
@@ -449,7 +458,7 @@ def test_a_state_link_downloads_without_firing_save(
     save = main_view.file_menu.save
     triggered = _count(save.triggered)
 
-    response = client.get(f"/state?trigger={_action_id(save)}")
+    response = client.get(f"/_composeui/state?trigger={_action_id(save)}")
 
     assert "attachment" in response.headers["content-disposition"]
     assert triggered == []
@@ -463,7 +472,7 @@ def test_the_open_upload_fires_its_action_then_loads(
     saved = json.dumps({"form": {"name": {"text": "Zoe"}}}).encode()
 
     response = client.post(
-        "/state",
+        "/_composeui/state",
         files={"file": ("study.hello", saved)},
         data={"trigger": _action_id(open_file)},
     )
@@ -482,7 +491,7 @@ def test_the_open_picker_offers_only_the_apps_files(
     page = client.get("/").text
     # renamed later: the action's fragment is swapped on its own, and keeps the filter
     open_file.text = "Open study"
-    fragment = client.get(f"/widget/{_action_id(open_file)}").text
+    fragment = client.get(f"/_composeui/widget/{_action_id(open_file)}").text
 
     assert [re.findall(r'accept="([^"]*)"', tag) for tag in file_inputs.findall(page)] == [
         [".hello"]
@@ -509,12 +518,15 @@ def test_new_clears_the_form_in_place(
     form = main_view.form
     triggered = _count(main_view.file_menu.new.triggered)
     _type_name(client, main_view, "Bob")
-    client.post(f"/widget/{_field_id(form.age)}", data={"value": "41", "event": "input"})
+    client.post(f"/_composeui/widget/{_field_id(form.age)}", data={"value": "41", "event": "input"})
 
-    client.post(f"/widget/{_action_id(main_view.file_menu.new)}", data={"event": "triggered"})
+    client.post(
+        f"/_composeui/widget/{_action_id(main_view.file_menu.new)}", data={"event": "triggered"}
+    )
     assert form.name.text == "Bob"  # unsaved: kept until the user agrees to discard it
     response = client.post(
-        f"/widget/{_widget_id(main_view.discard_changes.renderer)}", data={"event": "accept"}
+        f"/_composeui/widget/{_widget_id(main_view.discard_changes.renderer)}",
+        data={"event": "accept"},
     )
 
     assert len(triggered) == 1
@@ -552,7 +564,7 @@ def test_a_pipe_study_from_first_page_to_reopening_it_elsewhere(
         form_log_id = _widget_id(form.log_view.renderer)
 
         def post(widget_id: str, data: dict[str, str]) -> str:
-            response: httpx.Response = alice.post(f"/widget/{widget_id}", data=data)
+            response: httpx.Response = alice.post(f"/_composeui/widget/{widget_id}", data=data)
             assert response.status_code == 200
             assert _find(response.text, widget_id) is None  # never the edited field
             return response.text
@@ -607,11 +619,12 @@ def test_a_pipe_study_from_first_page_to_reopening_it_elsewhere(
         assert form.log_view.log_message == ""
 
         # saved, then opened in another browser's session
-        saved = alice.get("/state").content
+        saved = alice.get("/_composeui/state").content
         bob.get("/")
         reopened = pipe_views[1].pages.inputs.pipe_form
         assert (
-            bob.post("/state", files={"file": ("tee.pipe", saved)}).headers["hx-refresh"] == "true"
+            bob.post("/_composeui/state", files={"file": ("tee.pipe", saved)}).headers["hx-refresh"]
+            == "true"
         )
         _assert_shows_the_tee_study(bob.get("/").text, reopened)
 
@@ -658,12 +671,12 @@ def test_a_toolbar_shows_its_actions_as_header_buttons(
     assert (run.text, run.attributes["title"]) == ("Run", "Run (Alt+Shift+R)")
 
     response = toolbar_client.post(
-        f"/widget/{_action_id(toolbar_view.run)}", data={"event": "triggered"}
+        f"/_composeui/widget/{_action_id(toolbar_view.run)}", data={"event": "triggered"}
     )
     total = _swapped(response.text, _widget_id(main_view.router.results.total.renderer))
     assert total.text == "Ran"
     wrap_id = _action_id(toolbar_view.wrap)
-    response = toolbar_client.post(f"/widget/{wrap_id}", data={"event": "triggered"})
+    response = toolbar_client.post(f"/_composeui/widget/{wrap_id}", data={"event": "triggered"})
     wrap = _swapped(response.text, wrap_id)
     assert wrap.attributes["aria-pressed"] == "true"
     assert "btn-active" in (wrap.attributes["class"] or "").split()
@@ -675,7 +688,7 @@ def test_a_toolbar_shows_its_actions_as_header_buttons(
         "disabled" in attributes for tag, attributes in swapped.descendants if tag == "button"
     )
     refused = toolbar_client.post(
-        f"/widget/{_action_id(toolbar_view.run)}", data={"event": "triggered"}
+        f"/_composeui/widget/{_action_id(toolbar_view.run)}", data={"event": "triggered"}
     )
     assert refused.status_code == 400
 
@@ -687,7 +700,7 @@ def test_the_language_menu_swaps_in_the_translated_widgets(
     main_pipe_id = _widget_id(pipe_main_view.pages.inputs.pipe_form.main_pipe.renderer)
 
     response = pipe_client.post(
-        f"/widget/{_action_id(menu.action('fr'))}", data={"event": "triggered"}
+        f"/_composeui/widget/{_action_id(menu.action('fr'))}", data={"event": "triggered"}
     )
 
     assert "hx-refresh" not in response.headers

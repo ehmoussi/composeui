@@ -114,9 +114,11 @@ def test_clearing_the_name_shows_its_row_message(
 ) -> None:
     name = pipe_main_view.pages.inputs.pipe_form.name
     name_id = _field_id(name)
-    pipe_client.post(f"/widget/{name_id}", data={"value": "Tee", "event": "input"})
+    pipe_client.post(f"/_composeui/widget/{name_id}", data={"value": "Tee", "event": "input"})
 
-    body = pipe_client.post(f"/widget/{name_id}", data={"value": "", "event": "input"}).text
+    body = pipe_client.post(
+        f"/_composeui/widget/{name_id}", data={"value": "", "event": "input"}
+    ).text
 
     assert "A name is mandatory" in body
     assert f'id="{_widget_id(_part(name, "log"))}" hx-swap-oob="true"' in body
@@ -168,7 +170,9 @@ def test_a_form_shows_its_other_views_between_its_rows_in_their_order(
         _widget_id(form.log_view.renderer),
     ]
 
-    body = client.post(f"/widget/{_widget_id(view.open.renderer)}", data={"event": "click"}).text
+    body = client.post(
+        f"/_composeui/widget/{_widget_id(view.open.renderer)}", data={"event": "click"}
+    ).text
     form_id = _widget_id(form.renderer)
     assert _contains(_swapped(body, dialog_id), form_id)
     # in the form's fieldset: the folder's row, the button, the table, then the message
@@ -177,7 +181,7 @@ def test_a_form_shows_its_other_views_between_its_rows_in_their_order(
         shown.index(element_id) for element_id in ids
     )
 
-    body = client.post(f"/widget/{ids[1]}", data={"event": "click"}).text
+    body = client.post(f"/_composeui/widget/{ids[1]}", data={"event": "click"}).text
 
     assert view.open_dialog.is_visible  # a button of its form leaves it open
     assert f'id="{dialog_id}"' not in body

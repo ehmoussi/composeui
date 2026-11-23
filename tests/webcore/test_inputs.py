@@ -46,18 +46,18 @@ if TYPE_CHECKING:
 def test_age_is_validated_and_summarised(main_view: HelloMainView, client: TestClient) -> None:
     age_id = _field_id(main_view.form.age)
 
-    body = client.post(f"/widget/{age_id}", data={"value": "-3", "event": "input"}).text
+    body = client.post(f"/_composeui/widget/{age_id}", data={"value": "-3", "event": "input"}).text
 
     assert main_view.form.age.value == -3.0
     assert "An age can&#39;t be negative" in body
 
     # another error of the same type: only the message changes, and it must still show
-    body = client.post(f"/widget/{age_id}", data={"value": "4.5", "event": "input"}).text
+    body = client.post(f"/_composeui/widget/{age_id}", data={"value": "4.5", "event": "input"}).text
 
     log_id = _widget_id(_part(main_view.form.age, "log"))
     assert _swapped(body, log_id).text == "An age is a whole number of years"
 
-    client.post(f"/widget/{age_id}", data={"value": "41", "event": "input"})
+    client.post(f"/_composeui/widget/{age_id}", data={"value": "41", "event": "input"})
 
     assert main_view.form.age.log_message == ""
     assert main_view.summary.text == "Nobody is 41 years old."
@@ -68,10 +68,10 @@ def test_leaving_the_age_field_with_unparsable_text_shows_the_age_again(
 ) -> None:
     age_id = _field_id(main_view.form.age)
     finished = _count(main_view.form.age.editing_finished)
-    client.post(f"/widget/{age_id}", data={"value": "4", "event": "input"})
-    client.post(f"/widget/{age_id}", data={"value": "4a", "event": "input"})
+    client.post(f"/_composeui/widget/{age_id}", data={"value": "4", "event": "input"})
+    client.post(f"/_composeui/widget/{age_id}", data={"value": "4a", "event": "input"})
 
-    body = client.post(f"/widget/{age_id}", data={"value": "4a", "event": "change"}).text
+    body = client.post(f"/_composeui/widget/{age_id}", data={"value": "4a", "event": "change"}).text
 
     # the field, otherwise never swapped back, now shows the age its messages describe
     assert main_view.form.age.value == 4.0
@@ -91,8 +91,8 @@ def test_change_event_applies_the_text_and_finishes_editing_once(
     input_id = _field_id(greeting)
 
     # a `change` can overtake a still-debounced `input` carrying the same value
-    client.post(f"/widget/{input_id}", data={"value": "Ann", "event": "change"})
-    client.post(f"/widget/{input_id}", data={"value": "Ann", "event": "input"})
+    client.post(f"/_composeui/widget/{input_id}", data={"value": "Ann", "event": "change"})
+    client.post(f"/_composeui/widget/{input_id}", data={"value": "Ann", "event": "input"})
 
     assert greeting.text == "Ann"
     assert edited == ["Ann"]
@@ -299,7 +299,9 @@ def test_a_text_area_takes_the_lines_posted_and_finishes_editing_once(
 
     # a form's encoding ends the lines with CRLF; `change` posts the text again
     for event in ("input", "change"):
-        pipe_client.post(f"/widget/{field_id}", data={"value": "North\r\nside", "event": event})
+        pipe_client.post(
+            f"/_composeui/widget/{field_id}", data={"value": "North\r\nside", "event": event}
+        )
 
     assert comment.text == "North\nside"
     assert edited == ["North\nside"]

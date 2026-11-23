@@ -64,7 +64,7 @@ class WebCheckBoxRenderer(WebRenderer[CheckBoxViewLike]):
             ' class="flex">'
             '<label class="label cursor-pointer gap-2 text-base-content">'
             '<input type="checkbox" class="checkbox checkbox-sm checkbox-primary"'
-            ' name="checked" value="on"{checked} hx-post="/widget/{widget_id}"'
+            ' name="checked" value="on"{checked} hx-post="/_composeui/widget/{widget_id}"'
             ' hx-trigger="change" hx-vals=\'{{"event": "change"}}\' hx-swap="none"'
             ' autocomplete="off"{disabled}>'
             "{text}</label></div>"
@@ -120,7 +120,7 @@ class WebButtonRenderer(WebRenderer[ButtonViewLike]):
         return Markup(
             '<button {root_attributes} type="button" data-variant="{kind}"'
             ' class="btn {variant} self-start"'
-            """ hx-post="/widget/{widget_id}" hx-vals='{{"event": "click"}}'"""
+            """ hx-post="/_composeui/widget/{widget_id}" hx-vals='{{"event": "click"}}'"""
             ' hx-swap="none"{disabled}>{text}</button>'
         ).format(
             root_attributes=self._root_attributes(oob=oob),
@@ -271,7 +271,8 @@ class WebSliderRenderer(WebRenderer[SliderViewLike]):
             '<input id="{input_id}"{row_attributes} type="range" data-slider'
             ' data-decimals="{decimals}"{fill} class="range range-primary" name="value"'
             ' min="{minimum}" max="{top}" step="{step}" value="{value}"'
-            ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:{delay}ms, change"'
+            ' hx-post="/_composeui/widget/{widget_id}"'
+            ' hx-trigger="input changed delay:{delay}ms, change"'
             ' data-post-event hx-swap="none" hx-sync="this:queue all"'
             ' autocomplete="off"{disabled}>'
             # read out by the input itself, as its value
@@ -389,7 +390,8 @@ class WebRangeSliderRenderer(WebRenderer[RangeSliderViewLike]):
                 '<input id="{widget_id}-{name}" type="range" class="range range-primary"'
                 ' name="{name}" min="0" max="{last}" step="1" value="{position}"'
                 ' aria-label="{label}" aria-valuetext="{text}" data-range-end="{name}"'
-                ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:{delay}ms, change"'
+                ' hx-post="/_composeui/widget/{widget_id}"'
+                ' hx-trigger="input changed delay:{delay}ms, change"'
                 ' hx-include="closest .cui-range-track" data-post-event hx-swap="none"'
                 ' hx-sync="closest .cui-range-track:queue all" autocomplete="off"{disabled}>'
             ).format(

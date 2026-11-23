@@ -292,4 +292,4 @@ it over:
 - **Qt.** It queues the change on Qt's main thread (`_MainThreadInvoker`).
 - **Textual.** It runs the change with `App.call_from_thread`.
 - **The web.** It runs the change under the session's lock. The next response, or the next
-  fetch of `/jobs`, sends the change.
+  fetch of `/_composeui/jobs`, sends the change.

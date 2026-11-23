@@ -67,7 +67,7 @@ class WebDialogRenderer(WebRenderer[DialogView]):
         # a disabled dialog can't be closed: its answer would be ignored
         cancel = (
             Markup(
-                ' hx-post="/widget/{}" hx-trigger="cancel"'
+                ' hx-post="/_composeui/widget/{}" hx-trigger="cancel"'
                 """ hx-vals='{{"event": "dismiss"}}'"""
             ).format(self.widget_id)
             if self.is_enabled
@@ -102,7 +102,7 @@ class WebDialogRenderer(WebRenderer[DialogView]):
         # the dialog's own `close`, not `cancel`: no dismissal posted on top of the answer
         autofocus = " autofocus" if is_focused else ""
         return Markup(
-            '<button type="button" class="{classes}" hx-post="/widget/{widget_id}"'
+            '<button type="button" class="{classes}" hx-post="/_composeui/widget/{widget_id}"'
             """ hx-vals='{{"event": "{event}"}}'"""
             " data-close-dialog{autofocus}{disabled}>"
             "{text}</button>"
@@ -172,7 +172,7 @@ class WebFormDialogRenderer(WebDialogRenderer):
         reject = self._button_html("reject", view.reject_text, "btn", disabled, is_focused=False)
         cancel = (
             Markup(
-                ' hx-post="/widget/{}" hx-trigger="cancel"'
+                ' hx-post="/_composeui/widget/{}" hx-trigger="cancel"'
                 """ hx-vals='{{"event": "dismiss"}}'"""
             ).format(self.widget_id)
             if self.is_enabled
@@ -218,7 +218,7 @@ class WebFormDialogRenderer(WebDialogRenderer):
         disabled = "" if self.is_enabled and self._form_view.can_accept else " disabled"
         return Markup(
             '<button id="{accept_id}" type="button" class="btn btn-primary"{swap}'
-            ' hx-post="/widget/{widget_id}"'
+            ' hx-post="/_composeui/widget/{widget_id}"'
             """ hx-vals='{{"event": "accept"}}'{disabled}>"""
             "{accept_text}</button>"
         ).format(

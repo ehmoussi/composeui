@@ -57,7 +57,7 @@
 
   <rect class="backend" x="20" y="280" width="280" height="64" rx="8"/>
   <text class="title" x="160" y="304" text-anchor="middle">The web</text>
-  <text class="mono" x="160" y="326" text-anchor="middle">POST /widget/{id} → dispatch()</text>
+  <text class="mono" x="160" y="326" text-anchor="middle">POST /_composeui/widget/{id}</text>
 
   <!-- the shared path -->
   <rect class="core" x="360" y="64" width="280" height="296" rx="10"/>

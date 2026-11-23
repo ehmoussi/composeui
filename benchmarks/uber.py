@@ -215,7 +215,7 @@ def _close_app(app: Any) -> None:
 
 
 def _poll(browser: Any, main_view: Any) -> int:
-    """Poll `/jobs`, as the page does, until no job runs; give the bytes polled.
+    """Poll `/_composeui/jobs`, as the page does, until no job runs; give the bytes polled.
 
     A job's end leaves the running jobs, then emits its result, which can start another
     job, all under the session's lock. A poll takes the lock: no job running after it means
@@ -224,7 +224,7 @@ def _poll(browser: Any, main_view: Any) -> int:
     polled = 0
     while True:
         _settle(main_view)
-        polled += len(browser.get("/jobs").content)
+        polled += len(browser.get("/_composeui/jobs").content)
         if not main_view.jobs.is_running:
             return polled
 
@@ -276,7 +276,7 @@ def _web_case(module: Any, clock: Clock) -> dict[str, Any]:
 
             def move(hour: int = hour) -> None:
                 response = browser.post(
-                    f"/widget/{slider_id}", data={"value": str(hour), "event": "change"}
+                    f"/_composeui/widget/{slider_id}", data={"value": str(hour), "event": "change"}
                 )
                 sizes[f"hour {hour:02d}"] = len(response.content)
                 # the map's points, when a job samples them, come with the polls
@@ -293,7 +293,9 @@ def _web_case(module: Any, clock: Clock) -> dict[str, Any]:
 
         def post(name: str, widget_id: str, data: dict[str, str]) -> None:
             def action() -> None:
-                sizes[name] = len(browser.post(f"/widget/{widget_id}", data=data).content)
+                sizes[name] = len(
+                    browser.post(f"/_composeui/widget/{widget_id}", data=data).content
+                )
                 sizes[f"{name} poll"] = poll()
 
             clock.step(name, action)

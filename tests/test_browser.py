@@ -562,7 +562,7 @@ def test_map_draws_and_keeps_the_viewport_after_swaps(browser: Browser) -> None:
         expect(position).not_to_have_text(previous)
         assert errors == []
         assert all(request.startswith(url) for request in requests)
-        assert sum("/static/deckgl.min.js" in request for request in requests) == 1
+        assert sum("/_composeui/static/deckgl.min.js" in request for request in requests) == 1
 
 
 def test_map_fits_loaded_points_and_resizes_without_pinning_the_viewport(browser: Browser) -> None:
@@ -829,7 +829,7 @@ def chart_pages_page(browser: Browser, chart_pages_base_url: str) -> Iterator[Pa
 def _posted(page: Page) -> contextlib.AbstractContextManager[object]:
     """Wait for the page's next widget POST to be answered."""
     return page.expect_response(
-        lambda response: response.request.method == "POST" and "/widget/" in response.url
+        lambda response: response.request.method == "POST" and "/_composeui/widget/" in response.url
     )
 
 
@@ -934,7 +934,9 @@ def test_open_over_unsaved_changes_asks_then_shows_the_study_opened(
     # Open posts the study to /state, not to a widget: `_posted` would wait for another
     # post, such as the field's as it lost the focus, which may come before or not at all
     with page.expect_response(
-        lambda response: response.request.method == "POST" and response.url.endswith("/state")
+        lambda response: (
+            response.request.method == "POST" and response.url.endswith("/_composeui/state")
+        )
     ):
         chooser.value.set_files(saved)
     dialog = page.get_by_role("dialog")
@@ -953,7 +955,7 @@ def test_a_file_the_app_gives_downloads_once_and_the_page_stays(browser: Browser
     fetched: list[str] = []
 
     async def recording(scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] == "http" and scope["path"].startswith("/download/"):
+        if scope["type"] == "http" and scope["path"].startswith("/_composeui/download/"):
             fetched.append(scope["path"])
         await app(scope, receive, send)
 
@@ -1465,7 +1467,7 @@ def test_an_error_stays_in_view_as_the_page_scrolls_until_the_user_closes_it(
     study = tmp_path / "broken.pipe"
     study.write_text("not a study", encoding="utf-8")
 
-    with page.expect_response(lambda response: response.url.endswith("/state")):
+    with page.expect_response(lambda response: response.url.endswith("/_composeui/state")):
         page.locator('input[type="file"][accept=".pipe"]').set_input_files(study)
     alert = page.get_by_role("alert")
     expect(alert).to_contain_text("Can't open 'broken.pipe'")

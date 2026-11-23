@@ -19,7 +19,7 @@ def _static_url(name: str) -> str:
     cached of an older one (e.g. a stylesheet without the classes a new page uses).
     """
     digest = hashlib.sha256((_STATIC / name).read_bytes()).hexdigest()[:16]
-    return f"/static/{name}?v={digest}"
+    return f"/_composeui/static/{name}?v={digest}"
 
 
 # no `data-theme`: daisyUI then follows the browser's light/dark preference
@@ -51,7 +51,7 @@ $content
 $page_marker
 $pollers
 $downloads
-<form id="$save_form" method="post" action="/state/download" hidden>
+<form id="$save_form" method="post" action="/_composeui/state/download" hidden>
 <input type="hidden" name="page" autocomplete="off">
 <input type="hidden" name="post" autocomplete="off">
 <input type="hidden" name="$session_field" value="$session_tag" autocomplete="off"></form>
@@ -120,9 +120,9 @@ def jobs_poller(*, is_running: bool, oob: bool = False) -> Markup:
     """
     swap = Markup(' hx-swap-oob="true"') if oob else Markup()
     poll = (
-        Markup(' hx-get="/jobs" hx-trigger="load delay:{}ms" hx-swap="outerHTML"').format(
-            JOBS_POLL_MS
-        )
+        Markup(
+            ' hx-get="/_composeui/jobs" hx-trigger="load delay:{}ms" hx-swap="outerHTML"'
+        ).format(JOBS_POLL_MS)
         if is_running
         else Markup()
     )
@@ -144,7 +144,7 @@ def reload_poller(instance: str | None) -> Markup:
     if instance is None:
         return Markup()
     return Markup(
-        '<div id="cui-reload" hx-get="/reload?instance={}" hx-trigger="every {}ms"'
+        '<div id="cui-reload" hx-get="/_composeui/reload?instance={}" hx-trigger="every {}ms"'
         ' hx-swap="none" hidden></div>'
     ).format(instance, RELOAD_POLL_MS)
 

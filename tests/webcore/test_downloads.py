@@ -72,11 +72,15 @@ def test_an_uploaded_file_name_cannot_reach_the_download_header(
         b"{}\r\n--b--\r\n"
     )
 
-    client.post("/state", content=body, headers={"Content-Type": "multipart/form-data; boundary=b"})
+    client.post(
+        "/_composeui/state",
+        content=body,
+        headers={"Content-Type": "multipart/form-data; boundary=b"},
+    )
 
     assert main_view.state_filepath is not None
     assert '"' in main_view.state_filepath.name  # the hostile name did reach the server
-    disposition = client.get("/state").headers["content-disposition"]
+    disposition = client.get("/_composeui/state").headers["content-disposition"]
     assert re.fullmatch(r'attachment; filename="[A-Za-z0-9._-]+\.hello"', disposition)
 
 
@@ -107,34 +111,34 @@ def test_an_app_s_file_is_named_until_the_page_of_its_session_fetches_it(tmp_pat
         view = views[0]
         export_id = _widget_id(view.export.renderer)
 
-        body = client.post(f"/widget/{export_id}", data={"event": "click"}).text
+        body = client.post(f"/_composeui/widget/{export_id}", data={"event": "click"}).text
         _swapped(body, "cui-downloads")
         ((address, name),) = links(body)
         assert name == "report é.csv"  # without the folder
         # named again until fetched: the answer may be lost, the page reloaded
-        assert links(client.get(f"/widget/{export_id}").text) == [(address, name)]
+        assert links(client.get(f"/_composeui/widget/{export_id}").text) == [(address, name)]
         assert links(client.get("/").text) == [(address, name)]
         stolen = other.get(address)  # the ticket is its session's alone
         head = client.head(address)
         fetched = client.get(address)
         again = client.get(address)  # e.g. a download manager's: no longer named, still kept
-        after = client.get(f"/widget/{export_id}").text
+        after = client.get(f"/_composeui/widget/{export_id}").text
 
         report = tmp_path / "report.csv"
         report.write_bytes(b"x\n")
         view.report = report
-        client.post(f"/widget/{export_id}", data={"event": "click"})
-        ((address, _),) = links(client.get(f"/widget/{export_id}").text)
+        client.post(f"/_composeui/widget/{export_id}", data={"event": "click"})
+        ((address, _),) = links(client.get(f"/_composeui/widget/{export_id}").text)
         from_file = client.get(address)
-        client.post(f"/widget/{export_id}", data={"event": "click"})
-        ((address, _),) = links(client.get(f"/widget/{export_id}").text)
+        client.post(f"/_composeui/widget/{export_id}", data={"event": "click"})
+        ((address, _),) = links(client.get(f"/_composeui/widget/{export_id}").text)
         report.unlink()
         gone = client.get(address)
         view.download("notes", b"# Notes", "text/markdown")  # outside any request
-        ((address, _),) = links(client.get(f"/widget/{export_id}").text)
+        ((address, _),) = links(client.get(f"/_composeui/widget/{export_id}").text)
         notes = client.get(address)
         view.export.content = None  # gives nothing
-        nothing = client.post(f"/widget/{export_id}", data={"event": "click"}).text
+        nothing = client.post(f"/_composeui/widget/{export_id}", data={"event": "click"}).text
 
     assert stolen.status_code == 404
     assert head.status_code == 200
@@ -171,7 +175,7 @@ def test_a_file_made_in_a_job_is_named_by_the_jobs_poll_the_button_disabled_mean
         deadline = time.monotonic() + 10
         while view.jobs.is_running and time.monotonic() < deadline:
             time.sleep(0.01)
-        response: httpx.Response = client.get("/jobs")
+        response: httpx.Response = client.get("/_composeui/jobs")
         return response.text
 
     with _Browser(ReportApp(build_main_view=ReportMainView).create_starlette_app()) as client:
@@ -180,17 +184,19 @@ def test_a_file_made_in_a_job_is_named_by_the_jobs_poll_the_button_disabled_mean
         view.later.content = make
         later_id = _widget_id(view.later.renderer)
 
-        started = client.post(f"/widget/{later_id}", data={"event": "click"}).text
-        refused = client.post(f"/widget/{later_id}", data={"event": "click"})  # while it runs
+        started = client.post(f"/_composeui/widget/{later_id}", data={"event": "click"}).text
+        refused = client.post(
+            f"/_composeui/widget/{later_id}", data={"event": "click"}
+        )  # while it runs
         view.jobs.drop()  # as New and Open do: the file is the study's replaced
-        dropped = client.get(f"/widget/{later_id}").text
+        dropped = client.get(f"/_composeui/widget/{later_id}").text
         release.set()
         deadline = time.monotonic() + 10
         while view.jobs.has_workers and time.monotonic() < deadline:
             time.sleep(0.01)
-        after_drop = client.get("/jobs").text
+        after_drop = client.get("/_composeui/jobs").text
 
-        client.post(f"/widget/{later_id}", data={"event": "click"})
+        client.post(f"/_composeui/widget/{later_id}", data={"event": "click"})
         polled = poll_until_over(client, view)
         ((address, name),) = [
             (a["href"], a["download"])
@@ -199,7 +205,7 @@ def test_a_file_made_in_a_job_is_named_by_the_jobs_poll_the_button_disabled_mean
         ]
         fetched = client.get(address or "")
 
-        client.post(f"/widget/{later_id}", data={"event": "click"})
+        client.post(f"/_composeui/widget/{later_id}", data={"event": "click"})
         failed = poll_until_over(client, view)
 
     assert "disabled" in _swapped(started, later_id).attributes
@@ -253,7 +259,9 @@ def _stream_ticket(
 ) -> str:
     """Give `write` as the report, click Export, and get the address that the page fetches."""
     view.report = StreamContent(write)
-    body = client.post(f"/widget/{_widget_id(view.export.renderer)}", data={"event": "click"}).text
+    body = client.post(
+        f"/_composeui/widget/{_widget_id(view.export.renderer)}", data={"event": "click"}
+    ).text
     # the newest: the answer names each file not fetched yet
     *_, address = [
         a["href"] or "" for tag, a in _swapped(body, "cui-downloads").descendants if tag == "a"
@@ -606,10 +614,10 @@ def test_a_server_that_stops_ends_the_downloads_being_written(tmp_path: Path) ->
                     break
                 time.sleep(0.1)
             assert page is not None
-            match = re.search(r'hx-post="(/widget/[^"]+)"[^>]*>Export<', page)
+            match = re.search(r'hx-post="(/_composeui/widget/[^"]+)"[^>]*>Export<', page)
             assert match is not None
             body = client.post(match[1], data={"event": "click"}).text
-            ticket = re.search(r'href="(/download/[^"]+)"', body)
+            ticket = re.search(r'href="(/_composeui/download/[^"]+)"', body)
             assert ticket is not None
             with client.stream("GET", ticket[1]) as download:
                 # kept: an iterator closed would close the download
@@ -638,7 +646,7 @@ def test_a_download_of_whatever_name_has_a_header_naming_it() -> None:
     with _Browser(RunApp(build_main_view=RunMainView).create_starlette_app()) as client:
         client.get("/")
         (view,) = views
-        address = f"/widget/{_widget_id(view.output.renderer)}/text"
+        address = f"/_composeui/widget/{_widget_id(view.output.renderer)}/text"
 
         # any characters a name can hold: quotes, slashes, line breaks, letters beyond ASCII
         @given(st.text(st.characters(codec="utf-8"), min_size=1, max_size=12))

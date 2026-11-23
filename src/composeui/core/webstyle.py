@@ -269,7 +269,7 @@ def _check_stylesheets(instance: WebStyle, _attribute: object, value: tuple[str,
 class WebStyle:
     """The look of the web app: its `theme`, then `stylesheets` of its own.
 
-    The web server serves `folder` at ``/style/files/``: the stylesheets, and the fonts
+    The web server serves `folder` at ``/_composeui/style/files/``: the stylesheets, and the fonts
     and images they name by a relative ``url(...)``. Its hidden files, and any file
     outside it, are not served. The stylesheets load after ComposeUI's, in their order, so
     their rules win over its. They select the parts of the page by their ``data-cui``

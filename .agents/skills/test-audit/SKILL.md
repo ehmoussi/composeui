@@ -80,7 +80,7 @@ the work itself:
 - **Web jobs:** read the views only after a request. A job hands its result to
   the session in its own thread, under the session's lock, and the reactive
   methods run there. A flag such as `has_result` or `jobs.is_running` changes
-  before they end. Poll `GET /jobs` until the state the test asserts arrives, or
+  before they end. Poll `GET /_composeui/jobs` until the state the test asserts arrives, or
   send one more request once the flag is set: it takes the lock after the
   callback is over. `test_a_user_unchecks_a_base_on_the_web_and_downloads_the_rows_shown`
   read a summary still empty on Windows with Python 3.9.

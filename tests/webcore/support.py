@@ -455,7 +455,7 @@ def _shows_files(renderer: WebRenderer[Any]) -> bool:
 
 def _type_name(client: TestClient, main_view: HelloMainView, name: str) -> None:
     field_id = _field_id(main_view.form.name)
-    response = client.post(f"/widget/{field_id}", data={"value": name, "event": "input"})
+    response = client.post(f"/_composeui/widget/{field_id}", data={"value": name, "event": "input"})
     assert response.status_code == 200
 
 

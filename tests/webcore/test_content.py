@@ -136,7 +136,7 @@ def test_a_timed_message_makes_the_status_bar_fetch_itself_after_the_timeout(
 
     status_bar.message = "Saved"
 
-    assert attributes()["hx-get"] == f"/widget/{renderer.widget_id}"
+    assert attributes()["hx-get"] == f"/_composeui/widget/{renderer.widget_id}"
     assert attributes()["hx-trigger"] == "load delay:3250ms"
     assert attributes()["hx-swap"] == "outerHTML"
 
@@ -164,7 +164,7 @@ def test_a_notification_shows_above_the_card_and_a_close_closes_only_the_message
     # meanwhile, a job's callback shows another message, which this page hasn't shown yet
     main_view.notify("Can't open b.txt.", LogType.ERROR)
 
-    url = f"/widget/{bar_id}"
+    url = f"/_composeui/widget/{bar_id}"
     assert client.post(url, data=replaced).status_code == 200
     assert main_view.notification.message == "Can't open b.txt."
     assert closes == []
@@ -197,7 +197,7 @@ def test_an_information_makes_the_notification_fetch_itself_after_its_timeout(
     main_view.notify("Imported 3 rows.")
 
     assert attributes()["role"] == "status"
-    assert attributes()["hx-get"] == f"/widget/{renderer.widget_id}"
+    assert attributes()["hx-get"] == f"/_composeui/widget/{renderer.widget_id}"
     assert attributes()["hx-trigger"] == "load delay:3250ms"
     main_view.clear_notification()
 
@@ -229,7 +229,7 @@ def test_a_console_sends_only_its_new_lines_then_the_line_being_written() -> Non
         assert console.text == "Ready <ok>\n"
 
         for _ in range(2):
-            body = client.post(f"/widget/{run_id}", data={"event": "click"}).text
+            body = client.post(f"/_composeui/widget/{run_id}", data={"event": "click"}).text
             assert f'id="{output_id}" hx-swap-oob' not in body
             assert f'hx-swap-oob="beforebegin:#{output_id}-last"' in body
             # the run's lines, the last run's progress line ended as the first of them
@@ -237,7 +237,7 @@ def test_a_console_sends_only_its_new_lines_then_the_line_being_written() -> Non
             assert _swapped(body, f"{output_id}-last").text == "Progress 100%"
 
         view.run.clicked.connect(lambda: setattr(view.output, "text", "New run"))
-        body = client.post(f"/widget/{run_id}", data={"event": "click"}).text
+        body = client.post(f"/_composeui/widget/{run_id}", data={"event": "click"}).text
         _swapped(body, output_id)  # whole
         assert _element(body, f"{output_id}-text").text == "New run"
 
@@ -269,14 +269,14 @@ def test_a_console_shows_its_ansi_colors_in_inline_styles_and_drops_them_when_as
         ]
 
         body = client.post(
-            f"/widget/{_widget_id(view.more.renderer)}", data={"event": "click"}
+            f"/_composeui/widget/{_widget_id(view.more.renderer)}", data={"event": "click"}
         ).text
         assert f'id="{output_id}" hx-swap-oob' not in body  # only the new lines
         assert 'style="color:#2472c8;font-style:italic;text-decoration:underline"' in body
 
         view.output.ansi_colors = False
         body = client.post(
-            f"/widget/{_widget_id(view.more.renderer)}", data={"event": "click"}
+            f"/_composeui/widget/{_widget_id(view.more.renderer)}", data={"event": "click"}
         ).text
         _swapped(body, output_id)  # whole
         assert styles(body, f"{output_id}-text") == []
@@ -315,12 +315,12 @@ def test_a_console_s_link_downloads_its_text() -> None:
         output_id = _widget_id(view.output.renderer)
         links = [a for tag, a in _element(page, output_id).descendants if tag == "a"]
         assert [(a["href"], "download" in a) for a in links] == [
-            (f"/widget/{output_id}/text", True)
+            (f"/_composeui/widget/{output_id}/text", True)
         ]
         view.output.append("Step 1 <done>\n")
 
-        response = client.get(f"/widget/{output_id}/text")
-        unknown = client.get(f"/widget/{_widget_id(view.run.renderer)}/text")
+        response = client.get(f"/_composeui/widget/{output_id}/text")
+        unknown = client.get(f"/_composeui/widget/{_widget_id(view.run.renderer)}/text")
 
     assert response.text == "Ready <ok>\nStep 1 <done>\n"
     assert response.headers["content-type"] == "text/plain; charset=utf-8"
@@ -354,12 +354,12 @@ def test_a_metric_is_a_stat_with_its_change_as_a_badge_colored_by_sign(
     running.delta = -2
     failed.label = "<Failed>"
     failed.delta = 0
-    stat = _element(client.get(f"/widget/{running_id}").text, running_id)
+    stat = _element(client.get(f"/_composeui/widget/{running_id}").text, running_id)
     assert "↓ 2 since yesterday" in stat.text
     badge = _badge(stat)
     assert badge is not None
     assert "badge-error" in badge
-    stat = _element(client.get(f"/widget/{failed_id}").text, failed_id)
+    stat = _element(client.get(f"/_composeui/widget/{failed_id}").text, failed_id)
     assert "<Failed>" in stat.text  # escaped, shown as text
     badge = _badge(stat)
     assert badge is not None
@@ -372,7 +372,7 @@ def test_a_metric_is_a_stat_with_its_change_as_a_badge_colored_by_sign(
     assert "↓ 2.0 since yesterday" in stat.text
     running.delta = -1 / 3
     running.delta_text = ""
-    stat = _element(client.get(f"/widget/{running_id}").text, running_id)
+    stat = _element(client.get(f"/_composeui/widget/{running_id}").text, running_id)
     assert "↓ 0.3" in stat.text
 
 
@@ -400,7 +400,7 @@ _SVG = b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>
 
 
 def _picture_address(html: str) -> str:
-    match = re.search(r'src="(/widget/[^"]+/picture\?version=[^"]+)"', html)
+    match = re.search(r'src="(/_composeui/widget/[^"]+/picture\?version=[^"]+)"', html)
     assert match is not None, html
     return match.group(1)
 
@@ -457,7 +457,7 @@ def test_what_is_no_image_shows_its_description_and_serves_nothing(
         (main_view,) = app.session_views
         assert isinstance(main_view.picture.renderer, WebImageRenderer)
         widget_id = main_view.picture.renderer.widget_id
-        answer = browser.get(f"/widget/{widget_id}/picture?version=any")
+        answer = browser.get(f"/_composeui/widget/{widget_id}/picture?version=any")
 
     assert f'<span id="{widget_id}" data-cui="image">A curve</span>' in page.text
     assert answer.status_code == 404
@@ -474,7 +474,7 @@ def test_a_file_that_is_no_image_is_never_served_under_any_version(tmp_path: Pat
         assert isinstance(main_view.picture.renderer, WebImageRenderer)
         widget_id = main_view.picture.renderer.widget_id
         digest = hashlib.sha256(b"not an image").hexdigest()[:16]
-        answer = browser.get(f"/widget/{widget_id}/picture?version={digest}")
+        answer = browser.get(f"/_composeui/widget/{widget_id}/picture?version={digest}")
 
     assert answer.status_code == 404
 
@@ -513,7 +513,7 @@ def test_a_new_image_swaps_its_address_and_the_old_one_answers_no_other_image(
 
         button = views[0].change.renderer
         assert isinstance(button, WebRenderer)
-        swapped = browser.post(f"/widget/{button.widget_id}", data={"event": "click"})
+        swapped = browser.post(f"/_composeui/widget/{button.widget_id}", data={"event": "click"})
 
         new_address = _picture_address(swapped.text)
         assert 'hx-swap-oob="true"' in swapped.text
@@ -564,4 +564,4 @@ def test_a_widget_that_is_no_image_serves_nothing_at_an_image_s_address() -> Non
         browser.get("/")
         note = views[0].note.renderer
         assert isinstance(note, WebRenderer)
-        assert browser.get(f"/widget/{note.widget_id}/picture").status_code == 404
+        assert browser.get(f"/_composeui/widget/{note.widget_id}/picture").status_code == 404

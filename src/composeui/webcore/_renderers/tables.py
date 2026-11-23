@@ -237,7 +237,7 @@ class WebFilterBarRenderer(WebRenderer[TView]):
     def _post(self, values: Mapping[str, str | int]) -> Markup:
         """Get the attributes posting an event of the table, without swapping its element back."""
         return Markup(
-            """ hx-post="/widget/{}" hx-vals='{}'"""
+            """ hx-post="/_composeui/widget/{}" hx-vals='{}'"""
             ' hx-swap="none"'
         ).format(self.widget_id, json.dumps(values))
 
@@ -267,7 +267,7 @@ class WebFilterBarRenderer(WebRenderer[TView]):
             '{search_icon}<input id="{widget_id}-search" type="search"'
             ' name="search" value="{search}"'
             ' placeholder="{search_label}" aria-label="{search_label}"'
-            ' hx-post="/widget/{widget_id}"'
+            ' hx-post="/_composeui/widget/{widget_id}"'
             ' hx-trigger="input changed delay:{delay}ms, search"'
             ' hx-vals=\'{{"event": "search"}}\' hx-swap="none" hx-sync="this:queue last"'
             ' autocomplete="off"{disabled}></label>'
@@ -370,7 +370,7 @@ class WebFilterBarRenderer(WebRenderer[TView]):
             ' value="{text}" aria-label="{value_label}"'
             ' placeholder="{placeholder}"'
             ' aria-describedby="{value_id}-error" autocomplete="off" autofocus'
-            ' hx-post="/widget/{widget_id}" hx-trigger="escape-key"'
+            ' hx-post="/_composeui/widget/{widget_id}" hx-trigger="escape-key"'
             """ hx-vals='{{"event": "close_editor"}}' hx-swap="none">"""
             "{error_html}"
             '<button type="submit" class="btn btn-sm btn-primary">'
@@ -513,7 +513,8 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
     `tables.js`) while some rows are; its click swaps back the rows, not itself. A file
     path is typed as a plain cell, and its "…" button opens the browser's picker, a
     hidden file input uploading the file picked with its row and column
-    (`/widget/{id}/file`, see `WebSession.pick_file`). The cell then shows its copy's path.
+    (`/_composeui/widget/{id}/file`, see `WebSession.pick_file`). The cell then shows its copy's
+    path.
 
     A cell of `cell_styles` has its background color, its text black or white on it, and
     its mark before its text, named for screen readers. A disabled one is grayed, its
@@ -862,7 +863,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             return Markup("<tr{}>{}</tr>").format(selected, cells)
         return Markup(
             '<tr id="{widget_id}-row-{index}" class="cursor-pointer" tabindex="0"'
-            '{selected} hx-post="/widget/{widget_id}"'
+            '{selected} hx-post="/_composeui/widget/{widget_id}"'
             # a click or Enter, not from a cell's field or widget, which takes its own
             ' hx-trigger="activate"'
             """ hx-vals='{{"event": "select", "row": "{index}"}}'"""
@@ -877,7 +878,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
 
         def post(event: str) -> Markup:
             return Markup(
-                ' hx-post="/widget/{widget_id}" hx-swap="none"'
+                ' hx-post="/_composeui/widget/{widget_id}" hx-swap="none"'
                 """ hx-vals='{{"event": "{event}", "row": "{row}", "column": "{column}"}}'"""
             ).format(widget_id=self.widget_id, event=event, row=row, column=column)
 
@@ -1047,7 +1048,7 @@ class WebTableRenderer(WebFilterBarRenderer[TableViewLike]):
             ' aria-label="{label}" title="{label}" data-file-browse{disabled}>…</button>'
             # emptied once sent: picking the same file again is a change too
             '<input type="file" name="file"{accept} class="hidden" tabindex="-1"'
-            ' aria-hidden="true" hx-post="/widget/{table_id}/file"'
+            ' aria-hidden="true" hx-post="/_composeui/widget/{table_id}/file"'
             """ hx-vals='{values}' hx-encoding="multipart/form-data" hx-trigger="change\""""
             ' hx-swap="none" data-clear-after-post autocomplete="off"{disabled}></span>'
         ).format(
@@ -1402,7 +1403,7 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
     above the frame. Ctrl+C in the frame posts `copy` (see `tables.js`): the selected rows'
     text (`SourceTableView.selection_text`) comes back in a hidden element, which the page
     writes to the clipboard. A link above the frame downloads the rows shown as CSV
-    (`csv_chunks`, streamed by the `/widget/{id}/csv` route).
+    (`csv_chunks`, streamed by the `/_composeui/widget/{id}/csv` route).
     """
 
     #: its `dispatch` decides by event: a disabled table still scrolls and is read
@@ -1474,7 +1475,7 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
         return Markup(
             '<div {root_attributes} class="flex flex-col gap-2">{bar_html}'
             # a plain link: htmx can't start a download
-            '<a class="btn btn-ghost btn-xs self-end" href="/widget/{widget_id}/csv"'
+            '<a class="btn btn-ghost btn-xs self-end" href="/_composeui/widget/{widget_id}/csv"'
             " download>{export}</a>{frame_html}{copied_html}</div>"
         ).format(
             root_attributes=self._root_attributes(oob=oob),
@@ -1569,7 +1570,7 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
         copied, self._copied = self._copied, None
         return Markup(
             '<pre id="{widget_id}-copied" hidden data-copied{answer}'
-            ' hx-post="/widget/{widget_id}"'
+            ' hx-post="/_composeui/widget/{widget_id}"'
             """ hx-trigger="copy-rows" hx-vals='{{"event": "copy"}}' hx-swap="none"{oob}>"""
             "{copied}</pre>"
         ).format(
@@ -1625,7 +1626,7 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
             )
         return Markup(
             '<tr class="h-9 cursor-pointer" tabindex="0" aria-rowindex="{index}"'
-            '{selected}{autofocus} data-window-row hx-post="/widget/{widget_id}"'
+            '{selected}{autofocus} data-window-row hx-post="/_composeui/widget/{widget_id}"'
             """ hx-trigger="activate" hx-vals='{vals}'"""
             ' hx-swap="none"'
             # a double click or Enter then activates it (see `tables.js`)
@@ -1657,7 +1658,7 @@ class WebSourceTableRenderer(WebFilterBarRenderer[SourceTableViewLike]):
             " data-virtual-scroll{oob}>"
             '<input type="hidden" name="offset" id="{widget_id}-offset" data-scroll-offset>'
             '<input type="hidden" name="start" data-scroll-start'
-            ' hx-post="/widget/{widget_id}" hx-trigger="scroll-window"'
+            ' hx-post="/_composeui/widget/{widget_id}" hx-trigger="scroll-window"'
             ' hx-include="#{widget_id}-offset"'
             """ hx-vals='{{"event": "scroll"}}' hx-swap="none" hx-sync="this:replace">"""
             '<table class="table table-zebra table-sm" aria-rowcount="{row_count}">'

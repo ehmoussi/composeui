@@ -129,12 +129,12 @@ def test_a_user_uploads_a_dataset_filters_it_and_exports_the_rows_shown() -> Non
         (main_view,) = views
         assert isinstance(main_view.upload.renderer, WebRenderer)
         response = client.post(
-            f"/widget/{main_view.upload.renderer.widget_id}/file",
+            f"/_composeui/widget/{main_view.upload.renderer.widget_id}/file",
             files={"file": ("pickups.csv", dataset, "text/csv")},
         )
         assert "pickups.csv" in response.text
         for _ in range(600):  # the page's poller: it brings the job's result to the views
-            client.get("/jobs")
+            client.get("/_composeui/jobs")
             if main_view.table.row_count > 0:
                 break
             time.sleep(0.05)
@@ -142,10 +142,10 @@ def test_a_user_uploads_a_dataset_filters_it_and_exports_the_rows_shown() -> Non
 
         assert isinstance(main_view.table.renderer, WebRenderer)
         table_id = main_view.table.renderer.widget_id
-        client.post(f"/widget/{table_id}", data={"event": "search", "search": "B02764"})
+        client.post(f"/_composeui/widget/{table_id}", data={"event": "search", "search": "B02764"})
         assert main_view.table.row_count == 5000
 
-        response = client.get(f"/widget/{table_id}/csv")
+        response = client.get(f"/_composeui/widget/{table_id}/csv")
         assert "pickups-filtered.csv" in response.headers["content-disposition"]
         exported = response.text.splitlines()
         assert exported[:2] == ["base,count", "B02764,2"]
