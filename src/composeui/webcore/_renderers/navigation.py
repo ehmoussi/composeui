@@ -21,7 +21,7 @@ from composeui.core.view import (
     ToolBar,
     View,
 )
-from composeui.webcore.downloads import Downloads, downloads_marker
+from composeui.webcore.downloads import Downloads, OpenedUrl, downloads_marker
 from composeui.webcore.icons import icon_url
 from composeui.webcore.page import NO_LINKS, get_page, jobs_poller, reload_poller
 from composeui.webcore.rendertarget import _RENDER_TARGET, RenderTarget, call_in_session
@@ -298,7 +298,8 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         super().__init__(view)
         #: set by `MainView.close()` (the Exit action); the route then ends the session
         self.is_closed = False
-        #: the files `MainView.download` gave, until the page fetches them
+        #: the files `MainView.download` gave and the URLs `open_url` opens, until the page
+        #: fetches them
         self.downloads = Downloads()
         self._target: RenderTarget | None = None
         self._refresh_dispatcher.update(
@@ -495,6 +496,12 @@ class WebMainRenderer(MainRenderer[MainView, str]):
     def download(self, file: DownloadedFile) -> None:
         # the session's next answer names it (`downloads_marker`)
         self.downloads.add(file)
+
+    @override
+    def open_url(self, url: str) -> bool:
+        # the session's next answer names it too: the page opens it in a new tab
+        self.downloads.add(OpenedUrl(url))
+        return True
 
     @staticmethod
     def _noop(_view: MainView, _rendered_object: str, _value: Any) -> None:

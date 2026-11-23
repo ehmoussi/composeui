@@ -31,6 +31,7 @@ from composeui.qtcore.widgets.qsidebar import QSidebar
 from examples.pipeform import PipeMainView
 from tests.downloading import ReportMainView
 from tests.markdown import HelpMainView
+from tests.opening import HELP_URL, OpeningMainView
 from tests.pages import (
     PagesMainView,
 )
@@ -338,3 +339,20 @@ def test_a_file_saved_under_any_extension_keeps_the_name_typed(
     )
 
     assert view.ask_save_filepath({"All files": ("",)}) == typed
+
+
+def test_a_url_opens_in_the_desktop_s_browser(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    launched: list[str] = []
+    monkeypatch.setattr("composeui.core._views.main.launch", launched.append)
+    monkeypatch.setattr("composeui.core.client._Current.capabilities", None)  # local
+    view = OpeningMainView()
+    _add_reference_to_signals(view, None)  # as the app does
+    view.render(RendererType.QT)
+    qtbot.addWidget(_widget(view))
+
+    qtbot.mouseClick(_widget(view.help), Qt.MouseButton.LeftButton)
+
+    assert launched == [HELP_URL]
+    assert view.notification.message == ""

@@ -159,6 +159,17 @@ def test_every_response_carries_the_security_headers(app: _HelloApp, tmp_path: P
         ]
         streamed = [browser.head(written), browser.get(written), browser.get(failed)]
         responses += streamed
+        # a new tab's redirect to a page the app opens: no `Referer` reaches that page
+        main_view.open_url("https://example.org/help")
+        (tab,) = [
+            a["href"] or ""
+            for tag, a in _element(browser.get("/").text, "cui-downloads").descendants
+            if tag == "a"
+        ]
+        opened = browser.get(tab, follow_redirects=False)
+        responses.append(opened)
+
+    assert opened.status_code == 303
 
     assert [response.status_code for response in streamed] == [200, 200, 500]
 

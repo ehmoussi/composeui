@@ -148,17 +148,45 @@
   }
   /* fetches each file the app gives (`#cui-downloads`), once per ticket: the server names a
      ticket in each answer until it's fetched, as an answer can be lost. The link's `download`
-     keeps the page if the file is gone: the browser shows a failed download instead. */
+     keeps the page if the file is gone: the browser shows a failed download instead.
+     A URL's link (`data-open`) opens in a new tab, which redirects to it. The tab starts
+     blank, without `opener`: the URL's page can't reach this one. A browser may refuse a
+     tab that no click opened, as after a job: the link then shows, for the user to click. */
   /** @type {Set<string | undefined>} */
   var startedDownloads = new Set();
+  /** @type {Set<string | undefined>} */
+  var refusedTabs = new Set();
   function startDownloads() {
-    document.querySelectorAll("#cui-downloads a[data-ticket]").forEach(function (element) {
+    var marker = document.getElementById("cui-downloads");
+    if (!marker) return;
+    marker.querySelectorAll("a[data-ticket]").forEach(function (element) {
       var link = /** @type {HTMLAnchorElement} */ (element);
-      if (startedDownloads.has(link.dataset.ticket)) return;
-      startedDownloads.add(link.dataset.ticket);
-      link.click();
+      var ticket = link.dataset.ticket;
+      if (!startedDownloads.has(ticket)) {
+        startedDownloads.add(ticket);
+        if (!("open" in link.dataset)) {
+          link.click();
+          return;
+        }
+        var tab = window.open("", "_blank");
+        if (tab) {
+          tab.opener = null;
+          tab.location.href = link.href;
+        } else {
+          refusedTabs.add(ticket);
+        }
+      }
+      link.hidden = !refusedTabs.has(ticket);
     });
+    // a file's link shows nothing: the toast shows only a refused tab's link
+    marker.hidden = !marker.querySelector("a[data-open]:not([hidden])");
   }
+  document.addEventListener("click", function (event) {
+    var link = /** @type {HTMLElement} */ (event.target).closest("#cui-downloads a[data-open]");
+    if (!link) return;
+    refusedTabs.delete(/** @type {HTMLAnchorElement} */ (link).dataset.ticket);
+    startDownloads(); // the link opens its tab, then leaves
+  });
 
   /* what the markup can't say itself: the page's policy (`headers.py`) runs no inline
      handler, and no code htmx would evaluate (`hx-on`, `js:` values, trigger filters). The

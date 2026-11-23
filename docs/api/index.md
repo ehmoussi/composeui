@@ -11,6 +11,7 @@ The [architecture](../technical-guide/architecture.md) explains how the parts fi
 view
 signal
 application
+client
 webstyle
 model
 sqlitemodel

@@ -65,6 +65,7 @@ from composeui.webcore.routes import (
     homepage,
     icon,
     jobs_poll,
+    open_url,
     page,
     picture,
     reload_poll,
@@ -88,6 +89,7 @@ if TYPE_CHECKING:
     from typing_extensions import TypeVarTuple, Unpack
 
     from composeui.core.application import _ConnectDecorator, _ConnectModelDecorator
+    from composeui.core.client import ClientCapabilities
     from composeui.core.model import Model
     from composeui.core.signal import Signal
     from composeui.core.view import MainView
@@ -184,6 +186,7 @@ def create_starlette_app(  # noqa: PLR0913 (each sets a part of the server)
                     Route("/widget/{widget_id}/csv", table_csv, methods=["GET"]),
                     Route("/widget/{widget_id}/text", console_text, methods=["GET"]),
                     Route("/download/{ticket}", download, methods=["GET"]),
+                    Route("/open/{ticket}", open_url, methods=["GET"]),
                     Route("/state", state_download, methods=["GET"]),
                     Route("/state", state_upload, methods=["POST"]),
                     Route("/state/download", state_save, methods=["POST"]),
@@ -561,6 +564,10 @@ class WebApplication(Application[MainViewT]):
     @override
     def _start_reactions(self) -> None:
         """Run none on `main_view`, a template: each session runs its own's."""
+
+    @override
+    def _client(self) -> ClientCapabilities:
+        return self.settings.client
 
     def setup_session(self, main_view: MainViewT) -> None:
         """Wire a new session's main view; override to connect app-level behavior."""

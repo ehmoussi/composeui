@@ -23,6 +23,7 @@ from composeui.core._views.base import LOGGER as VIEW_LOGGER
 from composeui.core._views.base import set_references
 from composeui.core._views.tables import take_filter_patterns
 from composeui.core.autosave import Autosave
+from composeui.core.client import ClientCapabilities, set_client
 from composeui.core.jobs import starting_study
 from composeui.core.reactivity import TRACE_LOGGER as REACTIVITY_LOGGER
 from composeui.core.reactivity import start_reactions
@@ -298,6 +299,7 @@ class Application(Generic[MainViewT]):
         take_filter_patterns()  # a mistyped setting stops the app here, not at a first filter
         if self.backend is not None:
             _Running.backend = self.backend
+        set_client(self._client())
         self._main_view = build_main_view()
         self._args: argparse.Namespace | None = None
         self._parser = argparse.ArgumentParser()
@@ -408,6 +410,10 @@ class Application(Generic[MainViewT]):
     def _start_reactions(self) -> None:
         """Run the main view's reactive methods once it's wired (`setup_model`)."""
         start_reactions(self.main_view)
+
+    def _client(self) -> ClientCapabilities:
+        """Get what the app can do for its user (`MainView.client`): on their computer here."""
+        return ClientCapabilities.local()
 
     def _study_model(self) -> Model | None:
         """Get the model opened, saved and started over with the views: none here."""
@@ -553,6 +559,12 @@ class WebSettings:
     #: Whether table filters take regular expressions (``/pattern/``). Set it to False for a
     #: public app: a crafted expression can make every session wait for a long time.
     filter_patterns: bool = True
+    #: What the app can do for its users (`MainView.client`). The default,
+    #: `ClientCapabilities.served`, suits a server that users reach from their own
+    #: computers. Set `ClientCapabilities.local` for a server on the user's own computer,
+    #: outside a container: `MainView.open_folder` then opens their file manager, and
+    #: `display_path` shows the whole path.
+    client: ClientCapabilities = attrs.field(factory=ClientCapabilities.served)
 
 
 def run(  # noqa: PLR0913 (each is an option of the app)
