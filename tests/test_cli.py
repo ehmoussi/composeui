@@ -265,12 +265,26 @@ _LOGGED_APP = textwrap.dedent(
 
     import os
     import pathlib
+    import sys
     import threading
 
     from composeui.core.application import current_backend
     from composeui.core.view import MainView, define_view
 
     VERSION = 1
+
+    def end() -> None:
+        if sys.platform == "win32":
+            # os._exit still unloads the DLLs on Windows, and Qt's can crash with the
+            # QApplication left alive: an exit code that isn't 0, after which the
+            # supervisor waits for another change
+            import ctypes
+            from ctypes import wintypes
+            kernel32 = ctypes.windll.kernel32
+            kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+            kernel32.TerminateProcess.argtypes = [wintypes.HANDLE, wintypes.UINT]
+            kernel32.TerminateProcess(kernel32.GetCurrentProcess(), 0)
+        os._exit(0)
 
     @define_view
     class LoggedMainView(MainView):
@@ -279,7 +293,7 @@ _LOGGED_APP = textwrap.dedent(
             with pathlib.Path(os.environ["RUNS_LOG"]).open("a") as log:
                 log.write(f"{VERSION}|{current_backend().name}|{os.getpid()}\\n")
             if VERSION == 2:
-                threading.Timer(1.0, os._exit, [0]).start()
+                threading.Timer(1.0, end).start()
     """
 )
 
