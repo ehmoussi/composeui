@@ -66,7 +66,13 @@ from composeui.core._views.files import (
 )
 from composeui.core._views.tables import RecordTableView, SourceTableView, TableMixin
 from composeui.core.autosave import Autosave
-from composeui.core.client import check_url, current_client, launch
+from composeui.core.client import (
+    building_for_browser,
+    check_url,
+    current_browser_id,
+    current_client,
+    launch,
+)
 from composeui.core.jobs import Jobs, _check_main_thread
 from composeui.core.model import InvalidStateError, Model
 from composeui.core.reactivity import (
@@ -472,6 +478,10 @@ class MainView(View):
     source_language: ClassVar[str] = "en"
     #: set by `set_language`; empty while the text shows as written in the code
     _language: str = attrs.field(default="", init=False, repr=False, metadata={OMIT: True})
+    #: the browser's id, or the user's account (`browser_id`), fixed as the view is built
+    _browser_id: str = attrs.field(
+        factory=current_browser_id, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
 
     @override
     def __attrs_post_init__(self) -> None:
@@ -633,6 +643,15 @@ class MainView(View):
         """
         return type(self)()
 
+    def _initial_view(self) -> MainView:
+        """Build the view of `build_initial_view` for this view's browser (`browser_id`).
+
+        Outside the session's build, e.g. for New: a view that reads its id as it is built
+        would read the server's account instead.
+        """
+        with building_for_browser(lambda: self._browser_id):
+            return self.build_initial_view()
+
     def check_state_data(self, data: Any) -> None:
         """Raise `InvalidStateError` if the data does not fit the view.
 
@@ -643,7 +662,7 @@ class MainView(View):
         if not isinstance(data, dict):
             msg = f"it isn't a valid {self.extension} file"
             raise InvalidStateError(msg)
-        initial = self.build_initial_view()
+        initial = self._initial_view()
         try:
             _apply_state(initial, data)
         except _BAD_STATE_ERRORS as error:
@@ -661,7 +680,7 @@ class MainView(View):
         connected signals keep working.
         """
         _check_main_thread("MainView.reset_state")
-        initial = self.build_initial_view()
+        initial = self._initial_view()
         self.jobs.drop()  # working for the study replaced
         _reset_state(self, initial)
         _show_checked(self)
@@ -762,6 +781,22 @@ class MainView(View):
         themselves. It is set before the app builds its main view.
         """
         return current_client()
+
+    @property
+    def browser_id(self) -> str:
+        """Get a lasting id of the user's browser on the web; elsewhere, of their account.
+
+        Label what the app keeps with it to show a browser its own work first, such as the
+        studies it opened, from every one of its visits. On the web, every tab of a browser
+        has the same id, and so has each of its sessions for `WebSettings.browser_ttl` after
+        its last visit, also after a restart of a server with a `session_folder`. Another
+        browser, a private window or cleared cookies get another id. On Qt and Textual, it
+        is the name of the account that runs the app (``getpass.getuser``), the same for
+        each user of a served terminal app. It never changes for a main view, and is known
+        once the main view is made. It is no user, and no proof of one: never grant access
+        by it.
+        """
+        return self._browser_id
 
     def open_folder(self, path: Path) -> None:
         """Open the folder `path` in the user's file manager: Windows' Explorer in WSL.

@@ -8,13 +8,19 @@ to hide or change a control, such as an "Open folder" button that can't work.
 
 from __future__ import annotations
 
+import contextlib
+import contextvars
+import getpass
 import os
 import subprocess
 import sys
-from typing import ClassVar, Optional
+from typing import TYPE_CHECKING, ClassVar, Optional
 from urllib.parse import urlsplit
 
 import attrs
+
+if TYPE_CHECKING:
+    from collections.abc import Callable, Iterator
 
 __all__ = ["ClientCapabilities"]
 
@@ -69,6 +75,39 @@ def current_client() -> ClientCapabilities:
 def set_client(capabilities: ClientCapabilities) -> None:
     """Set the capabilities of the app this process runs: its `Application` does it."""
     _Current.capabilities = capabilities
+
+
+#: what gives the browser's id to the main views built meanwhile: a web session's, built
+#: for a request, which makes the id only once a main view asks, so that a request that
+#: builds none sets no cookie
+_BROWSER_ID: contextvars.ContextVar[Optional[Callable[[], str]]] = contextvars.ContextVar(
+    "composeui_browser_id", default=None
+)
+#: the id of an account whose name can't be found, e.g. in a container without an entry
+#: for its user
+UNKNOWN_ACCOUNT = "local"
+
+
+@contextlib.contextmanager
+def building_for_browser(browser_id: Callable[[], str]) -> Iterator[None]:
+    """Give the main views built inside the id that `browser_id` returns."""
+    token = _BROWSER_ID.set(browser_id)
+    try:
+        yield
+    finally:
+        _BROWSER_ID.reset(token)
+
+
+def current_browser_id() -> str:
+    """Get the id of the browser a main view is built for; elsewhere, the user's account."""
+    browser_id = _BROWSER_ID.get()
+    if browser_id is not None:
+        return browser_id()
+    try:
+        return getpass.getuser()
+    except (OSError, KeyError, ImportError):
+        # OSError from Python 3.13, before it KeyError (POSIX) or ImportError (Windows)
+        return UNKNOWN_ACCOUNT
 
 
 def check_url(url: str) -> None:

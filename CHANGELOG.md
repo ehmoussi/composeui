@@ -11,6 +11,12 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `MainView.browser_id` is a lasting id of the user's browser on the web, the same for every
+  tab and every session of that browser. Label with it what the app keeps for all its users, to
+  show each browser its own work first. It lasts `WebSettings.browser_ttl` after the browser's
+  last visit (14 days by default), and outlives a restart with `session_folder`. On Qt and
+  Textual, it is the name of the user's account.
+
 - `MainView.open_folder`, `open_file` and `open_url` open a folder, a file or a page for the
   user, and `display_path` names a path for them. Each one adapts to where the app runs for
   its user: the file manager and the browser of their desktop on Qt and in a local terminal
@@ -188,6 +194,10 @@ backends' modules included, can change in any release without an entry here.
   passes them in a `WebSettings`: a subclass that still sets one fails with a `TypeError`.
 
 ### Fixed
+
+- A web session with a `session_ttl` longer than 14 days ends after `session_ttl` without a
+  request, up to the 400 days that a browser keeps a cookie: before, its cookie lasted 14 days,
+  and the session ended with it.
 
 - A job waiting for a `@shared_data` load gets the load's last progress, also when the load
   ends while the job reports the progress before it.

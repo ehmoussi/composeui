@@ -523,6 +523,13 @@ class WebSettings:
     #: session, and its user loses what they didn't save. Raise it when users leave the page
     #: open for long periods, such as a working day.
     session_ttl: float = 3600.0
+    #: Seconds after a browser's last visit that it keeps its id (`MainView.browser_id`),
+    #: in the session cookie, or `session_ttl` if longer, at most 400 days: a browser keeps
+    #: no cookie longer. Each visit starts them again. Set it longer than `session_ttl`, so
+    #: that a browser keeps its id once its session ends, e.g. a year. Without a
+    #: `session_folder`, a restart of the server gives every browser a new id, except with
+    #: ``--reload``.
+    browser_ttl: float = 14 * 24 * 3600.0
     #: Most sessions in memory at once. Past it, a new browser gets an error (503) until a
     #: session ends, and the open sessions keep working. Each session holds its main view,
     #: and its model if the app has one. Sessions on disk don't count.

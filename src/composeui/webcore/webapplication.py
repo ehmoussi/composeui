@@ -8,6 +8,7 @@ import functools
 import importlib.abc
 import importlib.util
 import logging
+import math
 import os
 import secrets
 import sys
@@ -154,6 +155,7 @@ def create_starlette_app(  # noqa: PLR0913 (each sets a part of the server)
     sessions: SessionStore,
     *,
     max_upload_size: int,
+    cookie_ttl: float,
     secret_key: str | None = None,
     reloading: bool = False,
     stream_places: StreamPlaces | None = None,
@@ -167,7 +169,9 @@ def create_starlette_app(  # noqa: PLR0913 (each sets a part of the server)
     couldn't load. `secret_key`
     signs the session cookie, a new one by default. A ``--reload`` server's process
     (`reloading`) saves the sessions as it stops (`SessionStore.save_all`), and its pages
-    reload once another process serves (`reload_poll`).
+    reload once another process serves (`reload_poll`). The cookie lasts `cookie_ttl`
+    seconds after the last answer, at most `MAX_COOKIE_AGE`: it holds the session's id and
+    the browser's (`browser_id`).
     """
     style_files = StyleFiles(style)
     app = Starlette(
@@ -220,6 +224,8 @@ def create_starlette_app(  # noqa: PLR0913 (each sets a part of the server)
             Middleware(
                 _SessionMiddleware,
                 secret_key=secret_key or sessions.secret_key or secrets.token_urlsafe(32),
+                # e.g. an endless `session_ttl` (`math.inf`): a whole number of seconds
+                max_age=math.ceil(min(cookie_ttl, MAX_COOKIE_AGE)),
                 same_site="lax",
             ),
             # the stylesheet, the scripts and a chart's points shrink several times
@@ -351,6 +357,8 @@ def _hide_reload_polls() -> None:
 
 LOGGER = logging.getLogger("COMPOSEUI")
 
+#: the longest that a browser keeps a cookie, in seconds: 400 days (RFC 6265bis)
+MAX_COOKIE_AGE = 400 * 24 * 3600
 #: the longest and the shortest wait between two looks for idle sessions to save, in seconds
 _MAX_SWEEP_INTERVAL = 30.0
 _MIN_SWEEP_INTERVAL = 0.01
@@ -600,6 +608,9 @@ class WebApplication(Application[MainViewT]):
             return create_starlette_app(
                 sessions,
                 max_upload_size=self.main_view.max_upload_size,
+                # the cookie holds both: a session would end with it, as at 14 days
+                # before, whatever `session_ttl` said
+                cookie_ttl=max(settings.browser_ttl, settings.session_ttl),
                 stream_places=StreamPlaces(
                     self.settings.max_download_streams,
                     self.settings.max_session_download_streams,

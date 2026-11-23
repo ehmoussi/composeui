@@ -192,6 +192,51 @@ container, set `WebSettings(client=ClientCapabilities.local())` (see
 manager, and `display_path` shows the whole path. A main view that no app runs, for example
 in a test, takes `ClientCapabilities.local()`.
 
+### Show a browser its own work
+
+`MainView.browser_id` is a lasting id of the user's browser on the web. Label with it what the
+app keeps for all its users, such as the studies that each browser opened, to show each
+browser its own work first.
+
+```python
+from composeui.core.view import LabelView, MainView, child, define_view
+
+#: the studies that each browser opened, by its id: a shared database in a real app
+STUDIES = {"Ann's browser": ["beam.comm"]}
+
+
+@define_view
+class StudiesView(MainView):
+    own: LabelView = child(LabelView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        studies = STUDIES.get(self.browser_id, [])
+        self.own.text = ", ".join(studies) if studies else "No study opened yet."
+```
+
+On the web, the id is in the session cookie, beside the session's own id:
+
+- **Every tab of a browser has the same id.** So has each of its sessions: a session ends after
+  `session_ttl` without a request, and the browser's next session keeps the id.
+- **The id lasts `browser_ttl` after the browser's last visit**, 14 days by default, or
+  `session_ttl` if it is longer. Each visit starts it again. A browser keeps a cookie at most
+  400 days, so the id lasts 400 days at most. Set `WebSettings(browser_ttl=365 * 24 * 3600.0)`
+  to keep it a year, and `session_ttl` short to free the memory of idle sessions (see
+  [Change the server's limits](#change-the-servers-limits)).
+- **A restart keeps the id with `session_folder`,** and in development with `--reload`.
+  Otherwise, the server signs the cookies with a new key, and every browser gets a new id.
+- **Another browser gets another id.** So do a private window and a browser that cleared its
+  cookies. Let the user show the work of every browser too.
+
+On Qt and Textual, `browser_id` is the name of the account that runs the app
+(`getpass.getuser()`). Each user of a terminal app served by `textual-serve` or a shared SSH
+account has the same id.
+
+The id is not a user, and doesn't prove one: never grant access by it. It is not secret
+either, and an app can show it: it doesn't open the session. ComposeUI never removes what the
+app labels with it. The app decides when to remove the work of a browser that no longer comes.
+
 ## Reloading the app on a change
 
 Use `--reload` for development, on every backend: the app runs the changed code when a
@@ -382,6 +427,9 @@ Read this section before other people use the app, on a network or behind a reve
   when it starts. So after a restart, each browser gets a new, empty session, and the work that
   its user did not save is lost. To keep the sessions, set `session_folder` (see
   "Sessions can outlive a restart" below).
+- **A browser keeps its id longer than its sessions.** `MainView.browser_id` stays the same
+  for `browser_ttl` after the browser's last visit (see
+  [Show a browser its own work](#show-a-browser-its-own-work)).
 - **Sessions have limits.** You can change each limit (see
   [Change the server's limits](#change-the-servers-limits)). The server drops a session after
   an hour without use (`session_ttl`). It keeps at most 1000 sessions at a time
