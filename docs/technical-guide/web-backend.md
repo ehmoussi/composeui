@@ -234,6 +234,16 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   (`X-ComposeUI-Session`), and Save's form in its `session` field. `_session` in `routes.py` answers
   a request with another tag as if its session were gone. A plain link, such as a download, sends no
   tag and is not checked: it only reads.
+- **The browser's id** (`MainView.browser_id`). The session cookie holds it beside the session
+  id, under `BROWSER_KEY`. It lasts `browser_ttl`, or `session_ttl` if longer: a session ends
+  with its cookie. It lasts at most `MAX_COOKIE_AGE` (400 days), the most that a browser keeps
+  a cookie, which also takes an endless `session_ttl`. One cookie rather than two: two cookies
+  could part, one cleared or expired while the other stays. The id is a random value of its
+  own, made as a session is built, so that showing it gives no session. `routes.py` gives it to
+  the main views that a request builds or wakes (`building_for_browser`). It makes the id only
+  when one is built, so a request that builds none, such as a poll, sets no cookie. New and the
+  check of a study build their initial view for the same id (`MainView._initial_view`): an app
+  that reads it as its view is built would read the server's account instead.
 - **Idle sessions on disk** (`session_idle`). The `SessionStore` tracks four states: in memory,
   being saved, on disk, and being restored.
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import getpass
 import subprocess
 import sys
 from typing import TYPE_CHECKING, Any
@@ -306,3 +307,20 @@ def test_a_terminal_app_reaches_the_desktop_unless_it_runs_over_ssh_or_in_a_brow
     )
 
     assert plain == with_model == [expected]
+
+
+def test_a_main_view_off_the_web_takes_its_user_s_account_as_its_browser_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in ("LOGNAME", "USER", "LNAME", "USERNAME"):  # what getuser reads first
+        monkeypatch.setenv(name, "ann")
+    named = MainView()
+
+    def unknown() -> str:
+        msg = "no name for uid 1001"  # e.g. a container without an entry for its user
+        raise OSError(msg)
+
+    monkeypatch.setattr(getpass, "getuser", unknown)
+
+    assert named.browser_id == "ann"
+    assert MainView().browser_id == "local"

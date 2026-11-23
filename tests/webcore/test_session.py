@@ -6,6 +6,7 @@ import contextlib
 import errno
 import itertools
 import logging
+import math
 import re
 import sys
 import threading
@@ -53,7 +54,11 @@ from composeui.core.view import (
 from composeui.webcore import session as session_module
 from composeui.webcore.page import SESSION_TAG_FIELD, SESSION_TAG_HEADER
 from composeui.webcore.session import Hibernation, SessionStore, WebSession
-from composeui.webcore.webapplication import WebApplication, WebModelApplication
+from composeui.webcore.webapplication import (
+    MAX_COOKIE_AGE,
+    WebApplication,
+    WebModelApplication,
+)
 from examples.webhello import HelloMainView, NameRowView
 from tests.datafiles import DataFileMainView
 
@@ -316,6 +321,65 @@ def test_an_idle_session_expires() -> None:
     assert response.headers["hx-refresh"] == "true"
     assert expired_view.form.name.text == ""
     assert len(app.session_views) == 2  # the reload started a fresh session
+
+
+def test_a_browser_keeps_its_id_across_its_sessions_for_its_browser_ttl() -> None:
+    year = 365 * 24 * 3600
+    app = _HelloApp(WebSettings(session_ttl=0.0, browser_ttl=year))
+    server = app.create_starlette_app()
+    other = _Browser(server)  # without a lifespan of its own: one server runs
+    with _Browser(server) as browser:
+        poll = browser.get("/_composeui/jobs")
+        page = browser.get("/")
+        browser.get("/")
+        other.get("/")
+
+    first, second, others = (view.browser_id for view in app.session_views)
+    assert "set-cookie" not in poll.headers  # a request that builds no session
+    assert f"Max-Age={year};" in page.headers["set-cookie"]
+    assert first == second  # its session expired, its id stays
+    assert others != first
+
+
+@pytest.mark.parametrize(
+    ("session_ttl", "cookie_age"),
+    [
+        (30 * 24 * 3600.0, 30 * 24 * 3600),
+        # a session that never ends: the cookie lasts as long as a browser keeps one
+        (math.inf, MAX_COOKIE_AGE),
+    ],
+)
+def test_the_cookie_lasts_a_session_ttl_longer_than_the_browser_ttl(
+    session_ttl: float, cookie_age: int
+) -> None:
+    app = _HelloApp(WebSettings(session_ttl=session_ttl, browser_ttl=3600.0))
+    with _Browser(app.create_starlette_app()) as browser:
+        page = browser.get("/")
+
+    assert f"Max-Age={cookie_age};" in page.headers["set-cookie"]
+
+
+@define_view
+class _BrowserNamedMainView(HelloMainView):
+    """The hello app, its name field filled with its browser's id as it is built."""
+
+    @override
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.form.name.text = self.browser_id
+
+
+def test_new_builds_the_initial_view_for_the_session_s_own_browser() -> None:
+    server = WebApplication(build_main_view=_BrowserNamedMainView).create_starlette_app()
+    with _Browser(server) as browser:
+        browser.get("/")
+        main_view = _session_of(server, browser).main_view
+        assert isinstance(main_view, _BrowserNamedMainView)
+        browser.post(
+            f"/_composeui/widget/{_action_id(main_view.file_menu.new)}", data={"event": "triggered"}
+        )
+
+    assert main_view.form.name.text == main_view.browser_id
 
 
 def test_a_session_outlives_the_server_s_clock_stepping_back(
@@ -1047,6 +1111,7 @@ def test_an_idle_session_goes_to_disk_and_its_page_reloads_into_it_as_it_was(
     assert response.headers["hx-refresh"] == "true"
     assert 'value="Bob"' in reloaded
     assert len(app.session_views) == 2  # built again, and opened
+    assert app.session_views[1].browser_id == app.session_views[0].browser_id
 
 
 class _UnclosableModel(_ReleasedModel):

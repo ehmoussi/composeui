@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import functools
+import secrets
 from typing import TYPE_CHECKING
 from urllib.parse import quote
 
@@ -15,6 +17,7 @@ from starlette.responses import (
 )
 
 from composeui.core import chartimage
+from composeui.core.client import building_for_browser
 from composeui.core.view import StreamContent
 from composeui.webcore.icons import icon_path
 from composeui.webcore.order import form_order
@@ -51,6 +54,19 @@ _ICON_HEADERS = {
 _PICTURE_HEADERS = {**_ICON_HEADERS, "Cache-Control": "private, max-age=31536000, immutable"}
 #: key of the session id in Starlette's signed session cookie
 SESSION_KEY = "composeui_session"
+#: key of the browser's id (`MainView.browser_id`) in the same cookie: it stays as the
+#: session id changes, and it is no session's, so that an app can keep and show it
+BROWSER_KEY = "composeui_browser"
+
+
+def _browser_id(request: Request) -> str:
+    """Get the id of the request's browser, from its cookie, else a new one put there."""
+    browser_id = request.session.get(BROWSER_KEY)
+    if isinstance(browser_id, str):
+        return browser_id
+    browser_id = secrets.token_urlsafe(16)
+    request.session[BROWSER_KEY] = browser_id
+    return browser_id
 
 
 def _store(request: Request) -> SessionStore:
@@ -66,7 +82,9 @@ def _session(request: Request, tag: object = None) -> WebSession | None:
     doesn't show. Its htmx requests name its own session (`SESSION_TAG_HEADER`), and Save's
     form gives it as `tag`, so it reloads, as for a session that is gone. A link names none.
     """
-    session = _store(request).get(request.session.get(SESSION_KEY))
+    # a session on disk is built again, for the browser its cookie names
+    with building_for_browser(functools.partial(_browser_id, request)):
+        session = _store(request).get(request.session.get(SESSION_KEY))
     if tag is None:
         tag = request.headers.get(SESSION_TAG_HEADER)
     if session is not None and tag is not None and tag != session.page_tag:
@@ -90,7 +108,8 @@ def _session_or_new(request: Request) -> WebSession | None:
 
     For a whole page, which the session then serves: whichever page asks.
     """
-    found = _store(request).get_or_create(request.session.get(SESSION_KEY))
+    with building_for_browser(functools.partial(_browser_id, request)):
+        found = _store(request).get_or_create(request.session.get(SESSION_KEY))
     if found is None:
         return None
     session_id, session = found

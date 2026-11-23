@@ -123,6 +123,7 @@ def test_a_session_in_a_folder_outlives_its_server_under_the_same_cookie(
 
     assert 'value="Bob"' in page
     assert _saved_ids(folder) == [session_id]  # saved again as the second server stopped
+    assert second.session_views[0].browser_id == first.session_views[0].browser_id
 
 
 _CRASHED_WITH_AN_IDLE_SESSION = """

@@ -25,7 +25,7 @@
 - [A SQLite model](https://ehmoussi.github.io/composeui/user-guide/sqlite-model.html): keep the app's data in SQLite with `DatabaseModel` and `SqliteDatabase`, each session's own (`per_session`) or one for every session (`shared`)
 - [Importing CSV data](https://ehmoussi.github.io/composeui/user-guide/csv-import.html): a SQLite table of an `attrs` row class, filled from a CSV file or URL
 - [Translating the app](https://ehmoussi.github.io/composeui/user-guide/translation.html): translation catalogs, and checking them
-- [Running the app](https://ehmoussi.github.io/composeui/user-guide/running-the-app.html): start an app on a backend, open folders, files and pages for its user (`ClientCapabilities`), reload it on a change, log messages, and serve it on the web with its limits (`WebSettings`) and its look (`WebStyle`)
+- [Running the app](https://ehmoussi.github.io/composeui/user-guide/running-the-app.html): start an app on a backend, open folders, files and pages for its user (`ClientCapabilities`), show a browser its own work (`browser_id`), reload it on a change, log messages, and serve it on the web with its limits (`WebSettings`) and its look (`WebStyle`)
 - [Testing your app](https://ehmoussi.github.io/composeui/user-guide/testing.html): test the views, forms, jobs, downloads, and a model with pytest, without a backend
 - [Using a coding agent](https://ehmoussi.github.io/composeui/user-guide/coding-agents.html): install the ComposeUI skill for coding agents
 
