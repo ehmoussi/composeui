@@ -79,6 +79,7 @@ from tests.datafiles import DataFileMainView
 from tests.filters import FiltersMainView
 from tests.frames import FramedMainView
 from tests.horizontal import HorizontalMainView, TablesRow
+from tests.memory import MemoryMainView
 from tests.metrics import JobsMainView
 from tests.ranges import FIRST_DAY, RangesMainView
 from tests.tables import EditableTableMainView
@@ -740,6 +741,22 @@ def test_a_date_input_follows_the_language_and_its_study_keeps_its_dates(tmp_pat
     assert arrival.shown_text(arrival.value) == "18/10/2026"
     view.load_state(path)
     assert arrival.value == datetime.date(2027, 3, 4)
+
+
+def test_a_study_keeps_a_parsed_field_s_text_and_reads_its_value_back(tmp_path: Path) -> None:
+    view = MemoryMainView()
+    memory = view.form.memory
+    memory.text = "8 GB"
+    path = tmp_path / "study.memory"
+    view.save_state(path)
+    saved = json.loads(path.read_text())["views"]["form"]["memory"]
+    assert saved["text"] == "8 GB"
+    assert {"parse", "format", "value", "_initial_value"}.isdisjoint(saved)
+
+    view.reset_state()  # a new study: the value the field was built with
+    assert (memory.text, memory.value) == ("4096 MB", 4096)
+    view.load_state(path)
+    assert memory.value == 8000
 
 
 def test_a_study_keeps_a_file_path_but_not_the_file_types_the_app_offers(tmp_path: Path) -> None:

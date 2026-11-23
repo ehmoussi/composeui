@@ -6,16 +6,20 @@ import contextlib
 import datetime
 import math
 import re
+from collections.abc import Callable
 from typing import (
     TYPE_CHECKING,
     Any,
+    Generic,
     Optional,
+    TypeVar,
     cast,
 )
 
 import attrs
+from typing_extensions import override
 
-from composeui.core._views.base import UI_TEXT, View, define_view, notify_renderer
+from composeui.core._views.base import OMIT, UI_TEXT, View, define_view, notify_renderer
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.translation import (
     T,
@@ -128,6 +132,79 @@ class IntInputView(IntInputMixin, View):
     """A whole number, e.g. an hour of the day; a spin box where the toolkit has one."""
 
     _renderer_key = "int_input"
+
+
+TParsed = TypeVar("TParsed")
+
+
+@define_view
+class ParsedInputMixin(InputMixin, Generic[TParsed]):
+    """The fields of a field whose text the app reads, e.g. "4 GB": `parse` and `format`.
+
+    The view holds the `text` as typed, and `value` reads it with `parse` at each read: None
+    while the field is empty, or while `parse` raises `ValueError`. The text that `format`
+    writes must be one that `parse` reads back.
+    """
+
+    #: reads a non-empty text into a value, raising `ValueError` for text it can't read
+    parse: Callable[[str], TParsed] = attrs.field(
+        on_setattr=attrs.setters.frozen, repr=False, metadata={OMIT: True}
+    )
+    #: writes a value as the field shows it once editing ends, and when the app sets it
+    format: Callable[[TParsed], str] = attrs.field(
+        on_setattr=attrs.setters.frozen, repr=False, metadata={OMIT: True}
+    )
+    #: the value the field starts with, the same as setting `value` once it is built
+    _initial_value: Optional[TParsed] = attrs.field(
+        default=None, alias="value", repr=False, metadata={OMIT: True}
+    )
+
+    def _set_up_parsed_input(self) -> None:
+        """Show the initial value, and write the text again once editing ends.
+
+        Called by the views' `__attrs_post_init__`: a form row has `View`'s before the mixin.
+        """
+        if self._initial_value is not None:
+            self.value = self._initial_value
+        # first, so the callbacks connected after it read the text shown
+        self.editing_finished.connect(self._show_value)
+
+    @property
+    def value(self) -> Optional[TParsed]:
+        """Get the value of `text`: None while it is empty, or while `parse` can't read it."""
+        if self.text.strip() == "":
+            return None
+        try:
+            return self.parse(self.text)
+        except ValueError:
+            return None
+
+    @value.setter
+    def value(self, value: Optional[TParsed]) -> None:
+        self.text = "" if value is None else self.format(value)
+
+    def _show_value(self) -> None:
+        """Write the text again as `format` does, unless `parse` can't read it."""
+        value = self.value
+        if value is not None:
+            self.text = self.format(value)
+
+
+@define_view
+class ParsedInputView(ParsedInputMixin[TParsed], View):
+    """A field whose text the app reads, e.g. a memory typed as "4 GB" or "4096 MB".
+
+    `value` is what `parse` reads from the text, and `format` writes it back once editing
+    ends. Text that `parse` can't read stays, so the user sees what to fix: its `value` is
+    None, as for an empty field, and `text` tells them apart.
+    """
+
+    _renderer_key = "input"
+
+    @override
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._set_up_parsed_input()
 
 
 #: how a date is typed and shown when nothing gives it a format: ISO 8601's
