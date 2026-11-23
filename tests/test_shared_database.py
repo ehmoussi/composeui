@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional
 import pytest
 from typing_extensions import override
 
+from composeui.core import sqlitemodel
 from composeui.core.application import ModelApplication
 from composeui.core.jobs import Job
 from composeui.core.model import InvalidStateError
@@ -220,8 +221,9 @@ def test_a_notice_whose_thread_can_t_start_leaves_the_write_done_and_the_next_on
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
     model_type = _book_model()
-    with closing(model_type()) as alice, closing(model_type()) as bob:
-        seen = _Seen(bob)
+    app, _ = _book_app(model_type)
+    bob = app.model
+    with closing(model_type()) as alice, closing(bob):
         start = threading.Thread.start
 
         def fail(_thread: threading.Thread) -> None:
@@ -238,7 +240,8 @@ def test_a_notice_whose_thread_can_t_start_leaves_the_write_done_and_the_next_on
         ]
 
         alice.book.names.add("next")
-        seen.wait_for("next")
+        app.main_view.jobs.wait()  # expects no notice of the thread that didn't start
+        assert app.main_view.summary.text == "committed, next"
 
 
 def test_a_session_whose_callback_fails_is_still_told_of_the_next_changes(
@@ -769,6 +772,61 @@ def _book_app(
         build_main_view=HelloMainView, build_model=model_type, setup_model=show_names
     )
     return app, threads
+
+
+def test_jobs_wait_emits_another_session_s_write_with_no_job_running() -> None:
+    """E.g. a test checking that a page shows another session's write: no toolkit runs."""
+    model_type = _book_model()
+    app, threads = _book_app(model_type)
+    main_view = app.main_view
+    with closing(model_type()) as writer:
+        try:
+            writer.book.names.add("Ada")
+            main_view.jobs.wait()
+            assert main_view.summary.text == "Ada"
+            assert threads == [threading.main_thread()]
+        finally:
+            app.model.close()
+
+
+@pytest.mark.parametrize("closed", [False, True])
+def test_jobs_wait_waits_for_a_notice_on_its_way_as_the_jobs_end(
+    monkeypatch: pytest.MonkeyPatch, *, closed: bool
+) -> None:
+    """The notice is still on its way once the last job's result is emitted.
+
+    Closed meanwhile, the session is told no more: the wait ends without it.
+    """
+    model_type = _book_model()
+    app, _ = _book_app(model_type)
+    main_view = app.main_view
+    held, released = threading.Event(), threading.Event()
+    deliver = sqlitemodel._deliver  # noqa: SLF001 (holds the notice before it is posted)
+
+    def held_deliver(handle: Any, indices: set[int]) -> None:
+        held.set()
+        assert released.wait(_TIMEOUT)
+        deliver(handle, indices)
+
+    monkeypatch.setattr(sqlitemodel, "_deliver", held_deliver)
+
+    def release() -> None:
+        if closed:
+            app.model.close()
+        released.set()
+
+    shown = main_view.summary.text
+    with closing(model_type()) as writer:
+        try:
+            writer.book.names.add("Ada")
+            job = main_view.jobs.start(lambda _job: held.wait(_TIMEOUT))
+            job.finished.connect(release)
+            main_view.jobs.wait()
+            assert released.is_set()  # by the job's callback: the notice was on its way
+            assert main_view.summary.text == (shown if closed else "Ada")
+        finally:
+            released.set()
+            app.model.close()
 
 
 def test_on_qt_another_session_s_write_shows_on_the_main_thread_once_rendered(

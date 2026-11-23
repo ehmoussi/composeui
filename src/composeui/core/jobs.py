@@ -80,6 +80,10 @@ def current_job() -> Job[Any, Any] | None:
     return job
 
 
+def _nothing() -> None:
+    """Do nothing: queued only to wake `Jobs.wait`."""
+
+
 def _as_main_thread(callback: Callable[[], None]) -> None:
     """Call `callback` as the main thread does, wherever the backend runs it.
 
@@ -939,6 +943,9 @@ class Jobs:
         # until then, so none waits forever or overtakes one queued before it
         self._handed_over = False
         self._results_lock = threading.Lock()
+        #: the posts of no job on their way, e.g. another session's write told by a thread:
+        #: `wait` waits for them too (`_expect_post`)
+        self._expected_posts = 0
         # what the jobs handed to a toolkit whose main thread hasn't called it yet, each with
         # a drain posted; the first drain to run calls all those waiting
         self._waiting: collections.deque[tuple[Job[Any, Any], Callable[[], None]]] = (
@@ -1150,6 +1157,8 @@ class Jobs:
 
         Use it for a main view that no toolkit shows, e.g. in a test. Its jobs' results wait
         for this call, which emits them on its own thread, as a toolkit would on its main one.
+        It also emits the tables' ``changed`` of a `shared` database that another session
+        wrote to before this call, with or without a job running.
         Raises `TimeoutError` if jobs are still running after `timeout` seconds.
         """
         main_view = self._main_view()
@@ -1157,7 +1166,7 @@ class Jobs:
             msg = "Jobs.wait is for a main view no toolkit shows: its event loop emits them"
             raise RuntimeError(msg)
         deadline = time.monotonic() + timeout
-        while self.is_running:
+        while self.is_running or self._expected_posts > 0 or not self._results.empty():
             remaining = deadline - time.monotonic()
             try:
                 emit = self._results.get(timeout=max(remaining, 0))
@@ -1233,6 +1242,18 @@ class Jobs:
                 return
         # outside the lock: a web session's renderer takes the session's lock
         renderer.post_on_main_thread(functools.partial(_as_main_thread, callback))
+
+    def _expect_post(self) -> None:
+        """Count a post of no job on its way (`_post`), until `_expected_post_over`."""
+        with self._results_lock:
+            self._expected_posts += 1
+
+    def _expected_post_over(self) -> None:
+        """Uncount a post of `_expect_post`, posted or not: e.g. its session closed meanwhile."""
+        with self._results_lock:
+            self._expected_posts -= 1
+            if self._expected_posts == 0 and not self._handed_over:
+                self._results.put(_nothing)  # wakes `wait`, maybe waiting for it
 
     def _drain(self) -> None:
         """Call, in order, all that the jobs handed over and the main thread hasn't called yet.

@@ -201,6 +201,10 @@ def test_count_shows_the_rows_once_its_job_is_over() -> None:
   `monkeypatch.setattr`, for example a constant that sets the duration of a step.
 - **A task too.** `jobs.wait()` also gives a [loading task](threads.md#reusable-loading-tasks)
   its outcome, so its `finished` or `failed` callbacks run.
+- **Another session's write too.** When another model writes to a
+  [shared database](sqlite-model.md#a-database-shared-by-every-session), `jobs.wait()` emits
+  the `changed` of its tables, also with no job running. So a test can check that a page shows
+  another session's write.
 
 ## Test a download
 
