@@ -128,6 +128,10 @@ backends' modules included, can change in any release without an entry here.
 
 ### Changed
 
+- `Jobs.wait` also emits the tables' `changed` after another session writes to a `shared`
+  database, with or without a job running. It waits for each write committed before the call.
+  So a test can check that a page shows another session's write.
+
 - **Breaking:** the web backend serves its own addresses under `/_composeui/`, such as
   `/_composeui/static/` and `/_composeui/jobs`, and the pages keep `/<route>`. So a page's
   route can be `icon`, `jobs`, `reload`, `state`, `static`, `style` or `widget`, and only

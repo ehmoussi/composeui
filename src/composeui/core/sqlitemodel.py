@@ -2127,11 +2127,13 @@ class _SharedStore:
             untold = [handle for handle in others if handle not in self._pending]
             for handle in others:
                 self._pending.setdefault(handle, set()).update(indices)
-        for handle in untold:
+            # counted before this write returns: the session's `Jobs.wait` waits for them
+            expecting = [(handle, _expect_post(handle)) for handle in untold]
+        for handle, jobs in expecting:
             # a daemon: the process doesn't wait for it to end
             thread = threading.Thread(
                 target=self._tell_session,
-                args=(handle,),
+                args=(handle, jobs),
                 name=f"composeui-{self.database_type.__name__}-notices",
                 daemon=True,
             )
@@ -2141,21 +2143,41 @@ class _SharedStore:
                 # e.g. no thread left: the write is done, and the session is told the next one
                 with self._notices:
                     del self._pending[handle]
+                _expected_post_over(jobs)
                 LOGGER.exception("Telling a session of a change failed")
 
-    def _tell_session(self, handle: _Handle) -> None:
+    def _tell_session(self, handle: _Handle, jobs: weakref.ReferenceType[Jobs] | None) -> None:
         """Tell a session its tables changed, the changes made meanwhile together, until none.
 
         The thread keeps the handle until then, not its session (`_Handle.deliver`).
         """
-        while True:
-            with self._notices:
-                indices = self._pending[handle]
-                if len(indices) == 0:  # all told: the next change starts another thread
-                    del self._pending[handle]
-                    return
-                self._pending[handle] = set()
-            _deliver(handle, indices)
+        try:
+            while True:
+                with self._notices:
+                    indices = self._pending[handle]
+                    if len(indices) == 0:  # all told: the next change starts another thread
+                        del self._pending[handle]
+                        return
+                    self._pending[handle] = set()
+                _deliver(handle, indices)
+        finally:
+            _expected_post_over(jobs)
+
+
+def _expect_post(handle: _Handle) -> weakref.ReferenceType[Jobs] | None:
+    """Have the jobs of `handle`'s session expect a post, if it has an app: get them."""
+    jobs = None if handle.jobs is None else handle.jobs()
+    if jobs is None:
+        return None
+    jobs._expect_post()  # noqa: SLF001 (counted for `Jobs.wait`)
+    return weakref.ref(jobs)
+
+
+def _expected_post_over(jobs: weakref.ReferenceType[Jobs] | None) -> None:
+    """Have `jobs`, of `_expect_post`, no longer expect the post."""
+    live = None if jobs is None else jobs()
+    if live is not None:
+        live._expected_post_over()  # noqa: SLF001 (counted for `Jobs.wait`)
 
 
 def _deliver(handle: _Handle, indices: set[int]) -> None:
