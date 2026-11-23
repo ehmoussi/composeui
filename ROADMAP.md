@@ -205,8 +205,8 @@ The SQLite model is complete otherwise: do not rebuild it.
 - **Sessions that survive a crash** (Later). `session_folder` keeps them across a restart, and
   the idle ones across a crash: a copy of each session in memory at intervals, with its uploads
   kept while a copy names them and one writer for its last use.
-- **A clean exit during a write** (Now). An exit waits briefly for a write, and the next start
-  removes what a crash left.
+- **Cleanup after a crash** (Now). The next start removes the temporary files that a crash or a
+  kill left.
 - **Formulas in CSV exports** (Now: a `shared` database holds what other users wrote). A table's
   Export CSV and `frame_content` escape a text cell that a spreadsheet would run as a formula,
   with a way to keep the exact values.
@@ -277,9 +277,6 @@ reproducible.
   web, a move takes 0.40 s with one session and 0.53 s with 4 at once, at the median. Loads no
   longer slow down: the sessions share one database, and 4 load in 9.6 s, as one does
   ([a shared database](benchmarks/README.md#a-shared-database)).
-- **A process that exits during a write may crash.** At exit, the model's finalizer closes the
-  connection and deletes its files while a job's thread can still be writing. A process that is
-  killed leaves its files behind. "A clean exit during a write" fixes both.
 - **A tab of an older version stops answering.** After an upgrade that changes the backend's
   addresses, a tab left open sends its posts to addresses that the server no longer serves.
   They get a 404, which htmx doesn't show: a click does nothing until the user reloads the

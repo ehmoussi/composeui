@@ -119,6 +119,10 @@ tables through the database (`model.study.runs.add(...)`).
   The database is a scratch copy in a temporary file. So the user's file changes only
   when the user saves it, and a failed save leaves the file whole. Opening checks everything
   first. When a file does not fit, the study stays as it was, and a notification says why.
+- **Exits during a write.** When the app exits while a job writes to the database, the exit
+  waits up to 5 s for the write, then interrupts it. The job's write then fails, and its
+  transaction rolls back. A web server that stops waits in the same way for the jobs of the
+  sessions that it closes.
 - **Versions.** Raise the database's `schema_version` with every change to the tables. Add
   the step from the previous version to its `migrations` (`{1: add_stress_column}`). When the
   user opens a study saved by an older version, the database is brought up to date. A study
