@@ -1,7 +1,7 @@
 """A download that the app writes as the browser receives it (`StreamContent`).
 
-`GET /download/{ticket}` takes the file (`Downloads.take`), then `StreamResponse` runs its
-writer on a thread of its own, outside the session's lock, and sends the pieces that it
+`GET /_composeui/download/{ticket}` takes the file (`Downloads.take`), then `StreamResponse`
+runs its writer on a thread of its own, outside the session's lock, and sends the pieces that it
 writes. The writer waits while `MAX_QUEUED_BYTES` wait to be sent: a slow browser slows it
 down, and a file of any size takes little memory. At most
 `WebSettings.max_download_streams` run at once on the server, and

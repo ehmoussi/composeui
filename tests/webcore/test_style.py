@@ -71,11 +71,11 @@ def test_the_page_loads_the_theme_then_the_stylesheets_after_composeui_s(tmp_pat
     with _Browser(app.create_starlette_app()) as browser:
         links = _links(browser.get("/").text)
         composeui, theme, studio, bold, dense = links
-        assert composeui.startswith("/static/app.css?v=")
+        assert composeui.startswith("/_composeui/static/app.css?v=")
         responses = [browser.get(link) for link in (theme, studio, bold, dense)]
         fonts = [
-            browser.get("/style/files/fonts/inter.woff2"),
-            browser.get("/style/files/fonts/inter%20bold.woff2"),
+            browser.get("/_composeui/style/files/fonts/inter.woff2"),
+            browser.get("/_composeui/style/files/fonts/inter%20bold.woff2"),
         ]
 
     assert [response.status_code for response in responses] == [200, 200, 200, 200]
@@ -102,7 +102,7 @@ def test_without_a_style_the_page_is_composeui_s(tmp_path: Path) -> None:
         app = WebApplication(build_main_view=HelloMainView, style=style)
         with _Browser(app.create_starlette_app()) as browser:
             assert len(_links(browser.get("/").text)) == 1
-            assert browser.get("/style/theme.css").status_code == 404
+            assert browser.get("/_composeui/style/theme.css").status_code == 404
 
 
 @pytest.mark.parametrize(
@@ -133,7 +133,7 @@ def test_the_folder_serves_none_of_the_files_a_page_needn_t(tmp_path: Path, name
     app = WebApplication(build_main_view=HelloMainView, style=WebStyle(folder=folder))
     outside = quote((tmp_path / "outside.css").as_posix(), safe="")
     with _Browser(app.create_starlette_app()) as browser:
-        response = browser.get(f"/style/files/{name.format(outside=outside)}")
+        response = browser.get(f"/_composeui/style/files/{name.format(outside=outside)}")
 
     assert response.status_code == 404
     assert "secret" not in response.text
@@ -146,7 +146,7 @@ def test_the_folder_serves_none_of_the_files_a_page_needn_t(tmp_path: Path, name
         ("@IMPORT url(other.css);", "@import is refused"),
         ("a { background: url(https://cdn.example/x.png); }", "url(https://cdn.example/x.png)"),
         ("a { background: url('//cdn.example/x.png'); }", "url(//cdn.example/x.png)"),
-        ('a { background: url("/static/x.png"); }', "url(/static/x.png)"),
+        ('a { background: url("/_composeui/static/x.png"); }', "url(/_composeui/static/x.png)"),
         ("a { background: url(data:image/png;base64,AAAA); }", "url(data:image/png;base64,AAAA)"),
         ("a { background: url(../x.png); }", "url(../x.png) isn't a file that the folder"),
         ("a { background: url(missing.png); }", "url(missing.png) isn't a file that the folder"),

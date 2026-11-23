@@ -85,7 +85,7 @@ class StyleFiles:
             return
         if not style.theme.is_default():
             self.theme = theme_css(style.theme).encode()
-            links.append(_link(f"/style/theme.css?v={_digest(self.theme)}"))
+            links.append(_link(f"/_composeui/style/theme.css?v={_digest(self.theme)}"))
         if style.folder is not None:
             self._folder = style.folder.resolve()
             if not self._folder.is_dir():
@@ -100,7 +100,7 @@ class StyleFiles:
             content = path.read_bytes()
             self._check_urls(name, content.decode("utf-8", errors="replace"))
             # no digest: the route answers `no-cache`, so an edit shows at the next page
-            links.append(_link(f"/style/files/{quote(name)}"))
+            links.append(_link(f"/_composeui/style/files/{quote(name)}"))
         #: the page's `<link>` tags, after ComposeUI's stylesheet
         self.links = Markup("").join(links)
 

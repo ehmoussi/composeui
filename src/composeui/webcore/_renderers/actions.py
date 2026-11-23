@@ -330,7 +330,7 @@ class WebActionRenderer(WebRenderer[ActionView]):
         href = self.href or ""
         return Markup(
             '<a {root_attributes} class="{classes}" href="{href}"{current}'
-            '{tooltip} hx-post="/widget/{widget_id}"'
+            '{tooltip} hx-post="/_composeui/widget/{widget_id}"'
             """ hx-vals='{{"event": "triggered"}}' hx-swap="none"{key}>{label}</a>"""
         ).format(
             root_attributes=self._root_attributes(oob=oob),
@@ -363,7 +363,7 @@ class WebActionRenderer(WebRenderer[ActionView]):
             accept = "" if self.accept is None else Markup(' accept="{}"').format(self.accept)
             return Markup(
                 '<label {attributes}>{label}<input type="file" name="file"{accept}'
-                ' class="hidden" hx-post="/state" hx-encoding="multipart/form-data"'
+                ' class="hidden" hx-post="/_composeui/state" hx-encoding="multipart/form-data"'
                 """ hx-trigger="change" hx-vals='{{"trigger": "{widget_id}"}}'"""
                 ' hx-swap="none" autocomplete="off" {CLOSE_DROPDOWN}{key}></label>'
             ).format(
@@ -380,7 +380,7 @@ class WebActionRenderer(WebRenderer[ActionView]):
             # emptied once sent: picking the same file again is a change too
             return Markup(
                 '<label {attributes}>{label}<input type="file" name="file"{accept}'
-                ' class="hidden" hx-post="/widget/{widget_id}/file"'
+                ' class="hidden" hx-post="/_composeui/widget/{widget_id}/file"'
                 ' hx-encoding="multipart/form-data" hx-trigger="change" hx-swap="none"'
                 ' data-clear-after-post autocomplete="off"'
                 " {CLOSE_DROPDOWN}{key}></label>"
@@ -394,7 +394,7 @@ class WebActionRenderer(WebRenderer[ActionView]):
             )
         return Markup(
             '<button {attributes} type="button"'
-            """ hx-post="/widget/{widget_id}" hx-vals='{{"event": "triggered"}}'"""
+            """ hx-post="/_composeui/widget/{widget_id}" hx-vals='{{"event": "triggered"}}'"""
             ' hx-swap="none" {CLOSE_DROPDOWN}{key}>{label}</button>'
         ).format(
             attributes=attributes,

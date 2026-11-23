@@ -49,7 +49,7 @@ def icon_url(icon: str) -> str | None:
                 _by_name[known.name] = path
     except OSError:  # no such file: no icon, as on Qt
         return None
-    return f"/icon/{known.name}"
+    return f"/_composeui/icon/{known.name}"
 
 
 def icon_path(name: str) -> Path | None:

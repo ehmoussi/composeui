@@ -117,7 +117,7 @@ def test_a_table_s_file_path_with_server_roots_is_picked_among_their_files(
 
     def post(event: str, **values: str) -> str:
         response: httpx.Response = client.post(
-            f"/widget/{renderer.widget_id}", data={"event": event, **values}
+            f"/_composeui/widget/{renderer.widget_id}", data={"event": event, **values}
         )
         return response.text
 
@@ -172,7 +172,7 @@ def test_a_table_s_path_by_kind_lists_the_study_as_each_row_s_kind_picks(
 
         def post(event: str, **values: str) -> str:
             response: httpx.Response = client.post(
-                f"/widget/{renderer.widget_id}", data={"event": event, **values}
+                f"/_composeui/widget/{renderer.widget_id}", data={"event": event, **values}
             )
             return response.text
 
@@ -245,7 +245,7 @@ def test_a_table_s_cell_widget_of_each_row_lists_its_own_server_files(
 
     def post(event: str, **values: str) -> str:
         response: httpx.Response = client.post(
-            f"/widget/{renderer.widget_id}", data={"event": event, **values}
+            f"/_composeui/widget/{renderer.widget_id}", data={"event": event, **values}
         )
         return response.text
 
@@ -278,7 +278,7 @@ def test_a_table_s_cell_widget_s_uploads_are_kept_while_their_cells_hold_them(
 
     for row in ("0", "1"):
         response = client.post(
-            f"/widget/{table_id}/file",
+            f"/_composeui/widget/{table_id}/file",
             data={"row": row, "column": "1"},
             files={"file": (f"mesh{row}.med", b"1", "application/octet-stream")},
         )
@@ -300,7 +300,7 @@ def test_a_table_s_file_path_typed_outside_its_server_roots_is_refused(
     def type_path(text: str) -> None:
         for event in ("start_edit", "edit"):
             data = {"event": event, "row": "0", "column": "1", "text": text}
-            client.post(f"/widget/{renderer.widget_id}", data=data)
+            client.post(f"/_composeui/widget/{renderer.widget_id}", data=data)
 
     for text in ("/etc/passwd", str(root / "beam" / ".." / ".."), "a\0b"):
         type_path(text)
@@ -325,7 +325,9 @@ def test_a_table_s_server_files_open_only_for_a_cell_the_user_can_edit(
 
     def post(event: str, **values: str) -> int:
         data = {"event": event, **values}
-        response: httpx.Response = client.post(f"/widget/{renderer.widget_id}", data=data)
+        response: httpx.Response = client.post(
+            f"/_composeui/widget/{renderer.widget_id}", data=data
+        )
         return response.status_code
 
     for row, column in (("0", "0"), ("9", "1"), ("x", "1")):  # no path, no row, no number
@@ -357,7 +359,7 @@ def test_finishing_a_dimension_edit_updates_the_summary_table(
     summary_id = _widget_id(pipe_main_view.pages.results.summary.renderer)
     pipe_client.get("/inputs")
 
-    pipe_client.post(f"/widget/{radius_id}", data={"value": "35", "event": "change"})
+    pipe_client.post(f"/_composeui/widget/{radius_id}", data={"value": "35", "event": "change"})
 
     summary = _element(pipe_client.get("/results").text, summary_id)
     assert [tag for tag, _ in summary.descendants].count("th") == 4
@@ -380,7 +382,7 @@ def test_clicking_a_table_row_selects_it_and_swaps_the_table_to_show_it(
     table.selection_changed.connect(emitted.append)
 
     def select(row: str) -> Any:
-        return client.post(f"/widget/{table_id}", data={"event": "select", "row": row})
+        return client.post(f"/_composeui/widget/{table_id}", data={"event": "select", "row": row})
 
     body = select("1").text
     assert table.selected_rows == [1]
@@ -411,7 +413,9 @@ def test_activating_a_table_row_emits_it_leaving_the_selection_to_its_click(
     table.row_activated.connect(activated.append)
 
     def activate(row: str) -> Any:
-        return client.post(f"/widget/{table_id}", data={"event": "activate_row", "row": row})
+        return client.post(
+            f"/_composeui/widget/{table_id}", data={"event": "activate_row", "row": row}
+        )
 
     activate("2")
     assert activated == [2]
@@ -436,7 +440,7 @@ def test_each_click_adds_or_removes_its_row_in_a_table_selecting_several(
 
     def select(row: str) -> str:
         response: httpx.Response = client.post(
-            f"/widget/{table_id}", data={"event": "select", "row": row}
+            f"/_composeui/widget/{table_id}", data={"event": "select", "row": row}
         )
         return response.text
 
@@ -466,7 +470,7 @@ class _Places(NamedTuple):
 
     def post(self, event: str, row: str, column: str, text: str = "") -> Any:
         data = {"event": event, "row": row, "column": column, "text": text}
-        return self.client.post(f"/widget/{self.table_id}", data=data)
+        return self.client.post(f"/_composeui/widget/{self.table_id}", data=data)
 
     def edit(self, row: str, column: str, text: str) -> str:
         """Edit a cell as the user does, and return the table the edit swaps back."""
@@ -658,7 +662,9 @@ def test_a_table_s_cells_and_headers_look_as_the_view_says() -> None:
         assert "disabled" in _element(page, f"{table_id}-cell-1-4").attributes
 
         def post(event: str, **values: str) -> str:
-            return str(client.post(f"/widget/{table_id}", data={"event": event, **values}).text)
+            return str(
+                client.post(f"/_composeui/widget/{table_id}", data={"event": event, **values}).text
+            )
 
         assert _find(post("start_edit", row="1", column="1"), f"{table_id}-cell-1-1") is None
         post("check", row="1", column="4", checked="on")
@@ -695,7 +701,9 @@ def test_a_table_s_cell_widgets_post_their_edits_and_clicks() -> None:
         )
 
         def post(event: str, **values: str) -> str:
-            return str(client.post(f"/widget/{table_id}", data={"event": event, **values}).text)
+            return str(
+                client.post(f"/_composeui/widget/{table_id}", data={"event": event, **values}).text
+            )
 
         keep, role = _element(page, f"{table_id}-cell-1-0"), _element(page, f"{table_id}-cell-0-2")
         assert (keep.attributes["aria-label"], "checked" in keep.attributes) == ("Keep", False)
@@ -771,7 +779,7 @@ def test_a_table_s_file_path_is_uploaded_or_typed_its_copy_kept_while_a_cell_hol
 
         def upload(row: str, name: str) -> str:
             response = client.post(
-                f"/widget/{table_id}/file",
+                f"/_composeui/widget/{table_id}/file",
                 data={"row": row, "column": "1"},
                 files={"file": (name, b"1,2", "text/csv")},
             )
@@ -784,7 +792,7 @@ def test_a_table_s_file_path_is_uploaded_or_typed_its_copy_kept_while_a_cell_hol
             a for tag, a in _element(page, f"{table_id}-row-0").descendants if tag == "input"
         ]
         assert (picker["type"], picker["accept"]) == ("file", ".csv")
-        assert picker["hx-post"] == f"/widget/{table_id}/file"
+        assert picker["hx-post"] == f"/_composeui/widget/{table_id}/file"
         assert picker["hx-vals"] == '{"row": "0", "column": "1"}'
 
         # the cell shows the copy's path once swapped back
@@ -809,9 +817,12 @@ def test_a_table_s_file_path_is_uploaded_or_typed_its_copy_kept_while_a_cell_hol
         status = _swapped(body, _widget_id(view.notification.renderer))
         assert status.text == "Can't open 'notes.md': expected a .csv file."
         # or the path is typed
-        client.post(f"/widget/{table_id}", data={"event": "start_edit", "row": "1", "column": "1"})
         client.post(
-            f"/widget/{table_id}",
+            f"/_composeui/widget/{table_id}",
+            data={"event": "start_edit", "row": "1", "column": "1"},
+        )
+        client.post(
+            f"/_composeui/widget/{table_id}",
             data={"event": "edit", "row": "1", "column": "1", "text": "/data/levels.csv"},
         )
         assert table.rows[1][1] == "/data/levels.csv"
@@ -912,7 +923,7 @@ class _SortedRooms(NamedTuple):
 
     def post(self, event: str, **values: str) -> str:
         data = {"event": event, **values}
-        response = self.client.post(f"/widget/{self.table_id}", data=data)
+        response = self.client.post(f"/_composeui/widget/{self.table_id}", data=data)
         assert response.status_code == 200
         return str(response.text)
 
@@ -1001,7 +1012,7 @@ def test_a_table_sorted_without_a_filter_bar_swaps_no_count(
     sorted_rooms.client.get("/")  # the page draws its headers sortable
     notes_id = _widget_id(notes.renderer)
     response = sorted_rooms.client.post(
-        f"/widget/{notes_id}", data={"event": "sort", "column": "0"}
+        f"/_composeui/widget/{notes_id}", data={"event": "sort", "column": "0"}
     )
     assert response.status_code == 200
     body = _swapped(response.text, f"{notes_id}-body").text
@@ -1061,7 +1072,7 @@ def test_the_filter_editor_adds_a_filter_as_a_chip_or_says_why_it_can_t(
     # disabled, the table refuses a stale page's posts
     table.is_enabled = False
     response = sorted_rooms.client.post(
-        f"/widget/{table_id}", data={"event": "sort", "column": "0"}
+        f"/_composeui/widget/{table_id}", data={"event": "sort", "column": "0"}
     )
     assert response.status_code == 400
 
@@ -1189,7 +1200,8 @@ def test_a_large_table_draws_the_rows_around_the_view_as_it_scrolls(
 
     def scroll(start: str, offset: str = "") -> str:
         response: httpx.Response = million_client.post(
-            f"/widget/{table_id}", data={"event": "scroll", "start": start, "offset": offset}
+            f"/_composeui/widget/{table_id}",
+            data={"event": "scroll", "start": start, "offset": offset},
         )
         assert response.status_code == 200
         return response.text
@@ -1225,9 +1237,13 @@ def test_a_large_table_draws_the_rows_around_the_view_as_it_scrolls(
 
     # disabled: the rows scrolled to still show, but none is selected
     main_view.table.is_enabled = False
-    response = million_client.post(f"/widget/{table_id}", data={"event": "scroll", "start": "0"})
+    response = million_client.post(
+        f"/_composeui/widget/{table_id}", data={"event": "scroll", "start": "0"}
+    )
     assert _window(response.text, table_id)[0].get("aria-rowindex") == "2"
-    selected = million_client.post(f"/widget/{table_id}", data={"event": "select", "position": "0"})
+    selected = million_client.post(
+        f"/_composeui/widget/{table_id}", data={"event": "select", "position": "0"}
+    )
     assert selected.status_code == 400
 
 
@@ -1237,9 +1253,11 @@ def test_a_large_table_s_header_sorts_by_its_column_from_the_top(
     million_client.get("/")
     (main_view,) = million_views
     table_id = _widget_id(main_view.table.renderer)
-    million_client.post(f"/widget/{table_id}", data={"event": "scroll", "start": "5000"})
+    million_client.post(f"/_composeui/widget/{table_id}", data={"event": "scroll", "start": "5000"})
 
-    response = million_client.post(f"/widget/{table_id}", data={"event": "sort", "column": "half"})
+    response = million_client.post(
+        f"/_composeui/widget/{table_id}", data={"event": "sort", "column": "half"}
+    )
 
     assert (main_view.table.sort_column, main_view.table.sort_descending) == ("half", False)
     frame = _swapped(response.text, f"{table_id}-frame")
@@ -1249,7 +1267,9 @@ def test_a_large_table_s_header_sorts_by_its_column_from_the_top(
     assert ["autofocus" in button for button in buttons] == [False, True]
     assert _window(response.text, table_id)[0].get("aria-rowindex") == "2"
 
-    refused = million_client.post(f"/widget/{table_id}", data={"event": "sort", "column": "mass"})
+    refused = million_client.post(
+        f"/_composeui/widget/{table_id}", data={"event": "sort", "column": "mass"}
+    )
     assert refused.status_code == 400
 
 
@@ -1259,11 +1279,11 @@ def test_a_large_table_s_row_selected_by_a_click_keeps_the_focus(
     million_client.get("/")
     (main_view,) = million_views
     table_id = _widget_id(main_view.table.renderer)
-    million_client.post(f"/widget/{table_id}", data={"event": "scroll", "start": "70"})
+    million_client.post(f"/_composeui/widget/{table_id}", data={"event": "scroll", "start": "70"})
 
     def select(position: str) -> str:
         response: httpx.Response = million_client.post(
-            f"/widget/{table_id}", data={"event": "select", "position": position}
+            f"/_composeui/widget/{table_id}", data={"event": "select", "position": position}
         )
         assert response.status_code == 200
         return response.text
@@ -1298,7 +1318,7 @@ def test_a_large_table_s_row_activated_emits_its_id(
 
     def activate(position: str) -> str:
         response: httpx.Response = million_client.post(
-            f"/widget/{table_id}", data={"event": "activate_row", "row": position}
+            f"/_composeui/widget/{table_id}", data={"event": "activate_row", "row": position}
         )
         return response.text
 
@@ -1312,7 +1332,7 @@ def test_a_large_table_s_row_activated_emits_its_id(
     assert _window(activate("1000000"), table_id)[0].get("aria-rowindex") == "2"
     table.is_enabled = False
     response = million_client.post(
-        f"/widget/{table_id}", data={"event": "activate_row", "row": "3"}
+        f"/_composeui/widget/{table_id}", data={"event": "activate_row", "row": "3"}
     )
     assert response.status_code == 400
     assert activated == [3]
@@ -1344,7 +1364,7 @@ def test_a_large_table_s_link_downloads_its_rows_shown_as_csv(
     page = rooms_data_client.get("/").text
     (main_view,) = rooms_data_views
     table_id = _widget_id(main_view.rooms.renderer)
-    address = f"/widget/{table_id}/csv"
+    address = f"/_composeui/widget/{table_id}/csv"
     link = next(
         attributes
         for tag, attributes in _element(page, table_id).descendants
@@ -1366,7 +1386,7 @@ def test_a_large_table_s_link_downloads_its_rows_shown_as_csv(
         "Kitchen,21.5,2",
         "Bedroom,19.5,1",
     ]
-    assert rooms_data_client.get("/widget/nothing/csv").status_code == 404
+    assert rooms_data_client.get("/_composeui/widget/nothing/csv").status_code == 404
 
 
 def test_a_large_table_s_bar_searches_and_filters_its_columns_by_name(
@@ -1378,7 +1398,9 @@ def test_a_large_table_s_bar_searches_and_filters_its_columns_by_name(
     assert _element(page, f"{table_id}-bar").attributes.get("role") == "search"
 
     def post(**data: str) -> str:
-        response: httpx.Response = rooms_data_client.post(f"/widget/{table_id}", data=data)
+        response: httpx.Response = rooms_data_client.post(
+            f"/_composeui/widget/{table_id}", data=data
+        )
         assert response.status_code == 200
         return response.text
 
@@ -1418,7 +1440,7 @@ def test_ctrl_c_answers_a_large_table_s_selected_rows_for_the_clipboard(
     main_view.table.selection_mode = SelectionMode.MULTIPLE
     main_view.table.selected_ids = [3, 1]
 
-    response = million_client.post(f"/widget/{table_id}", data={"event": "copy"})
+    response = million_client.post(f"/_composeui/widget/{table_id}", data={"event": "copy"})
 
     copied = _swapped(response.text, f"{table_id}-copied")
     assert copied.text == "2\t0.5\n6\t1.5"  # in the table's order
@@ -1426,7 +1448,7 @@ def test_ctrl_c_answers_a_large_table_s_selected_rows_for_the_clipboard(
     assert copied.attributes.get("hx-trigger") == "copy-rows"  # the next copy posts again
     # the table swapped whole meanwhile (e.g. its texts changed): the answer comes in it
     main_view.table.texts = {**main_view.table.texts, "export": "Save the rows"}
-    response = million_client.post(f"/widget/{table_id}", data={"event": "copy"})
+    response = million_client.post(f"/_composeui/widget/{table_id}", data={"event": "copy"})
     whole = _swapped(response.text, table_id)
     (answer,) = [
         attributes
@@ -1455,7 +1477,9 @@ def test_a_table_answers_a_stale_page_s_posts_with_itself_as_it_now_is() -> None
         table.cell_edited.connect(lambda row, column, text: events.append((row, column, text)))
 
         def post(event: str, **values: str) -> str:
-            return str(client.post(f"/widget/{table_id}", data={"event": event, **values}).text)
+            return str(
+                client.post(f"/_composeui/widget/{table_id}", data={"event": event, **values}).text
+            )
 
         # e.g. sent by hand, or by a page showing rows, columns or a sort no longer there
         unknown_row = post("check", row="x", column="0", checked="on")
@@ -1499,7 +1523,7 @@ def test_a_table_cell_picked_keeps_the_rows_the_app_answers_with() -> None:
 
         def pick(text: str) -> str:
             data = {"event": "pick", "row": "0", "column": "2", "text": text}
-            return str(client.post(f"/widget/{table_id}", data=data).text)
+            return str(client.post(f"/_composeui/widget/{table_id}", data=data).text)
 
         answered = pick("Output")
         kept = pick("Input")

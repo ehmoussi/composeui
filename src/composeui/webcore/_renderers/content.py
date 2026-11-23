@@ -184,7 +184,7 @@ class WebImageRenderer(WebRenderer[ImageViewLike]):
         height = self._view.height
         return Markup(
             '<img {} class="max-w-full self-start object-contain object-left" alt="{}"'
-            ' src="/widget/{}/picture?version={}"{}>'
+            ' src="/_composeui/widget/{}/picture?version={}"{}>'
         ).format(
             self._root_attributes(oob=oob),
             self._view.description,
@@ -270,7 +270,7 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
     page's script drops the oldest lines past `data-max-lines`, and keeps the box at its
     end as lines come, unless the user scrolled up (see `page.js`). Above the box, a button
     copies the whole text, in the page, which holds the lines the view keeps; a link
-    downloads it (`text_file`, by the `/widget/{id}/text` route). The search field finds
+    downloads it (`text_file`, by the `/_composeui/widget/{id}/text` route). The search field finds
     in the page too, as `find_in_lines` does, and highlights the matches without changing
     the text; it stays as typed when the whole console is swapped (`hx-preserve`).
     """
@@ -317,7 +317,7 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
             '<button type="button" class="btn btn-ghost btn-xs ml-auto"'
             ' data-copy-console="{widget_id}-text">{copy}</button>'
             # a plain link: htmx can't start a download
-            '<a class="btn btn-ghost btn-xs" href="/widget/{widget_id}/text"'
+            '<a class="btn btn-ghost btn-xs" href="/_composeui/widget/{widget_id}/text"'
             " download>{save}</a></div>"
             '<pre id="{widget_id}-text" class="cui-console" data-console'
             ' data-max-lines="{max_lines}" tabindex="0">'
@@ -435,9 +435,9 @@ def _fetch_after(widget_id: str, timeout: float) -> Markup:
     """Get the attributes that fetch the fragment `widget_id` again once `timeout` has passed."""
     # margin: the browser's delay starts after the server's timer did, but not by much
     delay_ms = round((timeout + _AUTO_CLEAR_MARGIN) * 1000)
-    return Markup(' hx-get="/widget/{}" hx-trigger="load delay:{}ms" hx-swap="outerHTML"').format(
-        widget_id, delay_ms
-    )
+    return Markup(
+        ' hx-get="/_composeui/widget/{}" hx-trigger="load delay:{}ms" hx-swap="outerHTML"'
+    ).format(widget_id, delay_ms)
 
 
 _NOTIFICATION_CLASSES: Final[dict[LogType, str]] = {
@@ -471,7 +471,7 @@ class WebNotificationBarRenderer(WebRenderer[NotificationBar]):
             ' class="alert alert-soft {kind} sticky top-16 z-10 mb-4 flex justify-between text-sm">'
             '<span class="whitespace-pre-line">{message}</span>'
             '<button id="{widget_id}-close" type="button" class="btn btn-ghost btn-xs btn-circle"'
-            ' aria-label="{close}" title="{close}" hx-post="/widget/{widget_id}"'
+            ' aria-label="{close}" title="{close}" hx-post="/_composeui/widget/{widget_id}"'
             """ hx-vals='{{"event": "close", "number": "{number}"}}' hx-swap="none"{disabled}>"""
             "{icon}</button></div>"
         ).format(

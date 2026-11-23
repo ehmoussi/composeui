@@ -25,8 +25,8 @@ This is the click of [A button click](architecture.md#a-button-click) on the web
 ![The browser posts the click. The middleware checks it. The route gives it to the session, which dispatches it to the button's renderer under its lock. The callback changes the label, which marks the label's renderer dirty. The session renders the dirty fragments, and htmx swaps them into the page.](../images/web-click.svg)
 
 1. **The browser posts the event.** The button's fragment (`WebButtonRenderer.to_html`) has
-   `hx-post="/widget/{id}"` and `hx-vals` with `event=click`. Its `hx-swap="none"` tells htmx
-   not to swap the button with the response.
+   `hx-post="/_composeui/widget/{id}"` and `hx-vals` with `event=click`. Its `hx-swap="none"`
+   tells htmx not to swap the button with the response.
 2. **The middleware checks the request.** `create_starlette_app` in `webapplication.py` adds
    the middleware. `SecurityHeadersMiddleware` (`headers.py`) adds the security headers to
    every response. `BodySizeLimitMiddleware` (`limits.py`) refuses a body that is too large.
@@ -106,8 +106,8 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
 - **Changes from threads.** `call_on_main_thread` runs its callback under the session's lock,
   and keeps what it changed in the session's `pending`. They are sent with the next event's
   response or fetch (a full page drops them). While the main view's jobs run, the page's
-  `cui-jobs` poller fetches `/jobs` every `JOBS_POLL_MS`, which brings them. The server pushes
-  nothing, so an idle page sends nothing. A response whose event starts or ends the jobs swaps
+  `cui-jobs` poller fetches `/_composeui/jobs` every `JOBS_POLL_MS`, which brings them. The
+  server pushes nothing, so an idle page sends nothing. A response whose event starts or ends the jobs swaps
   the poller in, as it does the page's marker.
 - **Choices of several values.** Each box of a check list posts its key and its state, not a
   flip, and the check-all box posts its state too. A post that arrives twice leaves the same
@@ -323,6 +323,10 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
 
 ## Pages, tabs, and dialogs
 
+- **The backend's own addresses** are under `/_composeui/` (`INTERNAL_ROUTE`), one `Mount` in
+  `create_starlette_app`, and the pages have the rest. So a page can take any other name, and a
+  new route of the backend does not take a name from an app's pages. A page's route can't be
+  `_composeui` (`check_routes`).
 - **Pages and tabs.** The router sends only the shown page. A change on another page is not
   sent: the page brings it once shown, as navigating swaps the router. Tabs send only the shown
   tab's views, and the other panels stay empty. The browser shows the tab picked at once. Then
@@ -356,12 +360,12 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   keeps its number. An information fetches the bar again after its timeout, as the status bar
   does.
 - **Icons.** An action's `icon` is a file path, as Qt reads it: `icons.py` serves the file at
-  `/icon/<digest><suffix>`, an address naming its content, cached for good. Only image files
-  that a view has named are served, and `icon` is never loaded from a study, so no request can
+  `/_composeui/icon/<digest><suffix>`, an address naming its content, cached for good. Only
+  image files that a view has named are served, and `icon` is never loaded from a study, so no request can
   name a file. An SVG is drawn as a CSS mask in the text's color, so it follows the theme like
   the built-in New, Open, and Save icons. Another image shows as it is.
-- **Images.** An `ImageView` has its own route, `/widget/{id}/picture`, that answers its session
-  only: an image can be private, so it stays out of the process's registry of icons. A `data:`
+- **Images.** An `ImageView` has its own route, `/_composeui/widget/{id}/picture`, that answers
+  its session only: an image can be private, so it stays out of the process's registry of icons. A `data:`
   address would send it again with each swap. The address names the content by its digest, so a
   browser can keep it, and an older digest answers 404, never another image. The route serves
   only what starts as an image, as an app may set a path that a user typed. `image` is never
@@ -374,8 +378,8 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   is not cut. Only the browser knows the scale on the page, so an arrow's line stops inside its head
   by a length computed at the largest size that the view can have.
 - **An app's look.** A `WebStyle`'s theme is a stylesheet that `style.py` writes as the server
-  starts, served at `/style/theme.css` by its digest, as the page's policy refuses a `<style>`
-  element. It sets daisyUI's variables under the selectors of ComposeUI's own themes in
+  starts, served at `/_composeui/style/theme.css` by its digest, as the page's policy refuses a
+  `<style>` element. It sets daisyUI's variables under the selectors of ComposeUI's own themes in
   `css/app.css` and loads after it, so it wins by order, not by a new theme name. So the Theme
   menu, the browser's preference and a chart's image (`data-theme="composeui"` in `charts.js`)
   need no change. The app's stylesheets are read and checked once, there too: an `@import` or a

@@ -44,7 +44,9 @@ def test_a_browser_cannot_reach_another_sessions_widgets(app: _HelloApp) -> None
 
         # widget ids are guessable (`id()`-based): they must only resolve per session
         alice_field = _field_id(alice_view.form.name)
-        response = mallory.post(f"/widget/{alice_field}", data={"value": "x", "event": "input"})
+        response = mallory.post(
+            f"/_composeui/widget/{alice_field}", data={"value": "x", "event": "input"}
+        )
 
         assert response.status_code == 404
         assert alice_view.form.name.text == ""
@@ -77,12 +79,18 @@ def test_a_post_from_another_origin_is_refused(app: _HelloApp, headers: dict[str
 
         responses = [
             browser.post(
-                f"/widget/{field_id}", data={"value": "x", "event": "input"}, headers=headers
+                f"/_composeui/widget/{field_id}",
+                data={"value": "x", "event": "input"},
+                headers=headers,
             ),
-            browser.post("/state/download", data={"trigger": _action_id(save)}, headers=headers),
-            browser.post("/state", files={"file": ("s.hello", b"{}")}, headers=headers),
             browser.post(
-                f"/widget/{field_id}/file", files={"file": ("a.txt", b"a")}, headers=headers
+                "/_composeui/state/download", data={"trigger": _action_id(save)}, headers=headers
+            ),
+            browser.post("/_composeui/state", files={"file": ("s.hello", b"{}")}, headers=headers),
+            browser.post(
+                f"/_composeui/widget/{field_id}/file",
+                files={"file": ("a.txt", b"a")},
+                headers=headers,
             ),
         ]
 
@@ -106,7 +114,7 @@ def test_a_post_from_the_app_s_own_page_is_served(app: _HelloApp, headers: dict[
         (session_view,) = app.session_views
 
         response = browser.post(
-            f"/widget/{_field_id(session_view.form.name)}",
+            f"/_composeui/widget/{_field_id(session_view.form.name)}",
             data={"value": "Ada", "event": "input"},
             headers=headers,
         )
@@ -125,16 +133,16 @@ def test_every_response_carries_the_security_headers(app: _HelloApp, tmp_path: P
         responses = [browser.get("/")]
         (main_view,) = app.session_views
         responses += [
-            browser.get(f"/widget/{_field_id(main_view.form.name)}"),
-            browser.get("/state"),
-            browser.get("/static/htmx.min.js"),
+            browser.get(f"/_composeui/widget/{_field_id(main_view.form.name)}"),
+            browser.get("/_composeui/state"),
+            browser.get("/_composeui/static/htmx.min.js"),
             browser.get(icon_address),  # with a policy of its own
-            browser.get("/widget/any/picture"),  # with a policy of its own once found
-            browser.get("/reload?instance=any"),  # only a `--reload` server's
-            browser.get("/download/any"),  # no such file
-            browser.get("/style/theme.css"),  # no theme
-            browser.get("/style/files/studio.css"),  # no style folder
-            browser.post("/state", headers={"Sec-Fetch-Site": "cross-site"}),  # refused
+            browser.get("/_composeui/widget/any/picture"),  # with a policy of its own once found
+            browser.get("/_composeui/reload?instance=any"),  # only a `--reload` server's
+            browser.get("/_composeui/download/any"),  # no such file
+            browser.get("/_composeui/style/theme.css"),  # no theme
+            browser.get("/_composeui/style/files/studio.css"),  # no style folder
+            browser.post("/_composeui/state", headers={"Sec-Fetch-Site": "cross-site"}),  # refused
         ]
 
         def fails(_sink: BinaryIO) -> None:

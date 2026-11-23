@@ -83,13 +83,13 @@ def test_a_catalogue_pipe_s_edit_button_opens_the_form_dialog_on_it() -> None:
         (view,) = views
         add_id = _widget_id(view.add.add_pipe.renderer)
         name_id = _field_id(view.add.pipe.name)
-        client.post(f"/widget/{name_id}", data={"event": "input", "value": "Main line"})
-        client.post(f"/widget/{add_id}", data={"event": "click"})
+        client.post(f"/_composeui/widget/{name_id}", data={"event": "input", "value": "Main line"})
+        client.post(f"/_composeui/widget/{add_id}", data={"event": "click"})
         (pipe,) = view.catalogue.browser.pipes.item_views
         assert isinstance(pipe, CataloguePipeExpander)
         edit = pipe.buttons.edit.renderer
 
-        body = client.post(f"/widget/{_widget_id(edit)}", data={"event": "click"}).text
+        body = client.post(f"/_composeui/widget/{_widget_id(edit)}", data={"event": "click"}).text
 
         dialog = _swapped(body, _widget_id(view.edit_dialog.renderer))
         assert "hidden" not in dialog.attributes
@@ -122,24 +122,26 @@ def test_a_form_dialog_swaps_only_its_ok_as_its_form_s_checks_change(
     accept_id = f"{dialog_id}-accept"
     name_id = _field_id(view.edit_dialog.form.name)
 
-    body = client.post(f"/widget/{_widget_id(view.edit.renderer)}", data={"event": "click"}).text
+    body = client.post(
+        f"/_composeui/widget/{_widget_id(view.edit.renderer)}", data={"event": "click"}
+    ).text
     dialog = _swapped(body, dialog_id)
     assert "hidden" not in dialog.attributes
     assert _contains(dialog, name_id)  # the form, in the dialog
     assert "disabled" not in _element(body, accept_id).attributes
 
     # the name emptied: only OK swaps, disabled, the dialog left as the user has it
-    body = client.post(f"/widget/{name_id}", data={"event": "input", "value": ""}).text
+    body = client.post(f"/_composeui/widget/{name_id}", data={"event": "input", "value": ""}).text
     assert "disabled" in _swapped(body, accept_id).attributes
     assert "A name is mandatory" in body
     assert f'id="{dialog_id}"' not in body
     # OK anyway: refused, the dialog left open as it is
-    body = client.post(f"/widget/{dialog_id}", data={"event": "accept"}).text
+    body = client.post(f"/_composeui/widget/{dialog_id}", data={"event": "accept"}).text
     assert view.edit_dialog.is_visible
     assert f'id="{dialog_id}"' not in body
 
-    client.post(f"/widget/{name_id}", data={"event": "input", "value": "Return"})
-    body = client.post(f"/widget/{dialog_id}", data={"event": "accept"}).text
+    client.post(f"/_composeui/widget/{name_id}", data={"event": "input", "value": "Return"})
+    body = client.post(f"/_composeui/widget/{dialog_id}", data={"event": "accept"}).text
     assert "hidden" in _swapped(body, dialog_id).attributes  # closed
     assert "Return, 12 m" in body
 
@@ -169,13 +171,15 @@ def test_a_content_dialog_shows_its_view_whose_buttons_leave_it_open(
     dialog_id = _widget_id(view.open_dialog.renderer)
     up_id, table_id = _widget_id(content.up.renderer), _widget_id(content.entries.renderer)
 
-    body = client.post(f"/widget/{_widget_id(view.open.renderer)}", data={"event": "click"}).text
+    body = client.post(
+        f"/_composeui/widget/{_widget_id(view.open.renderer)}", data={"event": "click"}
+    ).text
     dialog = _swapped(body, dialog_id)
     assert "hidden" not in dialog.attributes
     assert all(_contains(dialog, element_id) for element_id in (up_id, table_id))
     assert "disabled" in _element(body, f"{dialog_id}-accept").attributes  # nothing selected
 
-    body = client.post(f"/widget/{up_id}", data={"event": "click"}).text
+    body = client.post(f"/_composeui/widget/{up_id}", data={"event": "click"}).text
 
     assert view.open_dialog.is_visible
     assert f'id="{dialog_id}"' not in body  # left as the user has it
@@ -207,16 +211,21 @@ def test_a_dialog_s_own_buttons_and_check_show_on_the_web_and_act_on_their_posts
         footer = [attributes.get("id") for tag, attributes in dialog.descendants if tag == "button"]
         assert footer[-3:] == [apply_id, discard_id, f"{dialog_id}-accept"]  # after Cancel
 
-        body = client.post(f"/widget/{field_id}", data={"event": "input", "value": ""}).text
+        body = client.post(
+            f"/_composeui/widget/{field_id}", data={"event": "input", "value": ""}
+        ).text
         assert NO_FOLDER in _swapped(body, log_id).text
         assert "disabled" in _swapped(body, f"{dialog_id}-accept").attributes
         assert "disabled" in _swapped(body, apply_id).attributes
-        assert client.post(f"/widget/{apply_id}", data={"event": "click"}).status_code == 400
+        assert (
+            client.post(f"/_composeui/widget/{apply_id}", data={"event": "click"}).status_code
+            == 400
+        )
 
-        client.post(f"/widget/{field_id}", data={"event": "input", "value": "out"})
-        body = client.post(f"/widget/{apply_id}", data={"event": "click"}).text
+        client.post(f"/_composeui/widget/{field_id}", data={"event": "input", "value": "out"})
+        body = client.post(f"/_composeui/widget/{apply_id}", data={"event": "click"}).text
         assert f'id="{dialog_id}"' not in body  # left open, as the user has it
-        body = client.post(f"/widget/{discard_id}", data={"event": "click"}).text
+        body = client.post(f"/_composeui/widget/{discard_id}", data={"event": "click"}).text
         assert "hidden" in _swapped(body, dialog_id).attributes
     assert view.answers == ["apply", "discard"]
 
@@ -347,7 +356,9 @@ def test_an_action_opens_a_dialog_whose_answers_close_it(
     clear_id = _widget_id(dialogs_main_view.edit_menu.clear.renderer)
 
     def post(widget_id: str, event: str) -> str:
-        response: httpx.Response = dialog_client.post(f"/widget/{widget_id}", data={"event": event})
+        response: httpx.Response = dialog_client.post(
+            f"/_composeui/widget/{widget_id}", data={"event": event}
+        )
         return response.text
 
     closed = _element(dialog_client.get("/").text, dialog_id)
@@ -399,7 +410,7 @@ def test_a_disabled_dialog_cannot_be_answered(
     assert "<b>busy</b>" in element.text
     assert all(tag != "b" for tag, _ in element.descendants)
 
-    dialog_client.post(f"/widget/{dialog_id}", data={"event": "accept"})
+    dialog_client.post(f"/_composeui/widget/{dialog_id}", data={"event": "accept"})
     assert dialog.is_visible
     assert dialogs_main_view.name.text == "Ada"
 
@@ -427,7 +438,7 @@ def test_disabling_a_page_disables_its_dialog_drawn_apart_from_it(
     dialog.open()
     container = main_view.pages.note if disabled == "page" else main_view.pages
     submit_id = _disable_on_submit(main_view, container)
-    body = client.post(f"/widget/{submit_id}", data={"event": "click"}).text
+    body = client.post(f"/_composeui/widget/{submit_id}", data={"event": "click"}).text
 
     dialog_id = _widget_id(dialog.renderer)
     swapped = _swapped(body, dialog_id)
@@ -435,7 +446,7 @@ def test_disabling_a_page_disables_its_dialog_drawn_apart_from_it(
     buttons = [attributes for tag, attributes in swapped.descendants if tag == "button"]
     assert all("disabled" in attributes for attributes in buttons)
     # a stale page's answer is ignored, as a disabled dialog's own
-    client.post(f"/widget/{dialog_id}", data={"event": "accept"})
+    client.post(f"/_composeui/widget/{dialog_id}", data={"event": "accept"})
     assert dialog.is_visible
 
 

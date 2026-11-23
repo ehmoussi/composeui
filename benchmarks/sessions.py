@@ -39,7 +39,7 @@ from uber import EXAMPLES, HOURS, MIB, _environment, fetch_data
 #: the header that the app's same-origin check reads, as a browser sends it
 HEADERS = {"Sec-Fetch-Site": "same-origin"}
 #: in a response, what shows that the main view's jobs still run
-RUNNING = 'hx-get="/jobs"'
+RUNNING = 'hx-get="/_composeui/jobs"'
 SLIDER = re.compile(r'type="range"[^>]*hx-post="([^"]+)"')
 #: seconds between two polls during a load, as the page does (`JOBS_POLL_MS`)
 LOAD_POLL = 0.3
@@ -107,8 +107,8 @@ def _check(response: Any) -> Any:
 
 
 def _settle(browser: Any) -> None:
-    """Poll `/jobs`, as the page does, until no job runs."""
-    while RUNNING in _check(browser.get("/jobs")).text:
+    """Poll `/_composeui/jobs`, as the page does, until no job runs."""
+    while RUNNING in _check(browser.get("/_composeui/jobs")).text:
         time.sleep(MOVE_POLL)
 
 
@@ -146,7 +146,7 @@ def _left_case(example: str, data: Path, delay: float) -> dict[str, Any]:
         files = set(_session_files())
         starlette_app.state.sessions._ttl = 0  # noqa: SLF001 (no public way to end one now)
         start = time.perf_counter()
-        browser.get("/jobs")
+        browser.get("/_composeui/jobs")
         expiry = time.perf_counter() - start
         freed = _wait_freed(main_views[0])
         # the last connection closed, or the job's end, can delete a file a moment later
@@ -198,7 +198,7 @@ def _cleanup_case(example: str, data: Path, count: int) -> dict[str, Any]:
         # a request's expiry closes them all, under the store's lock
         store._ttl = 0  # noqa: SLF001 (no public way to end a session now)
         start = time.perf_counter()
-        browser.get("/jobs")
+        browser.get("/_composeui/jobs")
         measures["expiry_s"] = time.perf_counter() - start
         measures["after"] = _snapshot()
         measures["main_views_freed"] = sum(reference() is None for reference in main_views)
@@ -235,7 +235,7 @@ def _peak_rss_mib(pid: int) -> float:
 
 async def _poll(client: Any, interval: float) -> None:
     while True:
-        response = _check(await client.get("/jobs"))
+        response = _check(await client.get("/_composeui/jobs"))
         if RUNNING not in response.text:
             return
         await asyncio.sleep(interval)

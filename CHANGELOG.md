@@ -107,6 +107,12 @@ backends' modules included, can change in any release without an entry here.
 
 ### Changed
 
+- **Breaking:** the web backend serves its own addresses under `/_composeui/`, such as
+  `/_composeui/static/` and `/_composeui/jobs`, and the pages keep `/<route>`. So a page's
+  route can be `icon`, `jobs`, `reload`, `state`, `static`, `style` or `widget`, and only
+  `_composeui` is refused. Change a proxy rule or a link that names one of the old addresses.
+  A page that the previous version served must be loaded again.
+
 - **Breaking:** `DatabaseModel` replaces `SqliteModel`. A `SqliteDatabase` declares the tables,
   `schema_version`, `migrations`, `open_time_limit` and `pragmas`. The model declares the
   database with `per_session`, which the study saves and opens, and declares no table of its

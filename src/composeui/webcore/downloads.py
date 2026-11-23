@@ -3,9 +3,9 @@
 The app makes a file while it handles a request, or in a job's callback, which no request
 answers. So the session keeps the file under a ticket, a name that can't be guessed, and each
 answer to the page names the tickets not fetched yet (`downloads_marker`). The page's script
-fetches each once, from `GET /download/{ticket}`, which only reads: the app's code never runs
-there, but a `StreamContent`'s writer, made in the request or job that gave the file, from
-what it read there. That writer runs once: its first fetch takes it (`take`).
+fetches each once, from `GET /_composeui/download/{ticket}`, which only reads: the app's code
+never runs there, but a `StreamContent`'s writer, made in the request or job that gave the
+file, from what it read there. That writer runs once: its first fetch takes it (`take`).
 """
 
 from __future__ import annotations
@@ -110,9 +110,9 @@ def downloads_marker(tickets: list[tuple[str, str]], *, oob: bool = False) -> Ma
     """
     swap = Markup(' hx-swap-oob="true"') if oob else Markup()
     links = Markup("").join(
-        Markup('<a href="/download/{ticket}" download="{name}" data-ticket="{ticket}"></a>').format(
-            ticket=ticket, name=name
-        )
+        Markup(
+            '<a href="/_composeui/download/{ticket}" download="{name}" data-ticket="{ticket}"></a>'
+        ).format(ticket=ticket, name=name)
         for ticket, name in tickets
     )
     return Markup('<div id="cui-downloads"{} hidden>{}</div>').format(swap, links)

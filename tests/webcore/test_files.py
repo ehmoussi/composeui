@@ -82,7 +82,10 @@ def test_a_file_upload_holds_its_file_until_the_next_one_or_the_session_s_end() 
     element = _element(field.to_html(), field.widget_id)
     assert element.text == "Choose a fileNo file chosen"
     (picker,) = [a for tag, a in element.descendants if tag == "input"]
-    assert (picker["accept"], picker["hx-post"]) == (".csv", f"/widget/{field.widget_id}/file")
+    assert (picker["accept"], picker["hx-post"]) == (
+        ".csv",
+        f"/_composeui/widget/{field.widget_id}/file",
+    )
 
     name = "<b>a & b.csv"
     result = _pick_file(session, field.widget_id, name, b"1,2", "text/csv")
@@ -146,7 +149,7 @@ def test_files_given_together_are_kept_in_one_folder_under_their_own_names() -> 
             a for tag, a in _element(field.to_html(), field.widget_id).descendants if tag == "input"
         ]
         assert ("multiple" in picker, picker["accept"]) == (True, ".shp,.shx,.dbf")
-        url = f"/widget/{field.widget_id}/file"
+        url = f"/_composeui/widget/{field.widget_id}/file"
 
         response = client.post(
             url,
@@ -180,13 +183,13 @@ def test_files_given_together_are_kept_in_one_folder_under_their_own_names() -> 
         # a field without `multiple` takes one file: its page never sends two; nor a field
         # disabled, nor what isn't a widget
         two = [("file", ("a.shp", b"1")), ("file", ("b.shp", b"2"))]
-        dataset_url = f"/widget/{_part(main_view.form.dataset, 'field').widget_id}/file"
+        dataset_url = f"/_composeui/widget/{_part(main_view.form.dataset, 'field').widget_id}/file"
         assert client.post(dataset_url, files=two).status_code == 400
         assert main_view.form.dataset.file is None
         shapes.is_enabled = False
         assert client.post(url, files=two).status_code == 400
         assert [file.name for file in shapes.files] == ["rivers.shp"]
-        assert client.post("/widget/cui-0/file", files=two).status_code == 404
+        assert client.post("/_composeui/widget/cui-0/file", files=two).status_code == 404
 
 
 @pytest.mark.parametrize(
@@ -214,7 +217,7 @@ def test_a_file_given_with_others_keeps_its_name_where_every_system_can_hold_it(
             name.replace("\\", "\\\\")
         )
         client.post(
-            f"/widget/{_part(shapes, 'field').widget_id}/file",
+            f"/_composeui/widget/{_part(shapes, 'field').widget_id}/file",
             content=f"--b\r\n{part}\r\n\r\n1\r\n--b--\r\n".encode(),
             headers={"Content-Type": "multipart/form-data; boundary=b"},
         )
@@ -367,7 +370,7 @@ def test_files_given_together_are_refused_together_and_the_last_ones_stay(
     with _data_files_app() as (client, main_view):
         shapes = main_view.form.shapes
         field = _part(shapes, "field")
-        url = f"/widget/{field.widget_id}/file"
+        url = f"/_composeui/widget/{field.widget_id}/file"
         client.post(url, files=[("file", ("kept.shp", b"0"))])
         kept = shapes.files
         uploads = kept[0].path.parent.parent  # the field's, each upload in a folder
@@ -548,7 +551,7 @@ def test_a_file_path_is_typed_or_uploaded_its_copy_kept_until_the_session_ends()
     text, picker = (attributes for tag, attributes in element.descendants if tag == "input")
     assert text["aria-labelledby"] == label.text_id
     assert (picker["type"], picker["accept"]) == ("file", ".csv,.txt,.text")
-    assert picker["hx-post"] == f"/widget/{field.widget_id}/file"
+    assert picker["hx-post"] == f"/_composeui/widget/{field.widget_id}/file"
     buttons = [attributes for tag, attributes in element.descendants if tag == "button"]
     assert [button["aria-label"] for button in buttons] == ["Choisir un fichier", "Recharger"]
 

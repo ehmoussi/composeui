@@ -129,28 +129,28 @@ def test_a_user_unchecks_a_base_on_the_web_and_downloads_the_rows_shown() -> Non
         client.get("/")
         (page,) = views
         for _ in range(600):  # the page's poller: it brings the job's result to the views
-            client.get("/jobs")
+            client.get("/_composeui/jobs")
             if page.loader.has_result:
                 break
             time.sleep(0.05)
         # the job's thread set the result under the session's lock, and its reactive methods
         # may still be filling the views: a request takes the lock once they're done
-        client.get("/jobs")
+        client.get("/_composeui/jobs")
         assert page.summary.pickups.value == "4"
 
         # a base's key is its text: a page posts it as it shows it
         client.post(
-            f"/widget/{_field_id(page.filters.bases)}",
+            f"/_composeui/widget/{_field_id(page.filters.bases)}",
             data={"event": "toggle", "key": "B02512"},  # unchecked: no "checked"
         )
         assert page.summary.pickups.value == "1"
 
         assert isinstance(page.download_rows.renderer, WebRenderer)
         body = client.post(
-            f"/widget/{page.download_rows.renderer.widget_id}", data={"event": "click"}
+            f"/_composeui/widget/{page.download_rows.renderer.widget_id}", data={"event": "click"}
         ).text
         # the newest: the answer names each file not fetched yet
-        *_, address = re.findall(r'href="(/download/[^"]+)"', body)
+        *_, address = re.findall(r'href="(/_composeui/download/[^"]+)"', body)
         downloaded = client.get(address)
 
     assert downloaded.status_code == 200
@@ -185,19 +185,19 @@ def test_four_web_sessions_read_the_csv_once_and_each_filters_its_own_rows(
             client.get("/")
         for client, page in zip(clients, views):
             for _ in range(600):  # the page's poller: it brings the job's result to the views
-                client.get("/jobs")
+                client.get("/_composeui/jobs")
                 if page.loader.has_result:
                     break
                 time.sleep(0.05)
             # the job's thread set the result under the session's lock, and its reactive
             # methods may still be filling the views: a request takes the lock once they're done
-            client.get("/jobs")
+            client.get("/_composeui/jobs")
 
         assert len(views) == 4
         assert len(reads) == 1
         # a session's filter changes its rows only
         clients[0].post(
-            f"/widget/{_field_id(views[0].filters.bases)}",
+            f"/_composeui/widget/{_field_id(views[0].filters.bases)}",
             data={"event": "toggle", "key": "B02512"},
         )
         assert [page.summary.pickups.value for page in views] == ["1", "4", "4", "4"]

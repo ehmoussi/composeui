@@ -15,7 +15,7 @@
       latitude: Math.max(-85.05112878, Math.min(85.05112878, state.latitude)),
       longitude: ((state.longitude + 180) % 360 + 360) % 360 - 180
     });
-    htmx.ajax("post", "/widget/" + element.dataset.widget, {
+    htmx.ajax("post", "/_composeui/widget/" + element.dataset.widget, {
       source: element,
       values: Object.assign({event: event}, state),
       swap: "none"

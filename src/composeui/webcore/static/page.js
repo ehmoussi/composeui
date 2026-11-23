@@ -591,7 +591,7 @@
   /** @param {Element} border */
   function postPaneLengths(border) {
     var splitter = /** @type {HTMLElement} */ (border.closest("[data-splitter]"));
-    htmx.ajax("post", "/widget/" + splitter.id, {
+    htmx.ajax("post", "/_composeui/widget/" + splitter.id, {
       source: splitter,
       swap: "none",
       values: {

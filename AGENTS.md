@@ -226,9 +226,9 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - A test that reads what a worker thread or a job does waits for that work, not for a fixed
   number of pauses: `await app.workers.wait_for_complete()` after a Textual file action,
   `main_view.jobs.wait()` for a job, `qtbot.waitUntil(...)` on Qt. On the web, a test reads
-  the views only after a request that follows the job's result (`GET /jobs`): the job's thread
-  sets a flag such as `has_result` before its reactive methods fill the views. A slow CI runner
-  (Windows, Python 3.9) fails a fixed wait. See the `test-audit` skill ("Waiting for work on
+  the views only after a request that follows the job's result (`GET /_composeui/jobs`): the
+  job's thread sets a flag such as `has_result` before its reactive methods fill the views. A
+  slow CI runner (Windows, Python 3.9) fails a fixed wait. See the `test-audit` skill ("Waiting for work on
   another thread").
 - Concurrency coverage must not depend on scheduling. Explicitly arrange and verify the
   waiting, cancellation, or cleanup state that a test protects. Do not rely on incidental

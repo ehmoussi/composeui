@@ -194,8 +194,8 @@ The SQLite model is complete otherwise: do not rebuild it.
 - **A warning when the tab closes** (Next). The browser's "Leave site?" prompt while the study
   has unsaved changes, but not on Save or the app's own reloads. After a session per tab, so that
   closing one of two tabs doesn't warn. First measure what the flag costs per request.
-- **Push from the server** (When needed). Server-Sent Events or websockets, if polling `/jobs` is
-  not enough.
+- **Push from the server** (When needed). Server-Sent Events or websockets, if polling
+  `/_composeui/jobs` is not enough.
 
 ## Deployment and users
 
@@ -280,6 +280,11 @@ reproducible.
 - **A process that exits during a write may crash.** At exit, the model's finalizer closes the
   connection and deletes its files while a job's thread can still be writing. A process that is
   killed leaves its files behind. "A clean exit during a write" fixes both.
+- **A tab of an older version stops answering.** After an upgrade that changes the backend's
+  addresses, a tab left open sends its posts to addresses that the server no longer serves.
+  They get a 404, which htmx doesn't show: a click does nothing until the user reloads the
+  page. A fix reloads the tab once, only when its page names another version, so that a page
+  of this version can never reload in a loop.
 
 ## Stable release (Later)
 

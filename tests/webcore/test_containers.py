@@ -80,7 +80,7 @@ def test_a_layout_frame_shows_its_title_as_text_and_is_swapped_when_translated()
         assert all(tag != "layout-title" for tag, _ in column.descendants)
 
         button_id = _widget_id(view.column.button.renderer)
-        response = client.post(f"/widget/{button_id}", data={"event": "click"})
+        response = client.post(f"/_composeui/widget/{button_id}", data={"event": "click"})
         assert response.status_code == 200
         translated = _swapped(response.text, row_id)
         assert translated.tag == "fieldset"
@@ -268,7 +268,9 @@ def test_a_list_view_swaps_only_the_items_its_records_changed(
     assert _contains(_element(page, list_id), main_line_id)
 
     # a pipe added first: the list's items kept, and the one added put in ahead of them
-    body = client.post(f"/widget/{_widget_id(view.add.renderer)}", data={"event": "click"}).text
+    body = client.post(
+        f"/_composeui/widget/{_widget_id(view.add.renderer)}", data={"event": "click"}
+    ).text
     feed = view.pipes.item_views[0]
     assert f'id="{list_id}" hx-swap-oob="true"' not in body
     assert f'hx-swap-oob="afterbegin:#{list_id}"' in body
@@ -278,15 +280,20 @@ def test_a_list_view_swaps_only_the_items_its_records_changed(
     assert feed_delete_id in body
 
     # the new item's controls reach the session: deleting it deletes its item only
-    body = client.post(f"/widget/{feed_delete_id}", data={"event": "click"}).text
+    body = client.post(f"/_composeui/widget/{feed_delete_id}", data={"event": "click"}).text
     assert [pipe.name for pipe in view.pipes.items] == ["Main line", "Return"]
     assert 'hx-swap-oob="delete"' in body
     assert main_line_id not in body
-    assert client.post(f"/widget/{feed_delete_id}", data={"event": "click"}).status_code == 404
+    assert (
+        client.post(f"/_composeui/widget/{feed_delete_id}", data={"event": "click"}).status_code
+        == 404
+    )
 
     # reordered: the whole list swaps
     view.add.clicked.connect(lambda: setattr(view.pipes, "items", PIPES[::-1]))
-    body = client.post(f"/widget/{_widget_id(view.add.renderer)}", data={"event": "click"}).text
+    body = client.post(
+        f"/_composeui/widget/{_widget_id(view.add.renderer)}", data={"event": "click"}
+    ).text
     assert _contains(_swapped(body, list_id), _widget_id(ret.renderer))
 
 
@@ -319,12 +326,14 @@ def test_clicking_the_button_changes_a_page_not_shown_once_it_shows(
     assert "btn-primary" in (button.attributes["class"] or "").split()
     inputs.name.text = "<Ada>"
 
-    response = pages_client.post(f"/widget/{button_id}", data={"event": "click"})
+    response = pages_client.post(f"/_composeui/widget/{button_id}", data={"event": "click"})
 
     assert response.status_code == 200
     assert response.text == ""  # the clicked button isn't swapped back, nor the label not shown
     results_link = _widget_id(main_view.router.results.action.renderer)
-    shown = pages_client.post(f"/widget/{results_link}", data={"event": "triggered"}).text
+    shown = pages_client.post(
+        f"/_composeui/widget/{results_link}", data={"event": "triggered"}
+    ).text
     _swapped(shown, _widget_id(main_view.router.renderer))
     assert _find(shown, button_id) is None  # the page left goes
     total = _element(shown, _widget_id(main_view.router.results.total.renderer))
@@ -338,10 +347,10 @@ def test_clicking_the_button_changes_a_page_not_shown_once_it_shows(
     assert swapped.attributes["data-variant"] == "danger"  # what an app's stylesheet selects
 
     inputs.submit.is_enabled = False
-    refused = pages_client.post(f"/widget/{button_id}", data={"event": "click"})
+    refused = pages_client.post(f"/_composeui/widget/{button_id}", data={"event": "click"})
     assert refused.status_code == 400
     main_view.router.results.total.text = ""
-    pages_client.post(f"/widget/{button_id}", data={"event": "click"})
+    pages_client.post(f"/_composeui/widget/{button_id}", data={"event": "click"})
     assert main_view.router.results.total.text == ""
 
 
@@ -365,7 +374,9 @@ def test_disabling_a_container_disables_the_views_in_it() -> None:
 
         column.table.selection_changed.connect(disable_the_row)
         table_id, button_id = _widget_id(column.table.renderer), _widget_id(column.button.renderer)
-        body = client.post(f"/widget/{table_id}", data={"event": "select", "row": "0"}).text
+        body = client.post(
+            f"/_composeui/widget/{table_id}", data={"event": "select", "row": "0"}
+        ).text
 
         # the row swaps whole, the views of the column inside it disabled
         swapped = _swapped(body, _widget_id(row.renderer))
@@ -379,8 +390,13 @@ def test_disabling_a_container_disables_the_views_in_it() -> None:
         # a stale page's posts are refused, as a disabled button's or table's own
         clicked: list[bool] = []
         column.button.clicked.connect(lambda: clicked.append(True))
-        assert client.post(f"/widget/{button_id}", data={"event": "click"}).status_code == 400
-        selected = client.post(f"/widget/{table_id}", data={"event": "select", "row": "1"})
+        assert (
+            client.post(f"/_composeui/widget/{button_id}", data={"event": "click"}).status_code
+            == 400
+        )
+        selected = client.post(
+            f"/_composeui/widget/{table_id}", data={"event": "select", "row": "1"}
+        )
         assert selected.status_code == 400
         assert (column.table.selected_rows, clicked) == ([0], [])
 

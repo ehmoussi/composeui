@@ -363,5 +363,5 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
             '<select class="select select-xs join-item w-auto" aria-label="Image format"'
             " data-chart-format>{options}</select>"
             '<a class="btn btn-ghost btn-xs join-item" data-chart-image download'
-            ' href="/widget/{widget_id}/image?format=pdf">{text}</a></div>'
+            ' href="/_composeui/widget/{widget_id}/image?format=pdf">{text}</a></div>'
         ).format(options=options, widget_id=self.widget_id, text=text)

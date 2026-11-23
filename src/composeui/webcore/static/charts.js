@@ -497,7 +497,7 @@
       if (down === null) return;
       down = null;
       var figure = /** @type {HTMLElement} */ (element.closest("figure"));
-      htmx.ajax("post", "/widget/" + figure.id, {
+      htmx.ajax("post", "/_composeui/widget/" + figure.id, {
         source: figure,
         swap: "none",
         values: {

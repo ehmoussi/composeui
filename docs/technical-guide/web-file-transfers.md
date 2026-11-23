@@ -43,10 +43,10 @@ the Open and Save actions transfer a study file. For request order and session l
   call (at most `MAX_STATE_SIZE`) until the answer, a post of its own. A second upload replaces
   them. A session that asks doesn't hibernate (an open dialog), so the bytes never need saving.
   A file of another type, or too large, is refused before the question.
-- **Save and download a study.** The Save form sends `POST /state/download` without htmx.
-  The response contains the study file, and the session marks the study as saved. `GET /state`
-  downloads the study without marking it as saved. A link can request the file without an
-  explicit Save action, and the user may never get the file.
+- **Save and download a study.** The Save form sends `POST /_composeui/state/download` without
+  htmx. The response contains the study file, and the session marks the study as saved.
+  `GET /_composeui/state` downloads the study without marking it as saved. A link can request
+  the file without an explicit Save action, and the user may never get the file.
 
 ## Downloads on the web
 
@@ -67,7 +67,8 @@ The diagram shows the default path, where `content` runs during the POST.
 2. The session keeps the file under a ticket: 128 random bits (`webcore/downloads.py`).
 3. Event responses, the jobs poll, and the full page list tickets not yet fetched.
    `downloads_marker` adds a link per ticket in `#cui-downloads`.
-4. `page.js` follows each ticket's link once (`startDownloads`): `GET /download/{ticket}`.
+4. `page.js` follows each ticket's link once (`startDownloads`):
+   `GET /_composeui/download/{ticket}`.
 5. The GET serves the bytes or file on disk. For a `StreamContent`, it runs `write` instead.
    The GET does not call `content`.
 
@@ -144,7 +145,7 @@ The download uses a ticket, like a file on disk. During the GET, `webcore/stream
   a request, so only a `session_idle` shorter than that gap could save the session meanwhile;
   the stream would then answer 404.
 - **Not compressed.** `GZipMiddleware` would compress each piece on the event loop. The app's
-  downloads (`/download/`) skip it, the bytes and the files too.
+  downloads (`/_composeui/download/`) skip it, the bytes and the files too.
 
 ### Why use POST and GET
 

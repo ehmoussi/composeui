@@ -234,7 +234,7 @@ def test_a_tree_shows_its_nodes_icon_style_and_mark_described_to_screen_readers(
     building, done, failed, parking = (
         _element(markup, f"{tree.widget_id}-node-{position}") for position in range(4)
     )
-    assert _icon_url(building).startswith("/icon/")
+    assert _icon_url(building).startswith("/_composeui/icon/")
     assert not any(tag == "img" or "style" in attributes for tag, attributes in parking.descendants)
     classes = [
         set(str(attributes.get("class")).split())
@@ -284,7 +284,9 @@ def test_choosing_a_style_regreets_without_swapping_the_radio_group(
     style_id = _field_id(main_view.form.style)
     _type_name(client, main_view, "Bob")
 
-    body = client.post(f"/widget/{style_id}", data={style_id: "FORMAL", "event": "change"}).text
+    body = client.post(
+        f"/_composeui/widget/{style_id}", data={style_id: "FORMAL", "event": "change"}
+    ).text
 
     assert main_view.form.style.value is GreetingStyle.FORMAL
     assert _swapped(body, _widget_id(main_view.status_bar.renderer)).text == "Good day, Bob."
@@ -297,14 +299,18 @@ def test_choosing_a_colour_updates_the_summary(
     colour_id = _field_id(main_view.form.colour)
     summary_id = _widget_id(main_view.summary.renderer)
 
-    body = client.post(f"/widget/{colour_id}", data={colour_id: "BLUE", "event": "change"}).text
+    body = client.post(
+        f"/_composeui/widget/{colour_id}", data={colour_id: "BLUE", "event": "change"}
+    ).text
 
     assert main_view.form.colour.value is Colour.BLUE
     assert _swapped(body, summary_id).text == "Nobody hasn't said how old they are and likes blue."
     assert _find(body, colour_id) is None
 
     # the empty choice clears the colour again
-    body = client.post(f"/widget/{colour_id}", data={colour_id: "", "event": "change"}).text
+    body = client.post(
+        f"/_composeui/widget/{colour_id}", data={colour_id: "", "event": "change"}
+    ).text
 
     assert main_view.form.colour.value is None
     assert _swapped(body, summary_id).text == "Nobody hasn't said how old they are."
@@ -316,7 +322,9 @@ def test_an_unknown_choice_clears_the_value_instead_of_failing(
     colour_id = _field_id(main_view.form.colour)
     main_view.form.colour.value = Colour.RED
 
-    response = client.post(f"/widget/{colour_id}", data={colour_id: "Purple", "event": "change"})
+    response = client.post(
+        f"/_composeui/widget/{colour_id}", data={colour_id: "Purple", "event": "change"}
+    )
 
     assert response.status_code == 200
     assert main_view.form.colour.value is None
@@ -332,7 +340,7 @@ def test_choosing_the_current_value_again_does_not_re_emit(
     style.value_changed.connect(emitted.append)
 
     for _ in range(2):
-        client.post(f"/widget/{style_id}", data={style_id: "FORMAL", "event": "change"})
+        client.post(f"/_composeui/widget/{style_id}", data={style_id: "FORMAL", "event": "change"})
 
     assert emitted == [GreetingStyle.FORMAL]
 
@@ -420,6 +428,6 @@ def test_a_none_choice_is_shown_selected_and_picked_back() -> None:
         assert _selected(combobox) == ["0"]
         assert _selected(_element(page, _field_id(shown))) == ["0"]
         region.value = "south"
-        client.post(f"/widget/{region_id}", data={region_id: "0", "event": "change"})
+        client.post(f"/_composeui/widget/{region_id}", data={region_id: "0", "event": "change"})
 
     assert region.value is None

@@ -355,7 +355,7 @@ class WebExpanderRenderer(WebRenderer[ExpanderView]):
         return Markup(
             "<details {root_attributes}{is_open}"
             ' class="collapse collapse-arrow rounded-box border border-base-300 bg-base-100"'
-            ' hx-post="/widget/{widget_id}" hx-trigger="toggle"'
+            ' hx-post="/_composeui/widget/{widget_id}" hx-trigger="toggle"'
             ' data-post-event data-post-open hx-swap="none">'
             '<summary class="collapse-title font-semibold{summary_classes}"{summary_attributes}>'
             "{title}</summary>"
@@ -600,7 +600,7 @@ class WebTabsRenderer(WebRenderer[TabView]):
                 Markup(
                     '<button type="button" role="tab" id="{tab_id}" aria-controls="{panel_id}"'
                     ' aria-selected="{lower}" tabindex="{value}"'
-                    ' class="tab{active}" data-tab hx-post="/widget/{widget_id}"'
+                    ' class="tab{active}" data-tab hx-post="/_composeui/widget/{widget_id}"'
                     """ hx-vals='{{"event": "select", "index": "{index}"}}' hx-swap='none'"""
                     "{hidden}{disabled}>{title}</button>"
                 ).format(

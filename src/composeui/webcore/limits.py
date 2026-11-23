@@ -26,7 +26,7 @@ _FORM_ROOM = 1024 * 1024
 #: largest request body accepted outside the route of file uploads, in bytes: a study
 MAX_BODY_SIZE = MAX_STATE_SIZE + _FORM_ROOM
 #: the route of file uploads, the only one that writes a body to a file under the app's limits
-_UPLOAD_ROUTE = re.compile(r"/widget/[^/]+/file")
+_UPLOAD_ROUTE = re.compile(r"/_composeui/widget/[^/]+/file")
 
 
 def max_upload_body_size(max_upload_size: int) -> int:

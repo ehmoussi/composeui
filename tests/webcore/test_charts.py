@@ -103,7 +103,7 @@ def test_the_chart_sends_its_series_for_the_page_to_draw(
         Series.line("Pressure", [0, 1, 2], [1, math.nan, math.inf]),
         Series.line("Temperature", [0, 1, 2], [5, 6, 7], step=True),
     ]
-    markup = chart_client.get(f"/widget/{_widget_id(chart.renderer)}").text
+    markup = chart_client.get(f"/_composeui/widget/{_widget_id(chart.renderer)}").text
     spec = _chart_spec(markup, chart)
     # uPlot's columns, the x shared; no NaN in JSON: a gap is null
     assert spec["data"] == [[0, 1, 2], [1, None, None], [5, 6, 7]]
@@ -138,7 +138,9 @@ def test_the_chart_sends_its_series_for_the_page_to_draw(
         Series.line("Model", [2, 0, 1], [4, 0, 1]),  # sorted for uPlot
         Series.line("Measured", [0.5], [0.4]),
     ]
-    spec = _chart_spec(chart_client.get(f"/widget/{_widget_id(chart.renderer)}").text, chart)
+    spec = _chart_spec(
+        chart_client.get(f"/_composeui/widget/{_widget_id(chart.renderer)}").text, chart
+    )
     # each series by its own x, joined by the page
     assert spec["pairs"] == [[[0, 1, 2], [0, 1, 4]], [[0.5], [0.4]]]
 
@@ -152,7 +154,9 @@ def test_each_series_is_sent_with_how_it_is_drawn(
     main_view.add_measurements()
     chart = main_view.chart
 
-    spec = _chart_spec(chart_client.get(f"/widget/{_widget_id(chart.renderer)}").text, chart)
+    spec = _chart_spec(
+        chart_client.get(f"/_composeui/widget/{_widget_id(chart.renderer)}").text, chart
+    )
     assert [series["kind"] for series in spec["series"]] == ["line", "scatter"]
     assert len(spec["pairs"][1][0]) == len(MEASUREMENTS)  # the measured flow rates, their own x
 
@@ -188,7 +192,9 @@ def test_a_new_series_list_swaps_the_figure(
     (main_view,) = chart_views
     add = main_view.buttons.add
 
-    response = chart_client.post(f"/widget/{_widget_id(add.renderer)}", data={"event": "click"})
+    response = chart_client.post(
+        f"/_composeui/widget/{_widget_id(add.renderer)}", data={"event": "click"}
+    )
 
     figure = _swapped(response.text, _widget_id(main_view.chart.renderer))
     assert figure.tag == "figure"
@@ -212,7 +218,9 @@ def test_the_page_loads_the_chart_script_only_from_its_own_script(
     """No tag loads the chart library with the page: its script does, once a chart shows."""
     for page in (client.get("/").text, chart_client.get("/").text):
         assert re.findall(r"<script src=\"[^\"]*uPlot", page) == []
-    (address,) = re.findall(r'"(/static/uPlot\.iife\.min\.js[^"]*)"', client.get("/").text)
+    (address,) = re.findall(
+        r'"(/_composeui/static/uPlot\.iife\.min\.js[^"]*)"', client.get("/").text
+    )
     assert chart_client.get(address).is_success
 
 
@@ -432,7 +440,7 @@ def test_the_chart_s_corner_downloads_its_image_at_the_zoom_asked(
     figure = _element(page, chart_id)
     links = [element for element in figure.descendants if element[0] == "a"]
     ((_, link),) = links
-    assert link["href"] == f"/widget/{chart_id}/image?format=pdf"
+    assert link["href"] == f"/_composeui/widget/{chart_id}/image?format=pdf"
     assert "download" in link
     assert (
         "select",
@@ -454,7 +462,7 @@ def test_the_chart_s_corner_downloads_its_image_at_the_zoom_asked(
     monkeypatch.setattr(chartimage, "chart_image_bytes", chart_image_bytes)
 
     response = chart_client.get(
-        f"/widget/{chart_id}/image",
+        f"/_composeui/widget/{chart_id}/image",
         params={"format": "svg", "x_min": 0.5, "x_max": "1.5", "y2_min": 1, "y2_max": 100},
     )
 
@@ -466,18 +474,22 @@ def test_the_chart_s_corner_downloads_its_image_at_the_zoom_asked(
     assert "Flow Rate (L/s)" in response.text
     (options,) = drawn
     assert (options.x_range, options.y_range, options.y2_range) == ((0.5, 1.5), None, (1, 100))
-    bad = chart_client.get(f"/widget/{chart_id}/image", params={"format": "jpg"})
+    bad = chart_client.get(f"/_composeui/widget/{chart_id}/image", params={"format": "jpg"})
     assert bad.status_code == 400
     assert (
         chart_client.get(
-            f"/widget/{chart_id}/image", params={"x_min": "a", "x_max": "1"}
+            f"/_composeui/widget/{chart_id}/image", params={"x_min": "a", "x_max": "1"}
         ).status_code
         == 400
     )
-    infinite = chart_client.get(f"/widget/{chart_id}/image", params={"x_min": "-inf", "x_max": "1"})
+    infinite = chart_client.get(
+        f"/_composeui/widget/{chart_id}/image", params={"x_min": "-inf", "x_max": "1"}
+    )
     assert infinite.status_code == 400
     assert (
-        chart_client.get(f"/widget/{_widget_id(main_view.buttons.add.renderer)}/image").status_code
+        chart_client.get(
+            f"/_composeui/widget/{_widget_id(main_view.buttons.add.renderer)}/image"
+        ).status_code
         == 404
     )
 
@@ -498,7 +510,7 @@ def test_without_matplotlib_the_page_draws_the_chart_s_png(
     assert "a" not in tags
     (button,) = [attributes for tag, attributes in figure.descendants if tag == "button"]
     assert button["data-chart-png"] == "Pressure Drop.png"
-    assert chart_client.get(f"/widget/{chart_id}/image").status_code == 404
+    assert chart_client.get(f"/_composeui/widget/{chart_id}/image").status_code == 404
 
 
 def test_a_click_on_the_chart_reaches_the_view() -> None:

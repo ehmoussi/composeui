@@ -392,7 +392,7 @@ class _ServerFiles:
         )
 
     def _post(self, values: Mapping[str, str]) -> Markup:
-        return Markup(""" hx-post="/widget/{}" hx-vals='{}' hx-swap="none\"""").format(
+        return Markup(""" hx-post="/_composeui/widget/{}" hx-vals='{}' hx-swap="none\"""").format(
             self._widget_id, json.dumps(values)
         )
 
@@ -508,7 +508,7 @@ class _WebPathInputRenderer(_WebTextFieldRenderer[TPathView]):
             focuses, self._focuses_browse = self._focuses_browse, False
             browse = Markup(
                 '<button id="{widget_id}-browse" type="button" class="btn btn-square"'
-                ' aria-label="{text}" title="{text}" hx-post="/widget/{widget_id}"'
+                ' aria-label="{text}" title="{text}" hx-post="/_composeui/widget/{widget_id}"'
                 """ hx-vals='{{"event": "browse"}}' hx-swap="none"{autofocus}{disabled}>"""
                 "…</button>"
             ).format(
@@ -525,7 +525,8 @@ class _WebPathInputRenderer(_WebTextFieldRenderer[TPathView]):
             '<input id="{widget_id}-field"{row_attributes}'
             ' class="input w-full" type="text" name="value"'
             ' value="{text}" placeholder="{placeholder}"'
-            ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:300ms, change"'
+            ' hx-post="/_composeui/widget/{widget_id}"'
+            ' hx-trigger="input changed delay:300ms, change"'
             ' data-post-event hx-swap="none" hx-sync="this:queue all"'
             ' autocomplete="off"{disabled}>'
             "{picker}{after}</div>"
@@ -647,7 +648,7 @@ class WebFilePathInputRenderer(_WebPathInputRenderer[FilePathInputViewLike]):
 
     The browser can't hand a page its files' paths. The button opens the browser's
     picker, a hidden file input beside it (see `page.js`) uploading the file picked
-    (`/widget/{id}/file`), and the session keeps a copy (see `WebSession.pick_file`),
+    (`/_composeui/widget/{id}/file`), and the session keeps a copy (see `WebSession.pick_file`),
     whose path the field then shows. With `server_roots`, the button instead opens the
     list of the server's files, a file of which puts its path in the field.
     """
@@ -663,7 +664,7 @@ class WebFilePathInputRenderer(_WebPathInputRenderer[FilePathInputViewLike]):
             ' aria-label="{browse}" title="{browse}" data-file-browse{disabled}>…</button>'
             # emptied once sent: picking the same file again is a change too
             '<input type="file" name="file"{accept} class="hidden" tabindex="-1"'
-            ' aria-hidden="true" hx-post="/widget/{widget_id}/file"'
+            ' aria-hidden="true" hx-post="/_composeui/widget/{widget_id}/file"'
             ' hx-encoding="multipart/form-data" hx-trigger="change" hx-swap="none"'
             ' data-clear-after-post autocomplete="off"{disabled}>'
         ).format(
@@ -680,7 +681,7 @@ class WebFilePathInputRenderer(_WebPathInputRenderer[FilePathInputViewLike]):
         reload = self._view.reload_text
         return Markup(
             '<button id="{widget_id}-reload" type="button" class="btn btn-square"'
-            ' aria-label="{reload}" title="{reload}" hx-post="/widget/{widget_id}"'
+            ' aria-label="{reload}" title="{reload}" hx-post="/_composeui/widget/{widget_id}"'
             """ hx-vals='{{"event": "reload"}}' hx-swap="none"{disabled}>"""
             "{reload_icon}</button>"
         ).format(
@@ -803,9 +804,9 @@ class FileUploadViewLike(ViewLike, Protocol):
 class WebFileUploadRenderer(WebRenderer[FileUploadViewLike]):
     """A button opening the browser's picker, then the name of the file it uploaded.
 
-    The hidden file input beside the button uploads the file (`/widget/{id}/file`), and the
-    session keeps a copy (see `WebSession.pick_file`). An upload swaps only the name, so
-    the button keeps the focus.
+    The hidden file input beside the button uploads the file (`/_composeui/widget/{id}/file`),
+    and the session keeps a copy (see `WebSession.pick_file`). An upload swaps only the name,
+    so the button keeps the focus.
     """
 
     _role = "file_upload"
@@ -867,7 +868,7 @@ class WebFileUploadRenderer(WebRenderer[FileUploadViewLike]):
             '<button type="button" class="btn" data-file-browse{disabled}>{browse}</button>'
             # emptied once sent: picking the same file again is a change too
             '<input type="file" name="file"{multiple}{accept} class="hidden" tabindex="-1"'
-            ' aria-hidden="true" hx-post="/widget/{widget_id}/file"'
+            ' aria-hidden="true" hx-post="/_composeui/widget/{widget_id}/file"'
             ' hx-encoding="multipart/form-data" hx-trigger="change" hx-swap="none"'
             ' data-clear-after-post data-uploading-text="{uploading}" autocomplete="off"{disabled}>'
             "{name}</div>"

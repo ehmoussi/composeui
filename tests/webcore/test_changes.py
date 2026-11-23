@@ -45,7 +45,9 @@ def test_one_keystroke_fans_out_to_the_log_the_summary_and_the_status_bar(
     assert main_view.form.name.log_message == "A name is mandatory"
     input_id = _field_id(main_view.form.name)
 
-    body = client.post(f"/widget/{input_id}", data={"value": "Bob", "event": "input"}).text
+    body = client.post(
+        f"/_composeui/widget/{input_id}", data={"value": "Bob", "event": "input"}
+    ).text
 
     assert main_view.form.name.text == "Bob"
     assert "hidden" in _swapped(body, _widget_id(_part(main_view.form.name, "log"))).attributes
@@ -95,18 +97,20 @@ def test_the_page_asks_for_what_jobs_change_while_they_run(
         main_view.jobs.start(work).finished.connect(show)
 
     submit.clicked.connect(start)
-    response = pages_client.post(f"/widget/{_widget_id(submit.renderer)}", data={"event": "click"})
+    response = pages_client.post(
+        f"/_composeui/widget/{_widget_id(submit.renderer)}", data={"event": "click"}
+    )
     poller = _swapped(response.text, "cui-jobs").attributes
-    assert poller["hx-get"] == "/jobs"
+    assert poller["hx-get"] == "/_composeui/jobs"
     assert poller["hx-trigger"] == f"load delay:{JOBS_POLL_MS}ms"
     assert poller["hx-swap"] == "outerHTML"
-    assert "hx-get" in _element(pages_client.get("/jobs").text, "cui-jobs").attributes
+    assert "hx-get" in _element(pages_client.get("/_composeui/jobs").text, "cui-jobs").attributes
 
     release.set()
     deadline = time.monotonic() + 10
     while main_view.jobs.is_running and time.monotonic() < deadline:
         time.sleep(0.01)
-    polled = pages_client.get("/jobs").text
+    polled = pages_client.get("/_composeui/jobs").text
 
     assert "hx-get" not in _element(polled, "cui-jobs").attributes  # over: done asking
     assert _swapped(polled, total_id).text == "Total: 7"
@@ -159,12 +163,12 @@ def test_a_job_s_finished_callback_starts_the_next_job(
         main_view.jobs.start(first).finished.connect(start_second)
 
     submit.clicked.connect(start)
-    pages_client.post(f"/widget/{_widget_id(submit.renderer)}", data={"event": "click"})
+    pages_client.post(f"/_composeui/widget/{_widget_id(submit.renderer)}", data={"event": "click"})
     deadline = time.monotonic() + 10
     while results.total.text != "Total: 6" and time.monotonic() < deadline:
         time.sleep(0.01)
 
-    assert _swapped(pages_client.get("/jobs").text, total_id).text == "Total: 6"
+    assert _swapped(pages_client.get("/_composeui/jobs").text, total_id).text == "Total: 6"
 
 
 # handed over by the view it changes, or by the main view, as an app does
@@ -189,15 +193,17 @@ def test_what_a_thread_changes_comes_with_the_session_s_next_response(
         worker.join()
 
     work(40)
-    fetched = pages_client.get(f"/widget/{bar_id}").text
+    fetched = pages_client.get(f"/_composeui/widget/{bar_id}").text
     assert _element(fetched, bar_id).attributes["value"] == "40"
     assert "hx-swap-oob" not in _element(fetched, bar_id).attributes  # the fetch's own swap
     assert _swapped(fetched, total_id).text == "Total: 40"
     # sent once
-    assert _find(pages_client.get(f"/widget/{bar_id}").text, total_id) is None
+    assert _find(pages_client.get(f"/_composeui/widget/{bar_id}").text, total_id) is None
 
     work(50)
-    response = pages_client.post(f"/widget/{_widget_id(submit.renderer)}", data={"event": "click"})
+    response = pages_client.post(
+        f"/_composeui/widget/{_widget_id(submit.renderer)}", data={"event": "click"}
+    )
     assert _swapped(response.text, bar_id).attributes["value"] == "50"
     # changed by both, swapped once, as the click left it
     assert response.text.count(f'id="{total_id}"') == 1
@@ -205,4 +211,6 @@ def test_what_a_thread_changes_comes_with_the_session_s_next_response(
 
     work(60)
     assert _element(pages_client.get("/results").text, total_id).text == "Total: 60"
-    assert _find(pages_client.get(f"/widget/{bar_id}").text, total_id) is None  # shown already
+    assert (
+        _find(pages_client.get(f"/_composeui/widget/{bar_id}").text, total_id) is None
+    )  # shown already

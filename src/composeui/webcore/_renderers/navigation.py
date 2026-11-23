@@ -107,7 +107,7 @@ class WebSidebarRenderer(WebRenderer[SidebarView]):
             ' class="btn btn-ghost btn-square btn-sm"'
             ' data-sidebar-toggle="{drawer_id}" aria-controls="{widget_id}"'
             ' aria-expanded="{expanded}" aria-label="{text}" title="{text}"'
-            ' hx-post="/widget/{widget_id}" hx-trigger="sidebar-toggle"'
+            ' hx-post="/_composeui/widget/{widget_id}" hx-trigger="sidebar-toggle"'
             """ hx-vals='{{"event": "toggle"}}' hx-swap="none">"""
             "{sidebar_icon}</button>"
         ).format(
@@ -244,18 +244,15 @@ class WebRouterRenderer(WebRenderer[Router]):
         ).format(links)
 
 
-#: first segments of the backend's own addresses, which no page's address can take
-RESERVED_ROUTES: Final = frozenset({"icon", "jobs", "reload", "state", "static", "style", "widget"})
+#: first segment of the backend's own addresses, which no page's address can take
+INTERNAL_ROUTE: Final = "_composeui"
 
 
 def check_routes(main_view: MainView) -> None:
     """Raise `ValueError` if a page of the main view's router has an address the backend uses."""
     router = next((view for view in main_view.children_views if isinstance(view, Router)), None)
-    reserved = sorted(
-        page.route for page in (router.pages if router else []) if page.route in RESERVED_ROUTES
-    )
-    if len(reserved) > 0:
-        msg = f"The web backend uses the address of the routes {reserved}: rename them."
+    if any(page.route == INTERNAL_ROUTE for page in (router.pages if router else [])):
+        msg = f"The web backend uses the address of the route {INTERNAL_ROUTE!r}: rename it."
         raise ValueError(msg)
 
 

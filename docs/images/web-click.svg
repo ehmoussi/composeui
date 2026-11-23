@@ -82,7 +82,7 @@
 
   <!-- 1: the click -->
   <circle class="dot" cx="30" cy="112" r="10"/><text class="step" x="30" y="116" text-anchor="middle">1</text>
-  <text class="mono" x="195" y="104" text-anchor="middle">POST /widget/{id}</text>
+  <text class="mono" x="195" y="104" text-anchor="middle">POST /_composeui/widget/{id}</text>
   <text class="mono" x="195" y="119" text-anchor="middle">event=click</text>
   <line class="line" x1="100" y1="128" x2="288" y2="128" marker-end="url(#arrow)"/>
 

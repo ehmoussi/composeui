@@ -31,7 +31,7 @@ def test_map_http_updates_events_and_tile_attribution() -> None:
         assert spec["tiles"] is False
         assert "OpenStreetMap contributors" not in figure.text
         response = client.post(
-            f"/widget/{widget}",
+            f"/_composeui/widget/{widget}",
             data={"event": "viewport", "latitude": "48.86", "longitude": "2.35", "zoom": "12"},
         )
         assert response.is_success
@@ -43,7 +43,8 @@ def test_map_http_updates_events_and_tile_attribution() -> None:
         assert "Zoom 12" in response.text
         assert _find(response.text, widget) is None
         response = client.post(
-            f"/widget/{widget}", data={"event": "click", "latitude": "48.86", "longitude": "2.35"}
+            f"/_composeui/widget/{widget}",
+            data={"event": "click", "latitude": "48.86", "longitude": "2.35"},
         )
         assert "Clicked 48.86, 2.35" in response.text
         view.map.tiles = True
@@ -68,7 +69,7 @@ def test_map_refuses_invalid_browser_events(data: dict[str, str]) -> None:
     with _Browser(WebApplication(build_main_view=lambda: view).create_starlette_app()) as client:
         client.get("/")
         widget = _widget_id(view.map.renderer)
-        assert client.post(f"/widget/{widget}", data=data).status_code == 400
+        assert client.post(f"/_composeui/widget/{widget}", data=data).status_code == 400
         assert view.result.text == "No map event"
 
 
@@ -79,7 +80,8 @@ def test_map_refuses_events_when_disabled() -> None:
         client.get("/")
         widget = _widget_id(view.map.renderer)
         response = client.post(
-            f"/widget/{widget}", data={"event": "click", "latitude": "40.73", "longitude": "-73.98"}
+            f"/_composeui/widget/{widget}",
+            data={"event": "click", "latitude": "40.73", "longitude": "-73.98"},
         )
         assert response.status_code == 400
         assert view.result.text == "No map event"

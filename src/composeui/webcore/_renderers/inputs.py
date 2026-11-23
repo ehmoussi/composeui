@@ -48,7 +48,7 @@ class _WebTextFieldRenderer(WebRenderer[TTextField]):
             ' class="input w-full" type="text"'
             ' name="value" value="{text}"'
             ' placeholder="{placeholder}"{extra_attributes}'
-            ' hx-post="/widget/{widget_id}"'
+            ' hx-post="/_composeui/widget/{widget_id}"'
             ' hx-trigger="input changed delay:300ms, change"'
             ' data-post-event hx-swap="none" hx-sync="this:queue all"'
             # the browser must not refill the field on reload: the server's value wins
@@ -140,7 +140,7 @@ class WebTextAreaRenderer(WebInputRenderer):
             "<textarea {root_attributes}{row_attributes}"
             ' class="textarea w-full" rows="4"'
             ' name="value" placeholder="{placeholder}"'
-            ' hx-post="/widget/{widget_id}"'
+            ' hx-post="/_composeui/widget/{widget_id}"'
             ' hx-trigger="input changed delay:300ms, change"'
             ' data-post-event hx-swap="none" hx-sync="this:queue all"'
             ' autocomplete="off"'
@@ -367,7 +367,8 @@ def _date_field_html(
             ' class="min-w-0 grow" type="text" name="value"'
             ' value="{shown_text}"'
             ' placeholder="{date_hint}"'
-            ' hx-post="/widget/{widget_id}" hx-trigger="input changed delay:300ms, change"'
+            ' hx-post="/_composeui/widget/{widget_id}"'
+            ' hx-trigger="input changed delay:300ms, change"'
             '{field_vals} data-post-event hx-swap="none" hx-sync="this:queue all"'
             ' autocomplete="off"{disabled}>'
             '<button id="{field_id}-pick" type="button"'
@@ -380,7 +381,7 @@ def _date_field_html(
             ' class="dropdown dropdown-end rounded-box bg-base-100 shadow-lg"'
             ' style="position-anchor: --{field_id}">'
             '<calendar-date class="cally" value="{picked}"{limits} data-date-calendar'
-            ' hx-post="/widget/{widget_id}" hx-trigger="change"'
+            ' hx-post="/_composeui/widget/{widget_id}" hx-trigger="change"'
             " hx-vals='{pick_vals}' data-post-picked hx-swap=\"none\">"
             '<span slot="previous" aria-label="{previous_month_text}">'
             "{chevron_icon}</span>"

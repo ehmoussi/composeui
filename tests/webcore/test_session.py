@@ -142,7 +142,7 @@ def test_a_session_s_model_closes_with_it() -> None:
         (view,) = views
         session_model = models[-1]
         exit_id = _action_id(view.file_menu.exit_app)
-        browser.post(f"/widget/{exit_id}", data={"event": "triggered"})
+        browser.post(f"/_composeui/widget/{exit_id}", data={"event": "triggered"})
 
     assert session_model.is_closed
 
@@ -204,7 +204,7 @@ def test_a_browser_s_write_to_a_shared_database_shows_in_another_s_next_request(
         models[1].book.signatures.changed.connect(bob_told.set)
 
         field_id = _field_id(alice_view.form.name)
-        alice.post(f"/widget/{field_id}", data={"value": "Alice", "event": "change"})
+        alice.post(f"/_composeui/widget/{field_id}", data={"value": "Alice", "event": "change"})
         assert bob_told.wait(30)
 
         summary = _element(bob.get("/").text, _widget_id(bob_view.summary.renderer)).text
@@ -235,7 +235,9 @@ def test_each_browser_gets_its_own_model() -> None:
     def sign_as(client: TestClient, view: HelloMainView, text: str) -> str:
         """Enter `text` as the name; return the summary as the browser now shows it."""
         field_id = _field_id(view.form.name)
-        response = client.post(f"/widget/{field_id}", data={"value": text, "event": "change"})
+        response = client.post(
+            f"/_composeui/widget/{field_id}", data={"value": text, "event": "change"}
+        )
         assert response.status_code == 200
         return _element(client.get("/").text, _widget_id(view.summary.renderer)).text
 
@@ -258,20 +260,20 @@ def test_a_request_without_a_live_session_reloads_the_page(
     field_id = _field_id(main_view.form.name)
     # e.g. after a server restart: the browser's cookie points at no session any more
     with _Browser(app.create_starlette_app()) as stale:
-        posted = stale.post(f"/widget/{field_id}", data={"value": "x", "event": "input"})
-        fetched = stale.get(f"/widget/{field_id}")
-        uploaded = stale.post("/state", files={"file": ("s.hello", b"{}")})
-        picked = stale.post(f"/widget/{field_id}/file", files={"file": ("a.txt", b"a")})
-        polled = stale.get("/jobs")
+        posted = stale.post(f"/_composeui/widget/{field_id}", data={"value": "x", "event": "input"})
+        fetched = stale.get(f"/_composeui/widget/{field_id}")
+        uploaded = stale.post("/_composeui/state", files={"file": ("s.hello", b"{}")})
+        picked = stale.post(f"/_composeui/widget/{field_id}/file", files={"file": ("a.txt", b"a")})
+        polled = stale.get("/_composeui/jobs")
         # a plain download link isn't htmx: it is sent to the page, which starts a session
         downloads = [
-            stale.get("/state", follow_redirects=False),
-            stale.post("/state/download", follow_redirects=False),
-            stale.get(f"/widget/{field_id}/image", follow_redirects=False),
-            stale.get(f"/widget/{field_id}/csv", follow_redirects=False),
-            stale.get(f"/widget/{field_id}/text", follow_redirects=False),
+            stale.get("/_composeui/state", follow_redirects=False),
+            stale.post("/_composeui/state/download", follow_redirects=False),
+            stale.get(f"/_composeui/widget/{field_id}/image", follow_redirects=False),
+            stale.get(f"/_composeui/widget/{field_id}/csv", follow_redirects=False),
+            stale.get(f"/_composeui/widget/{field_id}/text", follow_redirects=False),
         ]
-        ticket = stale.get("/download/any", follow_redirects=False)
+        ticket = stale.get("/_composeui/download/any", follow_redirects=False)
 
     for response in (posted, fetched, uploaded, picked, polled):
         assert response.status_code == 200
@@ -306,7 +308,7 @@ def test_an_idle_session_expires() -> None:
         expired_view = app.session_views[0]
 
         response = client.post(
-            f"/widget/{_field_id(expired_view.form.name)}",
+            f"/_composeui/widget/{_field_id(expired_view.form.name)}",
             data={"value": "x", "event": "input"},
         )
         client.get("/")
@@ -324,7 +326,8 @@ def test_a_session_outlives_the_server_s_clock_stepping_back(
     monkeypatch.setattr(time, "time", lambda: stepped_back)
 
     response = client.post(
-        f"/widget/{_field_id(main_view.form.name)}", data={"value": "Alice", "event": "input"}
+        f"/_composeui/widget/{_field_id(main_view.form.name)}",
+        data={"value": "Alice", "event": "input"},
     )
 
     assert "hx-refresh" not in response.headers  # no reload into a new session
@@ -346,7 +349,7 @@ def test_a_session_that_expires_cancels_its_jobs() -> None:
 
     with _Browser(WorkingApp(_SHORT_LIVED).create_starlette_app()) as client:
         client.get("/")
-        client.get("/jobs")  # finds the session expired, and starts no other
+        client.get("/_composeui/jobs")  # finds the session expired, and starts no other
 
     assert canceled.wait(10)
 
@@ -369,7 +372,10 @@ def test_a_full_server_refuses_new_sessions_but_keeps_its_own() -> None:
         _type_name(alice, alice_view, "Alice")  # the live sessions still work
         assert alice_view.form.name.text == "Alice"
         # Exit ends Bob's session, which leaves room for Carol's
-        bob.post(f"/widget/{_action_id(bob_view.file_menu.exit_app)}", data={"event": "triggered"})
+        bob.post(
+            f"/_composeui/widget/{_action_id(bob_view.file_menu.exit_app)}",
+            data={"event": "triggered"},
+        )
         assert carol.get("/").status_code == 200
         assert len(app.session_views) == 3
 
@@ -1032,7 +1038,7 @@ def test_an_idle_session_goes_to_disk_and_its_page_reloads_into_it_as_it_was(
         assert app.models[0].is_released
         # the page that the saved session served, as it posts its next event
         response = browser.post(
-            f"/widget/{_field_id(app.session_views[0].form.name)}",
+            f"/_composeui/widget/{_field_id(app.session_views[0].form.name)}",
             data={"value": "Bobby", "event": "input"},
             headers={SESSION_TAG_HEADER: tag[1]},
         )
@@ -1194,7 +1200,7 @@ def test_a_session_whose_table_source_a_study_gives_again_goes_to_disk_again(
             browser.get("/")  # opens the study: a new source
         else:
             new = app.session_views[0].file_menu.new
-            browser.post(f"/widget/{_action_id(new)}", data={"event": "triggered"})
+            browser.post(f"/_composeui/widget/{_action_id(new)}", data={"event": "triggered"})
         clock.now += 1.0
         _wait_until_released(app.models[-1])
         saved = app.models[-1].is_released  # before the server stops, which releases them all
@@ -1397,7 +1403,10 @@ def test_a_page_of_an_ended_session_reloads_rather_than_act_on_the_new_one(
     app: _HelloApp, main_view: HelloMainView, client: TestClient
 ) -> None:
     ended_tag = _session_tag(client.get("/").text)
-    client.post(f"/widget/{_action_id(main_view.file_menu.exit_app)}", data={"event": "triggered"})
+    client.post(
+        f"/_composeui/widget/{_action_id(main_view.file_menu.exit_app)}",
+        data={"event": "triggered"},
+    )
     current_tag = _session_tag(client.get("/").text)  # e.g. another tab: the cookie's new session
     _, new_view = app.session_views
     # an id that the ended page shows can name a view of the new session: `id()` reuses them
@@ -1406,23 +1415,23 @@ def test_a_page_of_an_ended_session_reloads_rather_than_act_on_the_new_one(
     saves = _count(new_view.file_menu.save.triggered)
 
     stale = client.post(
-        f"/widget/{field_id}",
+        f"/_composeui/widget/{field_id}",
         data={"value": "x", "event": "input"},
         headers={SESSION_TAG_HEADER: ended_tag},
     )
     # Save's form, which carries no header
     stale_save = client.post(
-        "/state/download",
+        "/_composeui/state/download",
         data={"trigger": save_id, SESSION_TAG_FIELD: ended_tag},
         follow_redirects=False,
     )
     current = client.post(
-        f"/widget/{field_id}",
+        f"/_composeui/widget/{field_id}",
         data={"value": "y", "event": "input"},
         headers={SESSION_TAG_HEADER: current_tag},
     )
     current_save = client.post(
-        "/state/download", data={"trigger": save_id, SESSION_TAG_FIELD: current_tag}
+        "/_composeui/state/download", data={"trigger": save_id, SESSION_TAG_FIELD: current_tag}
     )
 
     assert stale.headers["hx-refresh"] == "true"
