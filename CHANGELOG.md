@@ -30,7 +30,8 @@ backends' modules included, can change in any release without an entry here.
 - `shared(Database)` declares a database of a `DatabaseModel` that every session of the
   process reads and writes, outside the study. A commit in one session emits the tables'
   `changed` in the others, each on its own main thread. With `location`, the database is kept
-  in a file across the runs, and its migrations run once as the first model is built. A
+  in a file across the runs, and its migrations run once as the first model is built. The
+  process closes the file once no session holds it, and the next model opens it again. A
   database's `fill` fills it once, and `ready(job)` waits for it in each session's job.
   `forget()` gives the next sessions a new one. With `read_only=True`, the sessions only read
   it, and a write raises `ReadOnlyDatabaseError`. The Uber pickups example reads its CSV file

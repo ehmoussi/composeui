@@ -427,6 +427,73 @@ def test_a_kept_read_only_file_is_read_without_a_write(tmp_path: Path) -> None:
     assert [file.name for file in tmp_path.iterdir()] == ["materials.sqlite"]
 
 
+@pytest.mark.parametrize("filled", [False, True])
+def test_a_kept_file_is_closed_once_no_session_holds_it_and_opened_again_without_a_fill(
+    tmp_path: Path, *, filled: bool
+) -> None:
+    """E.g. a test per state folder: a process holds no file that no session reads."""
+    path = tmp_path / "book.sqlite"
+    fills: list[None] = []
+
+    def fill(database: Book, _job: Job[None, Any]) -> None:
+        fills.append(None)
+        database.names.add("filled")
+
+    model_type = _pickups_model(fill, location=path) if filled else _book_model(path)
+    main_view = MainView()
+
+    def opened() -> tuple[DatabaseModel, Book]:
+        model = model_type()
+        book: Book = model.pickups if isinstance(model, _PickupsModel) else model.book
+        main_view.jobs.start(book.ready)
+        main_view.jobs.wait()
+        return model, book
+
+    alice, alice_book = opened()
+    bob, _ = opened()
+    alice_book.names.add("Ada")
+    alice.close()
+    assert (tmp_path / "book.sqlite-wal").exists()  # bob still holds it
+    bob.close()
+    # SQLite removes its -wal and -shm files as the file's last connection closes
+    assert [file.name for file in tmp_path.iterdir()] == ["book.sqlite"]
+
+    carol, carol_book = opened()
+    with closing(carol):
+        assert carol_book.names.texts() == (["filled", "Ada"] if filled else ["Ada"])
+        assert len(fills) == (1 if filled else 0)
+
+
+def test_a_kept_file_opened_again_waits_for_no_late_write_and_is_told_of_it(
+    tmp_path: Path,
+) -> None:
+    """E.g. a job of a web session that expired, ending after its file was opened again."""
+    model_type = _book_model(tmp_path / "book.sqlite")
+    alice = model_type()
+    writing, release = threading.Event(), threading.Event()
+
+    def write() -> None:
+        with alice.book.names.connection() as db:
+            db.execute("INSERT INTO name VALUES ('late')")
+            writing.set()
+            assert release.wait(_TIMEOUT)
+
+    writer = threading.Thread(target=write)
+    writer.start()
+    try:
+        assert writing.wait(_TIMEOUT)
+        alice.close()  # its last session: the file closes once the write ends
+        with closing(model_type()) as bob:
+            assert writer.is_alive()  # opened while the write is held, not once it gave up
+            seen = _Seen(bob)
+            release.set()
+            writer.join(_TIMEOUT)
+            seen.wait_for("late")
+    finally:
+        release.set()
+        writer.join(_TIMEOUT)
+
+
 def test_a_fill_runs_once_for_every_session_one_closed_meanwhile_included() -> None:
     entered, release = threading.Event(), threading.Event()
     fills: list[None] = []
