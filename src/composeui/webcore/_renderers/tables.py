@@ -270,13 +270,18 @@ class WebFilterBarRenderer(WebRenderer[TView]):
             ' hx-post="/_composeui/widget/{widget_id}"'
             ' hx-trigger="input changed delay:{delay}ms, search"'
             ' hx-vals=\'{{"event": "search"}}\' hx-swap="none" hx-sync="this:queue last"'
-            ' autocomplete="off"{disabled}></label>'
+            ' autocomplete="off" data-table-search{disabled}>'
+            '<button type="button" class="btn btn-ghost btn-xs btn-circle -me-1"'
+            ' aria-label="{clear_label}" title="{clear_label}" data-clear-search'
+            "{hidden}{disabled}>\u00d7</button></label>"
         ).format(
             search_icon=_icon("search"),
             widget_id=self.widget_id,
             delay=SEARCH_DELAY_MS,
             search=self._filtered.search,
             search_label=search_label,
+            clear_label=texts.get("clear_search", ""),
+            hidden=" hidden" if self._filtered.search == "" else "",
             disabled=disabled,
         )
         if self._editor is None:

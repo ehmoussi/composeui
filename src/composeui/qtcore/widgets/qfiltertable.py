@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, cast
 
-from qtpy.QtCore import QSignalBlocker, Qt, QTimer, Signal
+from qtpy.QtCore import QEvent, QSignalBlocker, Qt, QTimer, Signal
 from qtpy.QtWidgets import (
     QComboBox,
     QHBoxLayout,
@@ -42,6 +42,33 @@ class _ValueEdit(QLineEdit):
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Escape:
             self.escaped.emit()
+            return
+        super().keyPressEvent(event)
+
+
+class _SearchEdit(QLineEdit):
+    """The search: Escape empties it, as its clear button does, if it holds text.
+
+    Empty, it leaves Escape to its parents, e.g. a dialog closing.
+    """
+
+    @override
+    def event(self, event: QEvent) -> bool:
+        # before the window's shortcuts, which would take Escape first
+        if (
+            event.type() == QEvent.Type.ShortcutOverride
+            and cast("QKeyEvent", event).key() == Qt.Key.Key_Escape
+            and self.text() != ""
+        ):
+            event.accept()
+            return True
+        return super().event(event)
+
+    @override
+    def keyPressEvent(self, event: QKeyEvent) -> None:
+        if event.key() == Qt.Key.Key_Escape and self.text() != "":
+            self.clear()
+            self.textEdited.emit("")
             return
         super().keyPressEvent(event)
 
@@ -91,8 +118,9 @@ class QTableFilterBar(QWidget):
     "+ Filter" opens an editor in the bar, of a column, a value and an Add button, and in
     a text column a toggle (`pattern`) making the value a regular expression. Enter
     or Add adds the filter, unless `check` says why its value can't filter, marking the
-    value field invalid. Escape closes it. Clicking a chip opens the editor on its
-    filter, its remove button removes it. The signals emit only for the user: `search_edited` the
+    value field invalid. Escape closes it. In the search, Escape empties the text, as the
+    clear button does. Clicking a chip opens the editor on its filter, its remove button
+    removes it. The signals emit only for the user: `search_edited` the
     text typed, `filter_added` a column and its text, `filter_removed` a column, and
     `filters_cleared`. `search_edited` waits `SEARCH_DELAY_MS` after the last key, but
     emits at once on Enter or once the search is cleared.
@@ -115,7 +143,7 @@ class QTableFilterBar(QWidget):
         self._filters: list[tuple[int, str, str, str]] = []
         #: the column whose chip takes the focus once shown, its filter just added
         self._focused_chip: int | None = None
-        self.search = QLineEdit()
+        self.search = _SearchEdit()
         self.search.setClearButtonEnabled(True)
         icon = self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogContentsView)
         self.search.addAction(icon, QLineEdit.ActionPosition.LeadingPosition)

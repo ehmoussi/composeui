@@ -3802,7 +3802,7 @@ def test_typing_in_a_table_s_search_keeps_the_caret_while_its_rows_update(
 ) -> None:
     page = rooms_page
     page.goto("/")
-    search = page.get_by_label("Search")
+    search = page.get_by_label("Search", exact=True)
     with _posted(page):
         search.press_sequentially("Bdroom")
     expect(page.get_by_text("No rows match the filters")).to_be_visible()
@@ -3816,6 +3816,35 @@ def test_typing_in_a_table_s_search_keeps_the_caret_while_its_rows_update(
     expect(search).to_have_value("Bedroom")
     expect(search).to_be_focused()
     expect(search).to_have_js_property("selectionStart", 2)
+
+
+def test_a_table_s_search_button_or_escape_empties_it_and_shows_every_row(rooms_page: Page) -> None:
+    page = rooms_page
+    page.goto("/")
+    search = page.get_by_label("Search", exact=True)
+    clear = page.get_by_role("button", name="Clear the search")
+    expect(clear).to_be_hidden()
+    with _posted(page):
+        search.press_sequentially("Bdroom")
+    expect(page.get_by_text("No rows match the filters")).to_be_visible()
+    expect(clear).to_be_visible()
+
+    with _posted(page):
+        clear.click()
+    expect(page.get_by_role("row").filter(has_text="Hall")).to_have_count(1)
+    expect(search).to_have_value("")
+    expect(search).to_be_focused()
+    expect(clear).to_be_hidden()
+
+    # Chromium's own Escape still empties it, its own clear button hidden (`app.css`)
+    with _posted(page):
+        search.press_sequentially("Bdroom")
+    expect(clear).to_be_visible()
+    with _posted(page):
+        search.press("Escape")
+    expect(page.get_by_role("row").filter(has_text="Hall")).to_have_count(1)
+    expect(search).to_have_value("")
+    expect(clear).to_be_hidden()
 
 
 def test_the_filter_editor_marks_a_value_it_can_t_take_and_focuses_the_chip_it_adds(
@@ -3875,7 +3904,7 @@ def test_a_table_s_body_swapped_with_another_table_leaves_that_one_whole(
     expect(page.locator(".htmx-added")).to_have_count(0)
     # hiding the hall deselects it: the rooms' body, then the notes whole, in one answer
     with _posted(page):
-        page.get_by_label("Search").press_sequentially("room")
+        page.get_by_label("Search", exact=True).press_sequentially("room")
     expect(page.get_by_role("cell", name="0 selected")).to_be_visible()
     expect(page.get_by_role("columnheader", name="Note")).to_be_visible()
     expect(page.get_by_role("row").filter(has_text="Bedroom")).to_have_count(1)

@@ -10,6 +10,8 @@ from qtpy.QtCore import QModelIndex, QPoint, Qt
 from qtpy.QtGui import (
     QColor,
     QImage,
+    QKeySequence,
+    QShortcut,
 )
 from qtpy.QtWidgets import (
     QAbstractItemView,
@@ -846,6 +848,23 @@ def test_the_filter_bar_searches_and_adds_filters_shown_as_chips(qtbot: QtBot) -
     qtbot.mouseClick(bar.clear, Qt.MouseButton.LeftButton)
     assert table.model().rowCount() == 4
     assert bar.chips == []
+
+
+def test_escape_empties_the_search_then_goes_on_to_the_window(qtbot: QtBot) -> None:
+    view, box = _sorted_rooms(qtbot)
+    bar, table = box.bar, box.table
+    escaped: list[bool] = []
+    QShortcut(QKeySequence("Escape"), box.window()).activated.connect(lambda: escaped.append(True))
+    bar.search.setFocus()
+    qtbot.keyClicks(bar.search, "ROOM")
+    qtbot.waitUntil(lambda: view.rooms.search == "ROOM", timeout=SEARCH_DELAY_MS * 5)
+
+    # the search is empty at once, not after the delay of typing; the shortcut waits
+    qtbot.keyClick(bar.search, Qt.Key.Key_Escape)
+    assert (bar.search.text(), view.rooms.search, escaped) == ("", "", [])
+    assert _shown_column(table, 0) == ["Hall", "kitchen", "Attic", "Bedroom"]
+    qtbot.keyClick(bar.search, Qt.Key.Key_Escape)
+    assert escaped == [True]
 
 
 def test_the_filter_editor_s_toggle_makes_the_value_a_regular_expression(qtbot: QtBot) -> None:

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, ClassVar
 
+from textual.actions import SkipAction
 from textual.binding import Binding
 from textual.containers import Horizontal, HorizontalScroll, Vertical
 from textual.content import Content
@@ -15,6 +16,7 @@ from composeui.textualcore.widgets.composetable import ComposeTable
 
 if TYPE_CHECKING:
     from textual.app import ComposeResult
+    from textual.binding import BindingType
     from textual.timer import Timer
 
 
@@ -35,6 +37,20 @@ class _ValueInput(Input):
 
     def action_close_editor(self) -> None:
         self.escaped.emit()
+
+
+class _SearchInput(Input):
+    """The search: Escape empties it if it holds text, else goes on to its parents."""
+
+    BINDINGS: ClassVar[list[BindingType]] = [Binding("escape", "empty", "Empty", show=False)]
+
+    def __init__(self) -> None:
+        super().__init__(id="search", compact=True)
+
+    def action_empty(self) -> None:
+        if self.value == "":
+            raise SkipAction
+        self.value = ""
 
 
 class ComposeFilterChip(Horizontal):
@@ -79,9 +95,9 @@ class ComposeFilterBar(Horizontal):
     a text column a toggle (`pattern`, primary while on) making the value a regular
     expression. Enter or Add adds the filter, unless `check` says why its value can't
     filter, marking the value field `-invalid` with the reason as its tooltip. Escape
-    closes it. A chip's
-    text opens the editor on its filter, its remove button removes it. The signals emit only for the
-    user: `search_edited` the text typed, `filter_added` a column and its text,
+    closes it. While the search holds text, a button after it, or Escape in it, empties it.
+    A chip's text opens the editor on its filter, its remove button removes it. The signals
+    emit only for the user: `search_edited` the text typed, `filter_added` a column and its text,
     `filter_removed` a column, and `filters_cleared`. `search_edited` waits
     `SEARCH_DELAY_MS` after the last key, but emits at once on Enter or once the search is
     cleared.
@@ -94,6 +110,9 @@ class ComposeFilterBar(Horizontal):
         & > Input#search {
             width: 20;
             margin-right: 1;
+        }
+        & > Button#clear-search {
+            min-width: 1;
         }
         & > Select {
             width: 28;
@@ -134,7 +153,9 @@ class ComposeFilterBar(Horizontal):
         self._filters: list[tuple[int, str, str, str]] = []
         #: the column whose chip takes the focus once shown, its filter just added
         self._focused_chip: int | None = None
-        self.search = Input(id="search", compact=True)
+        self.search = _SearchInput()
+        self.clear_search = Button(REMOVE, id="clear-search", compact=True)
+        self.clear_search.display = False
         self.add_filter = Button("", id="add-filter", compact=True)
         self.column: Select[int] = Select([], id="column", compact=True, allow_blank=True)
         self.pattern = Button(".*", id="pattern", compact=True)
@@ -151,6 +172,7 @@ class ComposeFilterBar(Horizontal):
     @override
     def compose(self) -> ComposeResult:
         yield self.search
+        yield self.clear_search
         yield self.add_filter
         yield self.column
         yield self.pattern
@@ -167,6 +189,7 @@ class ComposeFilterBar(Horizontal):
     def set_texts(self, texts: dict[str, str]) -> None:
         self._texts = texts
         self.search.placeholder = texts.get("search", "")
+        self.clear_search.tooltip = Content(texts.get("clear_search", ""))
         self.add_filter.label = Content(texts.get("add_filter", ""))
         self.add.label = Content(texts.get("add", ""))
         self.clear.label = Content(texts.get("clear", ""))
@@ -196,6 +219,7 @@ class ComposeFilterBar(Horizontal):
             self._stop_search_timer()  # the app's search, not the user's typed before
             with self.search.prevent(Input.Changed):
                 self.search.value = text
+            self.clear_search.display = text != ""
 
     def set_filters(self, filters: list[tuple[int, str, str, str]]) -> None:
         """Show each filter as a chip: its column, the chip's text, the text typed, the header."""
@@ -242,6 +266,8 @@ class ComposeFilterBar(Horizontal):
     def on_input_changed(self, event: Input.Changed) -> None:
         event.stop()
         if event.input is self.search:
+            # the field's text now, not the message's: the app may have set another since
+            self.clear_search.display = self.search.value != ""
             self._stop_search_timer()
             if event.value == "":
                 self._emit_search()
@@ -271,7 +297,10 @@ class ComposeFilterBar(Horizontal):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         event.stop()
         button = event.button
-        if button is self.add_filter:
+        if button is self.clear_search:
+            self.search.value = ""  # searches at once, as the value is empty
+            self.search.focus()
+        elif button is self.add_filter:
             self.open_editor()
         elif button is self.add:
             self._add()
