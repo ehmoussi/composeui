@@ -1745,22 +1745,31 @@ class _Shared(Generic[SqliteDatabaseT]):
     """A database a `DatabaseModel` class shares between the sessions (see `shared`)."""
 
     def __init__(
-        self, database_type: type[SqliteDatabaseT], location: Path | None, *, read_only: bool
+        self,
+        database_type: type[SqliteDatabaseT],
+        location: Path | Callable[[], Path] | None,
+        *,
+        read_only: bool,
     ) -> None:
         self.database_type = database_type
-        # resolved once: the process's folder may change
-        self.location = None if location is None else Path(location).resolve()
+        # a path is resolved once: the process's folder may change
+        self.location = (
+            location if location is None or callable(location) else Path(location).resolve()
+        )
         self.read_only = read_only
 
-    @property
     def key(self) -> _StoreKey:
-        return (self.database_type, self.location, self.read_only)
+        """Get the key of its store, calling a callable `location` for the file."""
+        location = self.location
+        if callable(location):
+            location = Path(location()).resolve()
+        return (self.database_type, location, self.read_only)
 
 
 def shared(
     database_type: type[SqliteDatabaseT],
     *,
-    location: Path | None = None,
+    location: Path | Callable[[], Path] | None = None,
     read_only: bool = False,
 ) -> SqliteDatabaseT:
     """Declare a database of a `DatabaseModel` that every session of the process shares.
@@ -1776,6 +1785,10 @@ def shared(
     session holds it, e.g. between two tests, and the next model opens it again. Without a
     `location`, it's a temporary file, deleted as the process ends, and `fill` fills it in
     each process. With `read_only`, the sessions only read it: only `fill` writes.
+
+    A callable `location` gives the file as each model is built, e.g. a file under a folder
+    that the app reads as it starts, or that each test sets. When the callable gives another
+    file, the sessions built before keep the previous file.
     """
     # the model's attribute is the database: typed as one, as `table` does
     return cast("SqliteDatabaseT", _Shared(database_type, location, read_only=read_only))
@@ -1818,15 +1831,6 @@ class DatabaseModel(Model):
                 " only a shared database is filled"
             )
             raise TypeError(msg)
-        shareds = _declared(cls, _Shared)
-        keys = [declared.key for declared in shareds.values()]
-        twice = [name for name, declared in shareds.items() if keys.count(declared.key) > 1]
-        if len(twice) > 0:
-            msg = (
-                f"{cls.__name__} shares the same database in several fields"
-                f" ({', '.join(twice)}): one is enough"
-            )
-            raise TypeError(msg)
         cls.data_name = next(
             (
                 f"{name}.sqlite" if declared.data_name is None else declared.data_name
@@ -1842,6 +1846,18 @@ class DatabaseModel(Model):
         self._handles: list[_Handle] = []
         #: every database, whose tables' signals are the model's
         self._databases: list[SqliteDatabase] = []
+        # the shared files, by field: a callable `location` gives its file only now
+        fields: dict[str, tuple[_Shared[Any], _StoreKey]] = {}
+        for name, declared_shared in _declared(type(self), _Shared).items():
+            key = declared_shared.key()
+            twice = next((other for other, (_, seen) in fields.items() if seen == key), None)
+            if twice is not None:
+                msg = (
+                    f"{type(self).__name__} shares the same database in several fields"
+                    f" ({twice}, {name}): one is enough"
+                )
+                raise TypeError(msg)
+            fields[name] = (declared_shared, key)
         try:
             for name, declared_per_session in _declared(type(self), _PerSession).items():
                 database = declared_per_session.database_type()
@@ -1850,8 +1866,8 @@ class DatabaseModel(Model):
                 self._per_session.append(engine)
                 self._databases.append(database)
                 setattr(self, name, database)
-            for name, declared_shared in _declared(type(self), _Shared).items():
-                store = _store_of(declared_shared)
+            for name, (declared_shared, key) in fields.items():
+                store = _store_of(key)
                 database = declared_shared.database_type()
                 handle = _Handle(store, database)
                 database._engine = handle  # noqa: SLF001 (the engine it's built for)
@@ -1974,10 +1990,8 @@ class _SharedStore:
     and opened again, without `fill`, by the next one.
     """
 
-    def __init__(self, declared: _Shared[Any]) -> None:
-        self.database_type: type[SqliteDatabase] = declared.database_type
-        self.location = declared.location
-        self.read_only = declared.read_only
+    def __init__(self, key: _StoreKey) -> None:
+        self.database_type, self.location, self.read_only = key
         pragmas = dict(self.database_type.pragmas)
         if self.location is not None and str(pragmas.get("synchronous", "")).upper() == "OFF":
             # a file kept across the runs, which a crash must leave whole
@@ -2193,20 +2207,19 @@ _STORES: dict[_StoreKey, _SharedStore] = {}
 _STORES_LOCK = threading.Lock()
 
 
-def _store_of(declared: _Shared[Any]) -> _SharedStore:
+def _store_of(key: _StoreKey) -> _SharedStore:
     """Get the process's store of a shared database, made by its first session."""
+    location = key[1]
     with _STORES_LOCK:
-        store = _STORES.get(declared.key)
+        store = _STORES.get(key)
         if store is None:
-            if declared.location is not None and any(
-                key[1] == declared.location for key in _STORES
-            ):
+            if location is not None and any(other[1] == location for other in _STORES):
                 msg = (
-                    f"{declared.location} is shared already, by another class or with another"
+                    f"{location} is shared already, by another class or with another"
                     " read_only: one file, one shared database"
                 )
                 raise ValueError(msg)
-            store = _STORES[declared.key] = _SharedStore(declared)
+            store = _STORES[key] = _SharedStore(key)
     return store
 
 
