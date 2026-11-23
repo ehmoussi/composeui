@@ -49,7 +49,9 @@ from composeui.core._views.inputs import (
     FloatInputMixin,
     InputMixin,
     IntInputMixin,
+    ParsedInputMixin,
     TextAreaMixin,
+    TParsed,
 )
 from composeui.core.registry import RendererType, create_renderer
 from composeui.core.renderer import Renderer, RendererContainer
@@ -199,6 +201,30 @@ class LabelRowIntInputView(FormLabelRowView, IntInputMixin):
     """A row of a form with a label and a field for a whole number."""
 
     _field_renderer_key = "int_input"
+
+
+@define_view
+class RowParsedInputView(FormRowView, ParsedInputMixin[TParsed]):
+    """A row of a form with a field whose text the app reads, without a label."""
+
+    _field_renderer_key = "input"
+
+    @override
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._set_up_parsed_input()
+
+
+@define_view
+class LabelRowParsedInputView(FormLabelRowView, ParsedInputMixin[TParsed]):
+    """A row of a form with a label and a field whose text the app reads, e.g. "4 GB"."""
+
+    _field_renderer_key = "input"
+
+    @override
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self._set_up_parsed_input()
 
 
 @define_view

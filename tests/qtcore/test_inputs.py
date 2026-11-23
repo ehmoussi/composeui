@@ -25,6 +25,7 @@ from composeui.qtcore.widgets.qdatefield import QDateField, QDateRangeField
 from examples.pipeform import PipeMainView
 from tests.bookings import BookingMainView
 from tests.hours import HoursMainView
+from tests.memory import MemoryMainView
 from tests.ranges import FIRST_DAY, RangesMainView
 
 if TYPE_CHECKING:
@@ -183,6 +184,26 @@ def test_a_float_input_shows_its_value_with_at_most_its_decimals(qtbot: QtBot) -
     assert view.value == 3.14159  # shown rounded, kept as it was
     view.value = 36.0
     assert field.text() == "36"
+
+
+def test_a_parsed_field_writes_its_value_again_once_editing_ends(
+    qtbot: QtBot,
+) -> None:
+    view = MemoryMainView()
+    view.render(RendererType.QT)
+    memory = view.form.memory
+    field = _field_widget(memory)
+    assert isinstance(field, QLineEdit)
+    qtbot.addWidget(field)
+    assert field.text() == "4096 MB"
+
+    field.show()
+    field.setFocus()
+    field.selectAll()
+    qtbot.keyClicks(field, "4gb")
+    assert (field.text(), memory.value) == ("4gb", 4000)  # as typed, until editing ends
+    qtbot.keyClick(field, Qt.Key.Key_Return)
+    assert (field.text(), memory.value) == ("4 GB", 4000)
 
 
 def test_int_input_is_a_spin_box_keeping_its_value_within_its_range(qtbot: QtBot) -> None:

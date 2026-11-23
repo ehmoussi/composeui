@@ -84,6 +84,68 @@ an hour of the day.
 - **The other backends** show a text field for digits. They do not refuse a number out of
   range (Textual marks it), so validate the number.
 
+## Text read by the app
+
+A `ParsedInputView` takes a value that the user types in the app's own format, for example a
+memory typed as "4 GB" or "4096 MB". The app gives two functions:
+
+- **`parse`** reads a text into a value. It raises `ValueError` for a text that it can't read.
+- **`format`** writes a value as text. `parse` must read that text back.
+
+```python
+from __future__ import annotations
+
+from typing import Optional
+
+from composeui.core.view import FormView, LabelRowParsedInputView, child, define_view
+
+
+def memory_mb(text: str) -> int:
+    number, factor = text.strip().upper(), 1
+    if number.endswith("GB"):
+        number, factor = number[:-2], 1000
+    elif number.endswith("MB"):
+        number = number[:-2]
+    return int(number) * factor  # int() raises ValueError, e.g. for "4 XB"
+
+
+def memory_text(value: int) -> str:
+    return f"{value // 1000} GB" if value % 1000 == 0 else f"{value} MB"
+
+
+@define_view
+class LimitsForm(FormView):
+    memory: LabelRowParsedInputView[int] = child(
+        LabelRowParsedInputView, label="Memory", parse=memory_mb, format=memory_text, value=4096
+    )
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.memory.set_validator(self._check_memory, self.memory.editing_finished)
+
+    def _check_memory(self) -> Optional[str]:
+        if self.memory.value is None:
+            return "Type a memory, e.g. 4 GB" if self.memory.text.strip() else "Required"
+        return None if self.memory.value >= 128 else "At least 128 MB"
+```
+
+The view keeps the `text` as the user types it. `value` is what `parse` reads from the text:
+`None` while the field is empty, or while `parse` can't read the text. Each read of `value`
+runs `parse` again, so keep `parse` quick. Set `value`, or give it when the view is built, and
+the field shows the text that `format` writes.
+
+When the user finishes editing, the field writes the value again with `format`: "4gb" becomes
+"4 GB". A text that `parse` can't read stays in the field, so the user sees what to fix. Check
+`value` with [a row's own check](building-views.md#check-a-form), and `text` to tell an empty
+field from a text that the app can't read. The view has no `minimum` or `maximum`: check the
+range too.
+
+A study saves the `text`, not `value`, and reads `value` from it when it loads. Give `parse`
+and `format` when the view is built: they can't change after.
+
+Every backend shows a text field: a `QLineEdit` on Qt, an `Input` on Textual, and a text field
+on the web.
+
 ## Date input
 
 A `DateInputView` takes a `datetime.date`, for example the first day of a booking, or no

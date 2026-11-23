@@ -31,6 +31,7 @@ from composeui.core.view import (
     FormView,
     GroupFormView,
     InputView,
+    LabelRowParsedInputView,
     LabelView,
     LanguageMenu,
     ListView,
@@ -39,7 +40,10 @@ from composeui.core.view import (
     MapPoint,
     MapView,
     NodeMark,
+    ParsedInputMixin,
+    ParsedInputView,
     RowInputView,
+    RowParsedInputView,
     StreamContent,
     TableView,
     TextStyle,
@@ -54,6 +58,7 @@ from examples.studyinputs import INPUT_FILE, OUTPUT_FOLDER, PATH, StudyInputsMai
 from tests.buildings import SITE
 from tests.console import RunMainView
 from tests.downloading import ReportMainView
+from tests.memory import memory_mb, memory_text
 from tests.pages import InputsPage
 from tests.splitter import StudySplitter
 from tests.tabs import PipeTabs
@@ -114,6 +119,34 @@ def test_closing_a_main_view_not_rendered_drops_its_jobs() -> None:
 
 def test_a_date_in_a_format_that_isn_t_one_is_read_as_iso() -> None:
     assert parse_date("2026-10-18", "not a format") == datetime.date(2026, 10, 18)
+
+
+@pytest.mark.parametrize(
+    "view_type", [ParsedInputView, RowParsedInputView, LabelRowParsedInputView]
+)
+def test_a_parsed_field_reads_its_text_and_writes_it_again_once_editing_ends(
+    view_type: type[ParsedInputMixin[int]],
+) -> None:
+    empty = view_type(parse=memory_mb, format=memory_text)
+    assert (empty.text, empty.value) == ("", None)
+    field = view_type(parse=memory_mb, format=memory_text, value=4096)
+    assert (field.text, field.value) == ("4096 MB", 4096)
+    shown: list[str] = []
+    field.editing_finished.connect(lambda: shown.append(field.text))
+
+    field.text = "4gb"
+    assert (field.text, field.value) == ("4gb", 4000)  # as typed, until editing ends
+    field.editing_finished.emit()
+    assert shown == ["4 GB"]  # rewritten before the app's callbacks
+
+    field.text = "4 XB"
+    field.editing_finished.emit()
+    assert (field.text, field.value) == ("4 XB", None)  # kept, for the user to fix
+
+    field.value = 128
+    assert field.text == "128 MB"
+    field.value = None
+    assert (field.text, field.value) == ("", None)
 
 
 def test_a_splitter_refuses_sizes_not_one_per_pane_and_keeps_its_own_unlaid_out() -> None:

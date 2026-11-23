@@ -11,6 +11,11 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `ParsedInputView`, with `RowParsedInputView` and `LabelRowParsedInputView`, takes a value
+  typed in the app's own format, such as a memory typed as "4 GB" or a time as "1h 30m". The
+  app gives `parse` and `format`. `value` is `None` while the text can't be read, and the text
+  stays for the user to fix. Once editing ends, the field shows the value as `format` writes it.
+
 - `MainView.browser_id` is a lasting id of the user's browser on the web, the same for every
   tab and every session of that browser. Label with it what the app keeps for all its users, to
   show each browser its own work first. It lasts `WebSettings.browser_ttl` after the browser's

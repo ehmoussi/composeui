@@ -43,6 +43,7 @@ from examples.pipeform import PipeMainView
 from examples.textual_demo import TextualDemoMainView
 from tests.bookings import BookingMainView
 from tests.hours import HoursMainView
+from tests.memory import MemoryMainView
 from tests.ranges import FIRST_DAY, RangesMainView
 
 if TYPE_CHECKING:
@@ -153,6 +154,29 @@ async def test_an_int_input_takes_only_whole_numbers_marking_those_out_of_range(
 
 #: clears a Textual field of up to 12 characters, the cursor first at its end
 _CLEAR = ("end", *["backspace"] * 12)
+
+
+@pytest.mark.asyncio
+async def test_a_parsed_field_writes_its_value_again_once_editing_ends() -> None:
+    view = MemoryMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    memory = view.form.memory
+
+    async with app.run_test() as pilot:
+        widget = _field_widget(memory.renderer)
+        assert isinstance(widget, Input)
+        await pilot.pause()
+        assert widget.value == "4096 MB"
+        widget.focus()
+        await pilot.press(*_CLEAR, *"4gb")
+        await pilot.pause()
+        assert (widget.value, memory.value) == ("4gb", 4000)  # as typed, until editing ends
+        await pilot.press("enter")
+        await pilot.pause()
+        assert (widget.value, memory.value) == ("4 GB", 4000)
 
 
 async def _booking_app() -> tuple[BookingMainView, App[None], list[Optional[datetime.date]]]:

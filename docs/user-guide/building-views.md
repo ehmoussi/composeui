@@ -180,6 +180,7 @@ The fields:
 | `TextAreaView` | `text`, with its lines (see [Text area](widgets.md#text-area)) | Types several lines of text |
 | `FloatInputView` | `value`, a `float` or `None`, from `minimum` to `maximum`, with `decimals` | Types a decimal number |
 | `IntInputView` | `value`, an `int` or `None` (see [Integer input](widgets.md#integer-input)) | Types a whole number |
+| `ParsedInputView` | `value`, read from `text` by the app's `parse` (see [Text read by the app](widgets.md#text-read-by-the-app)) | Types a value in the app's format, such as "4 GB" |
 | `DateInputView` | `value`, a `datetime.date` or `None` (see [Date input](widgets.md#date-input)) | Types or picks a date |
 | `DateRangeInputView` | `value`, a pair of dates, either `None` (see [Date range](widgets.md#date-range)) | Types or picks the first and the last day |
 | `FilePathInputView` | `text`, and `path` (see [File path input](widgets.md#file-path-input)) | Types or picks a file |
@@ -248,10 +249,10 @@ checks of several rows.
 
 You can compose a view by mixing traits. For example, `LabelRowFloatInputView` combines
 `FormLabelRowView` and `FloatInputMixin`. The mixins of `composeui.core.view` are the available
-building blocks: `InputMixin`, `FloatInputMixin`, `IntInputMixin`, `DateInputMixin`,
-`DateRangeInputMixin`, `FilePathInputMixin`, `SliderMixin`, `FloatSliderMixin`, `RangeSliderMixin`,
-`FloatRangeSliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`, `MultiValuesMixin`, `TableMixin`,
-`LogMixin`, `LabelMixin`, and `MarkdownMixin`.
+building blocks: `InputMixin`, `FloatInputMixin`, `IntInputMixin`, `ParsedInputMixin`,
+`DateInputMixin`, `DateRangeInputMixin`, `FilePathInputMixin`, `SliderMixin`, `FloatSliderMixin`,
+`RangeSliderMixin`, `FloatRangeSliderMixin`, `CheckBoxMixin`, `ValuesGroupMixin`,
+`MultiValuesMixin`, `TableMixin`, `LogMixin`, `LabelMixin`, and `MarkdownMixin`.
 
 Larger views have sections of their own:
 

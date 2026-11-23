@@ -24,6 +24,7 @@ from composeui.webcore.webrenderer import (
 )
 from tests.bookings import BookingMainView
 from tests.hours import HoursMainView
+from tests.memory import MemoryMainView
 from tests.ranges import FIRST_DAY, RangesMainView
 from tests.webcore.support import (
     _count,
@@ -251,6 +252,24 @@ def test_int_input_takes_whole_numbers_and_puts_the_value_back_on_anything_else(
 
     # left with a decimal: the field, otherwise never swapped back, shows 15 again
     assert _swapped(fragments, field.widget_id).attributes["value"] == "15"
+
+
+def test_a_parsed_field_writes_its_value_again_once_left_or_keeps_text_it_can_t_read() -> None:
+    view = MemoryMainView()
+    view.render(RendererType.WEB)
+    memory = view.form.memory
+    field = _part(memory, "field")
+    assert _element(field.to_html(), field.widget_id).attributes["value"] == "4096 MB"
+
+    handle_event(field, "input", {"value": "4gb"})
+    assert memory.value == 4000
+    fragments = handle_event(field, "change", {"value": "4gb"})
+    assert _swapped(fragments, field.widget_id).attributes["value"] == "4 GB"
+
+    fragments = handle_event(field, "change", {"value": "4 XB"})
+    assert (memory.text, memory.value) == ("4 XB", None)
+    # not put back, as an int field's is: the user fixes it
+    assert _find(fragments, field.widget_id) is None
 
 
 def test_a_date_range_swaps_the_end_that_followed_never_the_one_typed_in() -> None:
