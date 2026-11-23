@@ -131,6 +131,8 @@ backends' modules included, can change in any release without an entry here.
   keeps the file name of the studies saved before. Without it, the study names the file
   after the model's attribute (`study.sqlite`).
 
+- On the web, the console's Copy all button shows "Copied" after a successful copy.
+  The button keeps its width.
 - On the web, a `SplitterView` shows a grip where the pointer meets the divider. The grip
   stays in the center on touch screens and when the divider has keyboard focus.
 - On the web, the underline slides to the tab you click without delaying selection. It moves

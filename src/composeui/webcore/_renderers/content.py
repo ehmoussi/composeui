@@ -30,6 +30,8 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from pathlib import Path
 
+    from composeui.core.translation import TranslatedText
+
 
 class MetricViewLike(ViewLike, Protocol):
     label: str
@@ -245,6 +247,8 @@ class ConsoleViewLike(ViewLike, Protocol):
     texts: dict[str, str]
     export_filename: str
 
+    def tr(self, text: str) -> TranslatedText: ...
+
 
 def _css_style(style: TextStyle) -> str:
     """Get the inline CSS of text in `style`: its colors are "#rrggbb", from the view."""
@@ -315,7 +319,10 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
             ' data-no-match="{no_match}">'
             '<span class="text-sm" aria-live="polite" data-console-matches></span>'
             '<button type="button" class="btn btn-ghost btn-xs ml-auto"'
-            ' data-copy-console="{widget_id}-text">{copy}</button>'
+            ' aria-label="{copy}" data-copy-console="{widget_id}-text">'
+            '<span class="cui-console-copy" aria-hidden="true">'
+            "<span>{copy}</span><span>{copied}</span></span></button>"
+            '<span class="sr-only" role="status" data-console-copy-status></span>'
             # a plain link: htmx can't start a download
             '<a class="btn btn-ghost btn-xs" href="/widget/{widget_id}/text"'
             " download>{save}</a></div>"
@@ -327,6 +334,7 @@ class WebConsoleRenderer(WebRenderer[ConsoleViewLike]):
             widget_id=self.widget_id,
             save=self._view.texts.get("save", ""),
             copy=self._view.texts.get("copy", ""),
+            copied=self._view.texts.get("copied") or self._view.tr("Copied"),
             search=self._view.texts.get("search", ""),
             matches=self._view.texts.get("matches", ""),
             no_match=self._view.texts.get("no_match", ""),
