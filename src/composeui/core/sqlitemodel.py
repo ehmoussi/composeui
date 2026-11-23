@@ -1699,7 +1699,10 @@ class _Engine:
                 msg = f"its data (version {version}) can't be brought up to date"
                 raise InvalidStateError(msg)
             migrate(db)
-        db.execute(f"PRAGMA user_version = {int(schema_version)}")
+        if version != schema_version:
+            # a write only then: a shared file opened again doesn't wait for a write of the
+            # engine it had, which a job of a session that ended may still make
+            db.execute(f"PRAGMA user_version = {int(schema_version)}")
         db.commit()
 
     def finish_file(self) -> None:
@@ -1769,9 +1772,10 @@ def shared(
     nor opens it, and New leaves it alone.
 
     With a `location`, the database is kept in that file, across the process's runs: `fill`
-    fills it only when the file doesn't exist yet. Without one, it's a temporary file,
-    deleted as the process ends, and `fill` fills it in each process. With `read_only`, the
-    sessions only read it: only `fill` writes.
+    fills it only when the file doesn't exist yet. The process closes the file once no
+    session holds it, e.g. between two tests, and the next model opens it again. Without a
+    `location`, it's a temporary file, deleted as the process ends, and `fill` fills it in
+    each process. With `read_only`, the sessions only read it: only `fill` writes.
     """
     # the model's attribute is the database: typed as one, as `table` does
     return cast("SqliteDatabaseT", _Shared(database_type, location, read_only=read_only))
@@ -1966,7 +1970,8 @@ class _SharedStore:
 
     Each handle binds to the current file (`_Generation`): at once, or once `fill` has run.
     After `forget`, the next handles bind to a new file, and the previous one is closed
-    once its last handle is.
+    once its last handle is. A database kept in a file is closed once no handle holds it,
+    and opened again, without `fill`, by the next one.
     """
 
     def __init__(self, declared: _Shared[Any]) -> None:
@@ -2012,7 +2017,7 @@ class _SharedStore:
                 if not generation.closed:
                     self._bind(handle, generation)
                     return
-            # forgotten, and closed by its last handle before this one got it: fill again
+            # closed by its last handle before this one got it: open, or fill, again
 
     def release(self, handle: _Handle) -> None:
         """Forget a closed handle, closing a file no other handle needs."""
@@ -2032,10 +2037,14 @@ class _SharedStore:
             raise TypeError(msg)
         with self._lock:
             previous = self._kept()
-            self._current = None
-            if self._fill is not None:
-                self._fill.forget()
+            self._stop_keeping()
             self._close_if_unused(previous)
+
+    def _stop_keeping(self) -> None:
+        """Have the next handle bind to a file opened, or filled, anew."""
+        self._current = None
+        if self._fill is not None:
+            self._fill.forget()
 
     def _bind(self, handle: _Handle, generation: _Generation) -> None:
         handle.generation = generation
@@ -2046,9 +2055,16 @@ class _SharedStore:
         return self._current if self._fill is None else self._fill.kept()
 
     def _close_if_unused(self, generation: _Generation | None) -> None:
-        if generation is not None and generation.holders == 0 and generation is not self._kept():
-            generation.closed = True
-            generation.engine.close()
+        if generation is None or generation.holders != 0:
+            return
+        if generation is self._kept():
+            if self.location is None:  # a temporary file: the next sessions' data is only there
+                return
+            # the file keeps it: a process doesn't hold a file that no session reads, e.g. one
+            # per test
+            self._stop_keeping()
+        generation.closed = True
+        generation.engine.close()
 
     def open_generation(self, job: Job[Any, Any] | None) -> _Generation:
         """Open the kept file, or make a new one, filled by `job` if not None."""
@@ -2093,12 +2109,16 @@ class _SharedStore:
         return _Generation(core, engine)
 
     def tell(self, writer: _Handle, generation: _Generation, indices: set[int]) -> None:
-        """Have the other sessions on `generation` emit the `changed` of these tables."""
+        """Have the other sessions on `generation`'s file emit the `changed` of these tables."""
         with self._lock:
+            # a kept file's generations are the same file: a write on a closed one, e.g. by a
+            # job of a session that ended, is also on the one opened again
             others = [
                 handle
                 for handle in self._handles
-                if handle is not writer and handle.generation is generation
+                if handle is not writer
+                and handle.generation is not None
+                and (self.location is not None or handle.generation is generation)
             ]
         if len(others) == 0:
             return

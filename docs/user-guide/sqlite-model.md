@@ -229,8 +229,9 @@ bob.close()
   [unsaved changes](building-views.md#unsaved-changes).
 - **A file, or a temporary one.** With `location`, the database is kept in that file across the
   runs of the app. SQLite then waits for the disk at each commit (`synchronous = NORMAL`). A
-  file of a newer version is refused, with `InvalidStateError`. Without `location`, the
-  database is a temporary file, deleted as the process ends.
+  file of a newer version is refused, with `InvalidStateError`. The process closes the file
+  once no session holds it, such as between two tests. The next model opens it again, without
+  `fill`. Without `location`, the database is a temporary file, deleted as the process ends.
 - **Writes take turns.** The threads of every session take turns on its connection, as the
   threads of one session do. `reading` reads without waiting, during a write too.
 - **Every session follows.** After a commit, the tables' `changed` is emitted in the session
