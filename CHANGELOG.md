@@ -214,6 +214,11 @@ backends' modules included, can change in any release without an entry here.
 
 ### Fixed
 
+- An app that exits while a job writes to a SQLite model doesn't crash any more. The exit
+  waits up to 5 s for the write, then interrupts it, and closes each database that no thread
+  uses. A job that asks for a database once the exit started waits for the process's end. A
+  web server that stops waits in the same way for the writes of the sessions that it closed.
+
 - A web session with a `session_ttl` longer than 14 days ends after `session_ttl` without a
   request, up to the 400 days that a browser keeps a cookie: before, its cookie lasted 14 days,
   and the session ended with it.

@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import sqlite3
 import struct
+import subprocess
+import sys
 import threading
 import tracemalloc
 import zipfile
@@ -504,6 +507,217 @@ def test_closing_a_model_waits_for_no_write_running_whose_end_closes_it() -> Non
     assert written == [1]
     with pytest.raises(sqlite3.ProgrammingError, match="closed database"):
         connections[0].execute("SELECT 1")
+
+
+# a model in a program of its own, which ends as its last line does
+_EXIT_PROGRAM = """\
+import faulthandler
+import logging
+import sqlite3
+import threading
+from composeui.core import sqlitemodel
+from composeui.core.sqlitemodel import DatabaseModel, SqliteDatabase, SqliteTable, per_session
+from composeui.core.view import MainView
+
+class Runs(SqliteTable):
+    create = "CREATE TABLE run(id INTEGER PRIMARY KEY, radius REAL NOT NULL);"
+
+class RunsDatabase(SqliteDatabase):
+    def __init__(self):
+        super().__init__()
+        self.runs = self.add_table(Runs)
+
+class RunsModel(DatabaseModel):
+    study = per_session(RunsDatabase)
+
+# a hang shows its threads' stacks, before the test's timeout
+faulthandler.dump_traceback_later(50, exit=True)
+logging.basicConfig()  # as an app's often goes: a job's failure would be written
+sqlitemodel.EXIT_WAIT_SECONDS = 0.1
+sqlitemodel.INTERRUPTED_WAIT_SECONDS = 0.1
+model = RunsModel()
+main_view = MainView()
+"""
+
+
+def _run_exit_program(
+    tmp_path: Path, body: str, *, head: str = ""
+) -> subprocess.CompletedProcess[str]:
+    """Run `head`, `_EXIT_PROGRAM` then `body`, with its temporary files in `tmp_path`."""
+    script = tmp_path / "program.py"
+    script.write_text(head + _EXIT_PROGRAM + body, encoding="utf-8")
+    files = tmp_path / "temporary"
+    files.mkdir()
+    return subprocess.run(  # noqa: S603 (the test's own program)
+        [sys.executable, str(script)],
+        env={**os.environ, "TMPDIR": str(files), "TEMP": str(files), "TMP": str(files)},
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+
+@pytest.mark.parametrize(
+    "access",
+    ["model.study.runs.connection()", "model.study.reading()"],
+    ids=["turn", "reader"],
+)
+def test_python_exits_during_a_job_s_statement_once_it_s_interrupted(
+    tmp_path: Path, access: str
+) -> None:
+    # the statement runs until Python's exit interrupts it, then the job asks for another turn
+    result = _run_exit_program(
+        tmp_path,
+        """\
+running = threading.Event()
+
+def started():
+    running.set()
+    return 1
+
+def count(job):
+    try:
+        with ACCESS as db:
+            db.create_function("started", 0, started)
+            db.execute(
+                "WITH RECURSIVE n(i) AS (SELECT started() UNION ALL SELECT i + 1 FROM n)"
+                " SELECT count(*) FROM n"
+            ).fetchone()
+    except sqlite3.OperationalError:
+        with model.study.runs.connection():
+            pass
+
+main_view.jobs.start(count)
+assert running.wait(30)
+""".replace("ACCESS", access),
+    )
+
+    # closed under the statement, the connection crashed the process
+    assert (result.returncode, result.stderr) == (0, "")
+    # closed once the statement is over, the database's file is removed
+    assert list((tmp_path / "temporary").iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    "work",
+    [
+        # no statement runs, which an interrupt would stop
+        "with model.study.runs.connection():\n        held.set()\n        threading.Event().wait()",
+        # e.g. a job opening a study: it uses its new database outside a turn
+        "made = RunsModel()\n    held.set()\n    threading.Event().wait()",
+    ],
+    ids=["turn-held", "made-by-the-job"],
+)
+def test_python_exits_leaving_open_a_database_that_a_job_s_thread_may_still_use(
+    tmp_path: Path, work: str
+) -> None:
+    result = _run_exit_program(
+        tmp_path,
+        f"""\
+held = threading.Event()
+
+def hold(job):
+    {work}
+
+main_view.jobs.start(hold)
+assert held.wait(30)
+""",
+    )
+
+    assert (result.returncode, result.stderr) == (0, "")
+    # the process's end releases it, and the next start removes its file
+    assert len(list((tmp_path / "temporary").glob("composeui-*.sqlite"))) > 0
+
+
+def test_python_s_exit_waits_for_a_job_s_write_that_ends_meanwhile(tmp_path: Path) -> None:
+    location = tmp_path / "runs.sqlite"
+    result = _run_exit_program(
+        tmp_path,
+        """\
+import time
+from pathlib import Path
+from composeui.core.sqlitemodel import shared
+
+class SharedRunsModel(DatabaseModel):
+    kept = shared(RunsDatabase, location=Path(__file__).with_name("runs.sqlite"))
+
+sqlitemodel.EXIT_WAIT_SECONDS = 30
+sqlitemodel.INTERRUPTED_WAIT_SECONDS = 0  # the first wait alone keeps the write
+shared_model = SharedRunsModel()
+writing = threading.Event()
+
+def write(job):
+    with shared_model.kept.runs.connection() as db:
+        db.execute("INSERT INTO run(radius) VALUES (1.5)")
+        writing.set()
+        # it commits once Python's exit started: kept only if the exit waits for it
+        while not sqlitemodel._Exit.started:
+            time.sleep(0.01)
+        time.sleep(1)  # else the process's end, which doesn't wait, would cut it
+
+main_view.jobs.start(write)
+assert writing.wait(30)
+""",
+    )
+
+    assert (result.returncode, result.stderr) == (0, "")
+    with contextlib.closing(sqlite3.connect(location)) as db:
+        assert db.execute("SELECT radius FROM run").fetchall() == [(1.5,)]
+
+
+@pytest.mark.parametrize(
+    "access",
+    ["model.study.runs.connection()", "model.study.reading()"],
+    ids=["turn", "reader"],
+)
+def test_python_s_exit_refuses_a_query_of_the_main_thread_also_while_a_job_s_thread_waits(
+    tmp_path: Path, access: str
+) -> None:
+    # registered before the model's module, so it runs once the model's databases are closed:
+    # a job's thread asking waits for the process's end, the main thread doesn't
+    result = _run_exit_program(
+        tmp_path,
+        "",
+        head="""\
+import atexit
+import sys
+import threading
+import time
+
+def write():
+    from composeui.core.model import RefusedError
+    from composeui.core.sqlitemodel import _refuse_at_exit
+
+    def ask():
+        with ACCESS:
+            pass
+
+    def waits(thread):
+        frame = sys._current_frames().get(thread.ident)
+        while frame is not None and frame.f_code is not _refuse_at_exit.__code__:
+            frame = frame.f_back
+        return frame is not None
+
+    job = threading.Thread(target=ask, daemon=True)
+    job.start()
+    # first, a job's thread that waits: it holds no lock that the main thread's query takes
+    while not waits(job):
+        time.sleep(0.01)
+    try:
+        with ACCESS:
+            pass
+    except RefusedError as error:
+        print(error)
+
+atexit.register(write)
+""".replace("ACCESS", access),
+    )
+
+    assert (result.returncode, result.stdout) == (
+        0,
+        "The app is exiting: its database takes no more queries.\n",
+    )
 
 
 def test_a_closed_model_reads_nothing_more_apart_as_its_connection() -> None:

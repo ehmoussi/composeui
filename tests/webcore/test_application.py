@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import sys
 import threading
 from typing import TYPE_CHECKING
@@ -353,6 +354,54 @@ def test_a_web_server_that_stops_stops_the_programs_that_jobs_run(app: _HelloApp
 
     (exit_code,) = exit_codes
     assert exit_code != 0
+
+
+def test_a_web_server_that_stops_interrupts_a_closed_session_s_write_once_it_waited(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # uvicorn ends on SIGTERM by sending it again once stopped: the write would be cut there
+    monkeypatch.setattr("composeui.core.sqlitemodel.EXIT_WAIT_SECONDS", 0.05)
+    monkeypatch.setattr("tempfile.tempdir", str(tmp_path))  # where the session's database goes
+    sessions: list[tuple[HelloMainView, _SignedGuestbook]] = []
+    running, stop, ended = threading.Event(), threading.Event(), threading.Event()
+    errors: list[str] = []
+
+    def started() -> int:
+        running.set()
+        return 1
+
+    def count(_job: Job[None]) -> None:
+        try:
+            with sessions[0][1].study.signatures.connection() as db:
+                db.create_function("started", 0, started)
+                db.create_function("going", 0, lambda: not stop.is_set())
+                # endless, unless interrupted: the test's end stops it too
+                db.execute(
+                    "WITH RECURSIVE n(i) AS (SELECT started() UNION ALL"
+                    " SELECT i + 1 FROM n WHERE going()) SELECT count(*) FROM n"
+                ).fetchone()
+        except sqlite3.OperationalError as error:
+            errors.append(str(error))
+        finally:
+            ended.set()
+
+    app = WebModelApplication(
+        build_main_view=HelloMainView,
+        build_model=_SignedGuestbook,
+        setup_model=lambda main_view, model: sessions.append((main_view, model)),
+    )
+    try:
+        with _Browser(app.create_starlette_app()) as browser:
+            browser.get("/")
+            sessions[0][0].jobs.start(count)
+            assert running.wait(20)
+        # closed under its write, the database's file stayed as long as the write went on
+        assert list(tmp_path.glob("composeui-*")) == []
+    finally:
+        stop.set()
+        ended.wait(20)  # a web session's jobs have no `Jobs.wait`
+
+    assert errors == ["interrupted"]
 
 
 class _ShapesApp(WebApplication[TranslatedMainView]):

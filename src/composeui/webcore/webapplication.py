@@ -51,6 +51,7 @@ from composeui.core.jobs import starting_study, stop_running_processes
 from composeui.core.reactivity import start_reactions
 from composeui.core.registry import RendererType
 from composeui.core.reload import has_change_events
+from composeui.core.sqlitemodel import wait_for_closed_writes
 from composeui.core.study import open_study
 from composeui.core.view import View
 from composeui.webcore._renderers.navigation import INTERNAL_ROUTE, check_routes
@@ -403,6 +404,8 @@ def _lifespan(
                 sessions.close_all()
             # uvicorn ends on SIGTERM by sending it again: Python's exit then doesn't run
             stop_running_processes()
+            # the closed sessions' jobs end their writes: the process's end would cut them
+            await run_in_threadpool(wait_for_closed_writes)
 
     return lifespan
 

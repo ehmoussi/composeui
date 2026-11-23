@@ -9,6 +9,7 @@ works on a scratch copy in a temporary file: the user's study only changes when 
 from __future__ import annotations
 
 import array
+import atexit
 import contextlib
 import csv
 import datetime
@@ -60,7 +61,7 @@ from composeui.core.view import CONVERTER, Filter, FilterOperator, Sort, SourceC
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable, Iterator, Mapping, Sequence
     from http.client import HTTPMessage
-    from typing import IO
+    from typing import IO, NoReturn
     from urllib.request import Request
 
     from attrs import AttrsInstance
@@ -1432,17 +1433,26 @@ class _Engine:
             if not self._shared and job is not None and job.is_dropped:  # study replaced
                 msg = "A job dropped by a new study can't use the database."
                 raise RefusedError(msg)
-            with self._readers_lock:
-                if self._closed:
-                    msg = "Cannot operate on a closed database."
-                    raise sqlite3.ProgrammingError(msg)
-                self._turns += 1
-            try:
-                yield self._database.connection
-            finally:
-                with self._readers_lock:
-                    self._turns -= 1
-                    self._close_if_unused(self._database)
+            database = self._database
+            if database.acquire():
+                # released last: Python's exit waits for a close that the turn's end makes
+                try:
+                    with self._readers_lock:
+                        if self._closed:
+                            msg = "Cannot operate on a closed database."
+                            raise sqlite3.ProgrammingError(msg)
+                        self._turns += 1
+                    try:
+                        yield database.connection
+                    finally:
+                        with self._readers_lock:
+                            self._turns -= 1
+                            self._close_if_unused(self._database)
+                finally:
+                    database.release()
+                return
+        # out of the turn's lock: a job's thread that waits there would block the main thread
+        _refuse_at_exit()
 
     def _close_if_unused(self, database: _Database) -> None:
         """Close a replaced file, or a closed engine's, once unused; hold the readers' lock."""
@@ -1510,21 +1520,30 @@ class _Engine:
 
     def _take_reader(self) -> tuple[_Database, sqlite3.Connection | None]:
         """Count a reader of the file, and take an idle connection, if any."""
+        db = None
         with self._readers_lock:
             if self._closed:  # its file is gone
                 msg = "Cannot operate on a closed database."
                 raise sqlite3.ProgrammingError(msg)
             database = self._database
-            database.readers += 1
-            db = database.idle_readers.pop() if len(database.idle_readers) > 0 else None
+            is_taken = database.acquire()
+            if is_taken:
+                database.readers += 1
+                db = database.idle_readers.pop() if len(database.idle_readers) > 0 else None
+        if not is_taken:  # out of the readers' lock, as a turn's refusal
+            _refuse_at_exit()
         return database, db
 
     def _give_back_reader(self, database: _Database, db: sqlite3.Connection | None) -> None:
-        with self._readers_lock:
-            database.readers -= 1
-            if db is not None:
-                database.idle_readers.append(db)
-            self._close_if_unused(database)
+        try:
+            with self._readers_lock:
+                database.readers -= 1
+                if db is not None:
+                    database.idle_readers.append(db)
+                self._close_if_unused(database)
+        finally:
+            # released last: Python's exit waits for a close that the reader's end makes
+            database.release()
 
     def ready(self, job: Job[Any, Any]) -> None:
         """Return: a session's own database needs no fill."""
@@ -1644,6 +1663,8 @@ class _Engine:
         # end closes it, as the last query `reading` it does
         with self._readers_lock:
             self._closed = True
+            if self._turns > 0:  # what a server's stop waits for (`wait_for_closed_writes`)
+                self._database.closing = True
             self._close_if_unused(self._database)
 
     def _new_database(self, path: Path | None = None) -> _Database:
@@ -2401,8 +2422,44 @@ class _Database:
         self._finalizer = weakref.finalize(
             self, _discard, self.connection, self.path, self.idle_readers, keep=keep
         )
+        # not by Python's exit itself: it would close the connection under a job's statement,
+        # which crashes the process (`_close_at_exit`)
+        self._finalizer.atexit = False  # type: ignore[misc]  # a property that typeshed misses
         #: the queries reading it on connections of their own (`SqliteDatabase.reading`)
         self.readers = 0
+        #: the turns and the readers that use it now, which Python's exit waits for
+        self.users = 0
+        #: every reader's connection, idle or reading: Python's exit interrupts their queries
+        self.reader_connections: list[sqlite3.Connection] = []
+        #: its model is closed while a turn holds it, which closes it at its end
+        self.closing = False
+        # until its end, the thread that made it may use it outside a turn (e.g. `open_study`)
+        self._creator = threading.current_thread()
+        with _USERS:
+            _OPEN_DATABASES.add(self)
+
+    def acquire(self) -> bool:
+        """Count a use of the database; tell if it may start: not once Python exits.
+
+        The caller refuses one that may not with `_refuse_at_exit`, once out of its locks.
+        """
+        with _USERS:
+            if _Exit.started:
+                return False
+            self.users += 1
+            return True
+
+    def release(self) -> None:
+        """Count a use of the database as over."""
+        with _USERS:
+            self.users -= 1
+            _USERS.notify_all()
+
+    def close_at_exit(self) -> None:
+        """Close the database as Python exits, unless another thread may still use it."""
+        creator = self._creator
+        if self.users == 0 and (creator is threading.current_thread() or not creator.is_alive()):
+            self.close()
 
     def open_reader(self) -> sqlite3.Connection:
         """Open a read-only connection, with the database's `pragmas`: any thread uses it."""
@@ -2410,6 +2467,7 @@ class _Database:
         reader = sqlite3.connect(uri, uri=True, timeout=WAIT_SECONDS, check_same_thread=False)
         for statement in self.pragma_statements:
             reader.execute(statement)
+        self.reader_connections.append(reader)
         return reader
 
     def start_journal(self) -> None:
@@ -2418,7 +2476,89 @@ class _Database:
             self.connection.execute(self._journal)
 
     def close(self) -> None:
-        self._finalizer()
+        # not by calling it: Python's exit turns the finalizers into no-ops, and a job's write
+        # can end its turn, which closes the database, after
+        detached = self._finalizer.detach()
+        if detached is not None:
+            _, discard, args, kwargs = detached
+            discard(*args, **kwargs)
+
+
+class _Exit:
+    """Whether Python's exit has started: the databases then take no more queries."""
+
+    started = False
+
+
+#: the databases open in this process: Python's exit closes those that no thread uses
+_OPEN_DATABASES: weakref.WeakSet[_Database] = weakref.WeakSet()
+#: guards each database's `users` and `_Exit.started`, and wakes an exit that waits for them
+_USERS = threading.Condition()
+#: seconds that an exit waits for the writes running, before it interrupts them
+EXIT_WAIT_SECONDS = 5.0
+#: seconds that an exit then waits for the writes interrupted to stop
+INTERRUPTED_WAIT_SECONDS = 1.0
+
+
+def _wait_for_users(databases: list[_Database], timeout: float) -> None:
+    """Wait up to `timeout` seconds for no thread to use `databases`, then interrupt them.
+
+    A write interrupted ends with an `sqlite3.OperationalError`, and rolls back.
+    """
+
+    def used() -> list[_Database]:
+        return [database for database in databases if database.users > 0]
+
+    with _USERS:
+        if _USERS.wait_for(lambda: len(used()) == 0, timeout):
+            return
+        for database in used():
+            for connection in [database.connection, *database.reader_connections]:
+                # one closed meanwhile, by the end of its turn, has nothing left to stop
+                with contextlib.suppress(sqlite3.ProgrammingError):
+                    # thread-safe: it stops the statement running, at its next step
+                    connection.interrupt()
+        _USERS.wait_for(lambda: len(used()) == 0, INTERRUPTED_WAIT_SECONDS)
+
+
+def _refuse_at_exit() -> NoReturn:
+    """Refuse a use of a database once Python exits; call it out of the engine's locks."""
+    if threading.current_thread() is threading.main_thread():
+        msg = "The app is exiting: its database takes no more queries."
+        raise RefusedError(msg)
+    # a job's thread waits for the process's end: an error that it would write as Python
+    # exits can abort the process
+    with _USERS:
+        while True:
+            _USERS.wait()
+
+
+def wait_for_closed_writes() -> None:
+    """Wait briefly for the writes on the closed models' databases: e.g. as a server stops.
+
+    A write that goes on after `EXIT_WAIT_SECONDS` is interrupted.
+    """
+    with _USERS:
+        closing = [database for database in _OPEN_DATABASES if database.closing]
+    _wait_for_users(closing, EXIT_WAIT_SECONDS)
+
+
+def _close_at_exit() -> None:
+    """Close the databases as Python exits, once their writes are over or interrupted.
+
+    A database that a thread still uses stays open: the process's end releases it, and the
+    next start removes its files.
+    """
+    with _USERS:
+        _Exit.started = True
+        databases = list(_OPEN_DATABASES)
+    _wait_for_users(databases, EXIT_WAIT_SECONDS)
+    for database in databases:
+        database.close_at_exit()
+
+
+# a job's thread is a daemon: Python's exit doesn't wait for it
+atexit.register(_close_at_exit)
 
 
 def _beside(location: Path) -> Path:
