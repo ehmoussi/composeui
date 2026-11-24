@@ -1,7 +1,7 @@
 # Core concepts
 
-A ComposeUI app is made of views, signals, an optional model, and studies, which a backend
-shows:
+A ComposeUI app is made of views, signals, an optional model, and studies. A backend shows
+the views:
 
 | Concept | Role |
 | --- | --- |
@@ -10,14 +10,18 @@ shows:
 | Signal (`composeui.core.signal`) | An event of a view or a model, such as `clicked`. `signal.connect(callback)` calls the callback on each event, and gives it the `view`, `main_view`, or `model` that it asks for. |
 | Reactive method (`composeui.core.reactivity`) | A view method decorated with `@reactive`. ComposeUI runs it again each time a view field that it read changes. See [Reactive methods](reactive-methods.md). |
 | Model (`composeui.core.model`) | The app's data beside the views. It is optional. `DatabaseModel` keeps the data in a [SQLite database](sqlite-model.md). |
-| Study | The file that the File menu saves and opens: the state of the views, and the data of the model. The `extension` of the main view names its file type. See [Saving and loading state](building-views.md#saving-and-loading-state). |
+| Study | The file that the File menu saves and opens: the state of the views, and the data of the model, if it has data to save. For a `DatabaseModel`, this data is its `per_session` database. A [shared database](sqlite-model.md#a-database-shared-by-every-session) is not in the study. The `extension` of the main view names its file type. See [Saving and loading state](building-views.md#saving-and-loading-state). |
 | Backend | The toolkit that shows the views: Qt, Textual, or the web. `run(MainViewClass)` starts the app on the backend that `--backend` names. See [Backends](running-the-app.md#backends). |
 | Jobs (`composeui.core.jobs`) | `main_view.jobs`: functions that [run in worker threads](threads.md). They report their results through signals. |
 | Task | `main_view.jobs.task(work)`, or `view.build_task(work)` in another view: a job that a view runs again and again, with its state (`is_running`, `progress`, `result`), and its `changed`, `finished`, and `failed` signals. See [Reusable loading tasks](threads.md#reusable-loading-tasks). |
 
-A backend binds each view to a widget with a renderer. The renderer keeps the two in sync in
-both directions, so the app's code never calls it. The
+A backend binds each view that it shows to a widget with a renderer. The renderer keeps the
+two in sync in both directions, so the app's code never calls it. The
 [technical guide](../technical-guide/architecture.md#views-and-renderers) explains renderers.
+
+A backend leaves out, with no error, a view that it has no renderer for. For example, Textual
+shows no `MapView`. See
+[Adapt the views to the backend](running-the-app.md#adapt-the-views-to-the-backend).
 
 ## How ComposeUI maps to MVVM
 
