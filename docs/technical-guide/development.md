@@ -16,9 +16,7 @@ Textual's console (`textual console`), add `--group textual-dev`. It is not in `
 installs Textual, which the tests without extras must not find.
 
 Run `make hooks` once in a clone. It sets git's `core.hooksPath` to `.githooks/`, whose hooks
-refuse a commit on `main` or on a branch with a slash in its name. They also refuse a message
-that is more than its subject, or a subject that is not capitalized, ends with a period, or
-credits an AI.
+check a commit's branch and message against the rules of `AGENTS.md` ("Commits").
 
 ## Commands
 
@@ -69,8 +67,7 @@ Every behavior change needs a test in `tests/`.
   Textual, and the Starlette test client for the web. It runs on `httpx2`, or on `httpx`
   before Python 3.11, as `httpx2` needs 3.11.
 - A backend's tests are in `tests/qtcore/`, `tests/textualcore/` or `tests/webcore/`, a
-  module per family of `_renderers/`, such as `test_tables.py`. A web test of another
-  `webcore` module goes in a test module named after it, such as `test_session.py`. A
+  module per family of `_renderers/` or per other module, such as `test_session.py`. A
   folder's `support.py` holds the helpers that several of its modules use, and its
   `conftest.py` the fixtures.
 - A rule that every backend follows, such as "a field reports the user's text, not the text
@@ -81,10 +78,9 @@ Every behavior change needs a test in `tests/`.
 - The rule that a view's signals report the user's changes only is moving into
   `tests/contracts/`, a family at a time. Families moved: inputs, controls. For a view in a moved
   family, test the rule there, not in each backend's folder.
-- Tests for an optional backend guard with `pytest.importorskip(...)`, on a module that only
-  the extra installs. A folder whose every test needs an extra goes in `collect_ignore_glob`
-  of `tests/conftest.py`, as `tests/qtcore/` does. The `without-extras` CI job runs the tests
-  without any extra, with `-p no:pytest-qt`: pytest-qt refuses to start without Qt.
+- A test of an optional backend skips without its extra: `pytest.importorskip(...)` on a
+  module that only the extra installs, or `collect_ignore_glob` in `tests/conftest.py` for a
+  folder, as for `tests/qtcore/`. The `without-extras` CI job checks it.
 - `make test` runs the tests in parallel, a worker per CPU (pytest-xdist). So a test must
   not depend on the state or the order of another. `pytest` without `-n` runs them one
   after another. On a machine that runs out of memory with a worker per CPU, set fewer, such
@@ -181,12 +177,11 @@ files, and delete `js/vendor/`.
 ## Code style
 
 - `ruff` lints with `select = ["ALL"]` and a line length of 100. `pyproject.toml` has the
-  ignore list. Fix lint properly rather than adding `noqa`, unless it is clearly justified.
-  A justified `noqa` says why in parentheses, e.g. `# noqa: SLF001 (shared task lifecycle)`,
-  or in a comment on the line above. `tests/test_code_rules.py` checks it, and the rules of
-  the architecture and code style that a script can check: the imports of the views and the
-  renderers, what the key maps hold, a test module per family, the Qt renderers' lambdas,
-  views defined in a function, the page's scripts' closures, and the browser tests' waits.
+  ignore list. Fix lint properly rather than adding `noqa`. A justified one says why, e.g.
+  `# noqa: SLF001 (shared task lifecycle)`, or in a comment above it.
+- `tests/test_code_rules.py` and `tests/test_docs.py` check the rules of this section and of
+  "Architecture" that a script can. Make a new such rule a test, and keep its sentence here
+  for its intent.
 - `mypy` must pass in strict mode, with the extra checks in `pyproject.toml`. Fully
   type-annotate new code: the package ships `py.typed`. Mark each method that
   overrides a base class's method with `@override` from `typing_extensions`, below
@@ -195,10 +190,9 @@ files, and delete `js/vendor/`.
   docstring. Ruff enforces it (`required-imports`, rule I002), and `make lint` adds it to a
   new file. The annotations are then strings:
   - Do not quote them.
-  - Define the views that `attrs` and `cattrs` resolve at module level, not inside a
-    function, so that their field types resolve from the module's globals. A test may
-    define one in its function to use a value of it, such as `tmp_path`, with field types
-    of the module only.
+  - Define views at module level, where `attrs` resolves their field types. A test may
+    define one in its function to use its `tmp_path`, typing fields with the module's
+    names only.
   - Give a `cattrs` hook its type explicitly, with
     `CONVERTER.register_structure_hook(cls, func)`, not as a bare decorator, which reads
     the annotation.
@@ -215,10 +209,9 @@ files, and delete `js/vendor/`.
   `self._connect(widget.toggled, self._update_checked)`, and to a view's signal with
   `self._relay(self._view.toggled, widget.toggled)`. Both helpers build a `QtSlot`
   (`qtcore/qtslot.py`): a `QObject` child of the widget, which PySide connects as a Qt slot.
-  PySide keeps a connection to any other callable, such as a lambda or a view's method, in a
-  table, and searches the whole table each time a sender is deleted. A page of many widgets
-  then took seconds to free. Call `connect` with such a callable only for a widget that a
-  page has few of, such as a table. Each `QtSlot` takes time to make, so pass all the
+  PySide searches its whole table of other connections, such as to a lambda, each time a
+  sender is deleted: keep those for a widget that a page has few of, such as a table. Each
+  `QtSlot` takes time to make, so pass all the
   methods of one signal to one `_connect`, in order:
   `self._connect(widget.toggled, self._update_checked, self._view.toggled.call_callbacks)`.
   A widget's own slots are methods of a `QObject`, and need no `QtSlot`.
@@ -226,10 +219,10 @@ files, and delete `js/vendor/`.
   without the widget reporting it. Qt blocks the widget's signals in `refresh_attribute`, but
   not the signals of a child widget, such as the line edit of a date field. Textual sets the
   value under `prevent(...)` through a method of the widget, such as `ComposeInput.set_value`.
-- In `webcore`, build HTML with `Markup(template).format(...)` from `markupsafe`, never with
-  an f-string. `format` escapes every value that is not `Markup` itself.
-- The page's scripts in `webcore/static/` are classic scripts with JSDoc types, each in a
-  closure, sharing only what another script calls under `window.ComposeUI`. Put a feature's
+- In `webcore`, build HTML with `Markup(template).format(...)` from `markupsafe`, which
+  escapes every value that is not `Markup` itself, never with an f-string.
+- The page's scripts in `webcore/static/` are classic scripts with JSDoc types, each one
+  closure that shares only `window.ComposeUI`. Put a feature's
   code in the script of its domain (`page.js`, `tables.js`, `charts.js`, `maps.js`).
   `make js-check` must pass: type what you add, with a JSDoc cast rather than a runtime check
   that changes what the code does.
@@ -271,11 +264,9 @@ uv sync --group dev --group docs --all-extras
   whether its `RENDERERS` has the key. A new widget, or a new backend, is in the catalog
   without a change to `docs/widgets.md`.
 - **A warning fails the build**, as a broken link or a docstring that autodoc cannot read.
-- **`tests/test_docs.py` checks examples and navigation.** Each name that a Python block of the
-  README, the guides, or the skill imports from `composeui` must be public. A block that defines
-  every name it uses must run in a scratch directory. A block that defines `test_` functions
-  must pass under pytest. The contents of each guide must list its pages and their `##` and `###`
-  headings. Links in the README to the site or repository must have a target.
+- **`tests/test_docs.py` checks examples and navigation:** that the examples import only public
+  names and run, that the contents lists and `llms.txt` follow the pages, that the README's
+  links have a target, and the Markdown's form. Read its tests for the full list.
 - **The screenshots of the examples are taken by a script.** `make screenshots` runs
   `docs/screenshots.py`, which writes `docs/images/<example>-<backend>.png` for Qt,
   Textual, and the web, in the light theme. The script sets each example up first, for

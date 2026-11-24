@@ -129,7 +129,7 @@ the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the overview.
    from attacker-controllable input (`location`, `window.name`, `document.referrer`,
    `postMessage`): that is client-side CSRF, which no server check stops.
 7. **Don't weaken the cookie.** Keep `same_site="lax"` (or stricter), signed, and with no
-   `Domain` shared with subdomains.
+   `Domain` shared with subdomains (`test_security.py` checks it).
 8. **No code in the markup.** No `<script>` without `src`, no `on*=` handler, no `hx-on`,
    no `js:` value, no `hx-trigger` filter: the policy refuses them, and htmx runs
    without `allowEval`. Put the behavior in the page's scripts in `static/` (`page.js`, or
@@ -164,8 +164,6 @@ the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the overview.
   header).
 - A new kind of response goes in `test_every_response_carries_the_security_headers`
   (`test_security.py`).
-- `test_the_session_cookie_stays_off_cross_site_posts_and_away_from_scripts`
-  (`test_security.py`) checks the cookie's `SameSite`, `HttpOnly` and `Domain` (rule 7).
 - `test_every_view_text_is_escaped` (`test_renderer.py`) puts hostile text in every text
   field of each main view in `_MAIN_VIEW_TYPES`, then parses the page in each state of
   `_states` (dialogs open, a cell edited, a table searched and filtered). The text must

@@ -148,7 +148,8 @@ Chromium. Browser tests are slow and opt-in, so the gate is stricter for them:
   `typeof htmx`).
 - **Wait on events, not time.** `expect(...)` assertions retry on their own; wrap
   an action that posts in `_posted(page)` to wait for the server's answer. No
-  `time.sleep` or `page.wait_for_timeout`. A test of a timeout derives its wait
+  `time.sleep` or `page.wait_for_timeout`, nor `cui-<id>` locators
+  (`tests/test_code_rules.py` refuses them). A test of a timeout derives its wait
   from the app's own setting (`_MESSAGE_TIMEOUT`), with a margin, rather than a
   bare number.
 - **Fail on unhandled script errors.** Keep the context-wide `weberror` guard
