@@ -95,7 +95,8 @@ class ComposeRangeSlider(DragReportMixin, can_focus=True):
         value = self.steps.value_at(position, self.first, self.step)
         return self.steps.shown_text(value, self.first, self.step)  # type: ignore[no-any-return]
 
-    def ends_text(self) -> str:
+    def shown_text(self) -> str:
+        """Get the ends' text, drawn beside the track."""
         return self._text_at(self.low) + RANGE_DASH + self._text_at(self.high)
 
     def set_steps(self, first: float, step: float, last: int, low: int, high: int) -> None:
@@ -126,7 +127,7 @@ class ComposeRangeSlider(DragReportMixin, can_focus=True):
             text.append("━" * (high - low - 1), style=fill)
             text.append("●", style=handles[1])
         text.append("─" * (width - high - 1), style=empty)
-        ends = self.ends_text().rjust(self._slot_width())
+        ends = self.shown_text().rjust(self._slot_width())
         text.append(f" {ends}", style=self.get_component_rich_style("slider--value"))
         return text
 

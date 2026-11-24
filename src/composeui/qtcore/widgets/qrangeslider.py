@@ -67,7 +67,8 @@ class QRangeSlider(QSlider):
         self.low, self.high = low, high
         self.update()
 
-    def ends_text(self) -> str:
+    def shown_text(self) -> str:
+        """Get the ends' text, painted beside the track."""
         return self._text_at(self.low) + RANGE_DASH + self._text_at(self.high)
 
     def _text_at(self, position: int) -> str:
@@ -131,7 +132,7 @@ class QRangeSlider(QSlider):
                 option.state &= ~QStyle.StateFlag.State_HasFocus
             style.drawComplexControl(QStyle.ComplexControl.CC_Slider, option, painter, self)
         align = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-        painter.drawText(self.value_rect(), align, self.ends_text())
+        painter.drawText(self.value_rect(), align, self.shown_text())
         painter.end()
 
     def _position_at(self, x: int) -> int:

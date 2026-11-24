@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 if TYPE_CHECKING:
     from contextlib import AbstractAsyncContextManager
@@ -27,4 +27,23 @@ class Driver(Protocol):
 
     def shown_text(self, view: View) -> str:
         """Read the text that `view`'s field shows."""
+        ...
+
+    async def toggle(self, view: View) -> None:
+        """Check `view`'s box, or uncheck it."""
+        ...
+
+    def is_checked(self, view: View) -> bool:
+        """Read whether `view`'s box shows checked."""
+        ...
+
+    async def slide(self, view: View, end: Literal["start", "end"]) -> None:
+        """Move `view`'s handle to the start of the track, or to its end, by key.
+
+        On a range, the key moves the handle on that side.
+        """
+        ...
+
+    def slider_text(self, view: View) -> str:
+        """Read the value that `view`'s slider shows beside its track."""
         ...

@@ -225,7 +225,7 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   widgets. A rule that one backend alone can break, such as an order of a toolkit's events,
   stays in that backend's folder.
 - The rule that a view's signals report the user's changes only is moving into
-  `tests/contracts/`, a family at a time. Families moved: inputs. For a view in a moved
+  `tests/contracts/`, a family at a time. Families moved: inputs, controls. For a view in a moved
   family, test the rule there, not in each backend's folder.
 - Tests for optional backends guard with `pytest.importorskip(...)`.
 - `make test` runs the tests in parallel, a worker per CPU (pytest-xdist): a test must not
