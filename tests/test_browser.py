@@ -73,6 +73,7 @@ from tests.horizontal import ButtonsMainView, HorizontalMainView, ManyButtonsMai
 from tests.listview import PIPES, PipesMainView
 from tests.maps import AutoMapMainView, MapMainView
 from tests.markdown import HelpMainView
+from tests.menubutton import MenuButtonMainView
 from tests.opening import OpeningMainView
 from tests.pages import PagesMainView, WidePageMainView
 from tests.ranges import RangesMainView
@@ -757,6 +758,23 @@ def buttons_page(browser: Browser, buttons_base_url: str) -> Iterator[Page]:
 
 
 @pytest.fixture(scope="module")
+def menu_button_base_url() -> Iterator[str]:
+    """Serve an app with a menu button beside a button, for the whole module."""
+    app = WebApplication(build_main_view=MenuButtonMainView).create_starlette_app()
+    with _serve(app) as url:
+        yield url
+
+
+@pytest.fixture
+def menu_button_page(browser: Browser, menu_button_base_url: str) -> Iterator[Page]:
+    """Open the app with a menu button like `page`, in a session of its own."""
+    context = browser.new_context(base_url=menu_button_base_url)
+    page = context.new_page()
+    yield page
+    context.close()
+
+
+@pytest.fixture(scope="module")
 def many_buttons_base_url() -> Iterator[str]:
     """Serve an app with rows of more buttons than its page holds, for the whole module."""
     app = WebApplication(build_main_view=ManyButtonsMainView).create_starlette_app()
@@ -896,6 +914,53 @@ def test_alt_shift_runs_a_menu_shortcut(page: Page) -> None:
     with _posted(page):
         page.get_by_role("button", name="Discard").click()
     expect(name).to_have_value("")
+
+
+def test_a_menu_button_opens_by_click_or_key_and_closes_on_the_entry_picked(
+    menu_button_page: Page,
+) -> None:
+    page = menu_button_page
+    page.goto("/")
+    more = page.get_by_role("button", name="More")
+    reload = page.get_by_role("button", name="Reload")
+    expect(reload).to_be_hidden()
+
+    more.click()
+    expect(reload).to_be_visible()
+    with _posted(page):
+        reload.click()
+
+    expect(page.get_by_text("Reloaded")).to_be_visible()
+    expect(reload).to_be_hidden()
+
+    more.focus()
+    expect(reload).to_be_visible()
+    page.keyboard.press("Tab")
+    page.keyboard.press("Tab")  # Preview, after Reload
+    with _posted(page):
+        page.keyboard.press("Enter")
+
+    expect(page.get_by_text("Previewed")).to_be_visible()
+    expect(reload).to_be_hidden()
+
+
+def test_a_menu_button_at_a_row_s_end_opens_its_list_within_a_phone_s_window(
+    menu_button_page: Page,
+) -> None:
+    page = menu_button_page
+    width = 390
+    page.set_viewport_size({"width": width, "height": 700})
+    page.goto("/")
+
+    page.get_by_role("button", name="More").click()
+
+    reload = page.get_by_role("button", name="Reload")
+    expect(reload).to_be_visible()
+    box = reload.bounding_box()
+    assert box is not None
+    assert box["x"] >= 0
+    assert box["x"] + box["width"] <= width
+    assert page.evaluate("document.documentElement.scrollWidth") == width
 
 
 def test_save_downloads_the_state_and_leaves_the_page(page: Page) -> None:

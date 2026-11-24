@@ -11,6 +11,10 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `MenuButtonView` is a button of a page that opens a list of actions, such as a More button.
+  Its `ActionView` and `SeparatorAction` fields are its entries, as in a `Menu`. Qt shows a
+  button with a menu, the web a drop-down list, and Textual a list under the button.
+
 - `SourceTableView.export_filename` set to `None` removes Export CSV from the table: the
   web's link, Qt's button and context menu entry, and Textual's key `e`. The web also refuses
   the table's CSV address.

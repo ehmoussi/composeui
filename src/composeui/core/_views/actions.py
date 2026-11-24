@@ -1,4 +1,4 @@
-"""The views of the menus and the toolbar: actions, menus and the file menu."""
+"""The views of the menus and the toolbar: actions, menus, menu buttons and the file menu."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from typing_extensions import override
 
 from composeui.core import study
 from composeui.core._views.base import OMIT, UI_TEXT, LogType, View, define_view
+from composeui.core._views.controls import ButtonVariant
 from composeui.core._views.dialogs import _CHANGED_ON_DISK_QUESTION
 from composeui.core.model import InvalidStateError, Model
 from composeui.core.renderer import MainRenderer
@@ -100,6 +101,22 @@ class ToolBar(View):
     _renderer_key = "toolbar"
 
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
+
+
+@define_view
+class MenuButtonView(View):
+    """A button of a page that opens a list of actions, for example a More button.
+
+    Its `ActionView` and `SeparatorAction` fields are its entries, in order, as in `Menu`.
+    The user picks an entry, which emits its `triggered`.
+    """
+
+    _renderer_key = "menu_button"
+    # as wide as its text in a row, as a `ButtonView`
+    default_stretch = 0
+
+    text: str = attrs.field(default="", metadata={UI_TEXT: True})
+    variant: ButtonVariant = attrs.field(default=ButtonVariant.SECONDARY)
 
 
 @define_view

@@ -362,6 +362,12 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   A drop-down is as wide as its longest item, the shortcut a faded hint beside it. On a phone,
   the buttons with an icon keep only their icon, and the app's title is cut short. So the header
   holds on one line. The pages' toolbar has a row of its own.
+- **A button with a menu.** A `MenuButtonView` is the header's drop-down in a page: its entries
+  are the menu items that `WebActionRenderer` draws, and its renderer adopts them, so the server
+  refuses an entry of a disabled or hidden button. daisyUI's drop-down opens from the button's
+  left edge and never flips, and the renderer doesn't know where the row puts the button. So
+  `page.js` measures the list each time it opens (`data-fit-dropdown`), and opens it from the
+  button's right edge instead where the window is too narrow, as at a row's end on a phone.
 - **Notification.** The main view's `notification` is drawn above the page's card, not in it:
   it isn't the page's content. It is sticky below the header, so a long page doesn't scroll it
   away. Its close button posts the number of the message it shows (`NotificationBar.number`):

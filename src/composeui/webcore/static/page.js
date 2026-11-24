@@ -359,6 +359,19 @@
       /** @type {HTMLElement} */ (document.activeElement).blur();
     }
   });
+  /* a menu button's list opens under the button, from its left edge (daisyUI's dropdowns
+     never flip): where the window is too narrow for it, e.g. a button at a row's end on a
+     phone, it opens from the button's right edge instead. Measured at each opening, from
+     the left edge first: the window can have changed since. */
+  document.addEventListener("focusin", function (event) {
+    var dropdown = /** @type {Element} */ (event.target).closest("[data-fit-dropdown]");
+    if (dropdown === null) return;
+    var list = /** @type {Element} */ (dropdown.querySelector(".dropdown-content"));
+    dropdown.classList.remove("dropdown-end");
+    if (list.getBoundingClientRect().right > document.documentElement.clientWidth) {
+      dropdown.classList.add("dropdown-end");
+    }
+  });
   /* the answer to a request whose element a swap has since replaced (e.g. a row clicked
      before the answer to a click on another row) still swaps its fragments: htmx looks
      for them from the element, which is no longer in the page. Whether it is, is read

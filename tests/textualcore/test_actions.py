@@ -25,11 +25,13 @@ from composeui.core.view import (
 from composeui.textualcore._renderers.navigation import TextualMainRenderer
 from composeui.textualcore.textualrenderer import TextualWidgetRenderer
 from composeui.textualcore.widgets.composedialog import ComposeDialog
+from composeui.textualcore.widgets.composemenubutton import ComposeMenuPopup
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbar, ComposeToolbarButton
 from examples.pipeform import PipeMainView
 from tests.dialogs import DialogsMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
-from tests.textualcore.support import _app_of, _field_widget
+from tests.menubutton import MenuButtonMainView
+from tests.textualcore.support import _app_of, _click_laid_out, _field_widget, _widget
 from tests.toolbar import ToolBarMainView
 
 if TYPE_CHECKING:
@@ -307,6 +309,82 @@ async def test_a_toolbar_shows_its_actions_above_the_pages_toolbar() -> None:
         await pilot.pause()
         await pilot.pause()
         assert [type(s).__name__ for s in app.screen_stack] == ["Screen", "FileOpen"]
+
+
+@pytest.mark.asyncio
+async def test_a_menu_button_lists_its_shown_actions_under_it_and_runs_the_one_picked() -> None:
+    view = MenuButtonMainView()
+    more = view.actions.more
+    more.reload.is_enabled = False
+    more.preview.text = "Preview [/draft]"  # shown as it is, not read as Textual's markup
+    more.wrap.is_visible = False
+    app = _app_of(view)
+
+    async with app.run_test() as pilot:
+        button = _widget(more)
+        await _click_laid_out(pilot, button)
+        await pilot.pause()
+        popup = app.screen
+        assert isinstance(popup, ComposeMenuPopup)
+        options = [popup.options.get_option_at_index(i) for i in range(2)]
+        assert [(str(o.prompt), o.disabled) for o in options] == [
+            ("Reload", True),
+            ("Preview [/draft]", False),
+        ]
+        assert popup.options.region.y == button.region.bottom  # under the button
+
+        await pilot.click(popup.options, offset=(2, 2))  # Preview, under the border and Reload
+        await pilot.pause()
+
+        assert not isinstance(app.screen, ComposeMenuPopup)
+        assert view.last.text == "Previewed"
+
+        view.last.text = ""
+        await _click_laid_out(pilot, button)
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        assert not isinstance(app.screen, ComposeMenuPopup)
+        await _click_laid_out(pilot, button)
+        await pilot.pause()
+        await pilot.click(offset=(app.size.width - 1, app.size.height - 1))  # outside the list
+        await pilot.pause()
+
+        assert not isinstance(app.screen, ComposeMenuPopup)
+        assert view.last.text == ""
+
+        # an entry hidden while the list shows it no longer runs, as Qt and the web refuse it
+        await _click_laid_out(pilot, button)
+        await pilot.pause()
+        popup = app.screen
+        assert isinstance(popup, ComposeMenuPopup)
+        more.preview.is_visible = False
+        await pilot.click(popup.options, offset=(2, 2))
+        await pilot.pause()
+        assert not isinstance(app.screen, ComposeMenuPopup)
+        assert view.last.text == ""
+
+
+@pytest.mark.asyncio
+async def test_a_menu_button_s_entry_keys_work_only_while_it_is_enabled_and_shown() -> None:
+    view = MenuButtonMainView()
+    more = view.actions.more
+    app = _app_of(view)
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        more.is_enabled = False
+        await pilot.press("ctrl+r")
+        await pilot.pause()
+        more.is_enabled = True
+        more.is_visible = False
+        await pilot.press("ctrl+r")
+        await pilot.pause()
+        assert view.last.text == ""
+        more.is_visible = True
+        await pilot.press("ctrl+r")
+        await pilot.pause()
+        assert view.last.text == "Reloaded"
 
 
 @pytest.mark.asyncio

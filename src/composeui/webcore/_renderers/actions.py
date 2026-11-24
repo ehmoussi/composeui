@@ -1,4 +1,4 @@
-"""The web renderers of actions: menus, toolbars, and the actions in them."""
+"""The web renderers of actions: menus, menu buttons, toolbars, and the actions in them."""
 
 from __future__ import annotations
 
@@ -16,7 +16,16 @@ from composeui.core._views.actions import (
     SaveAction,
     SaveAsAction,
 )
-from composeui.core.view import ActionView, Menu, PickFileAction, SeparatorAction, ToolBar, View
+from composeui.core.view import (
+    ActionView,
+    Menu,
+    MenuButtonView,
+    PickFileAction,
+    SeparatorAction,
+    ToolBar,
+    View,
+)
+from composeui.webcore._renderers.controls import _BUTTON_CLASSES
 from composeui.webcore.page import SAVE_FORM_ID
 
 if TYPE_CHECKING:
@@ -230,13 +239,14 @@ class WebActionRenderer(WebRenderer[ActionView]):
             ' whitespace-nowrap">{file_icon}{check}{text}</span>{kbd}'
         ).format(file_icon=_file_icon(view.icon), check=check, text=view.text, kbd=kbd)
         key = Markup(' data-shortcut="{}"').format(shortcut[1]) if shortcut else ""
-        if not view.is_enabled:
+        # `is_enabled`: an entry of a disabled menu button is disabled with it
+        if not self.is_enabled:
             item = Markup(
                 '<button type="button" class="justify-between" disabled>{}</button>'
             ).format(label)
         else:
             item = self._active_html(Markup('class="justify-between"'), label, key)
-        menu_disabled = "" if view.is_enabled else Markup(' class="menu-disabled"')
+        menu_disabled = "" if self.is_enabled else Markup(' class="menu-disabled"')
         return Markup("<li {root_attributes}{menu_disabled}>{item}</li>").format(
             root_attributes=self._root_attributes(oob=oob), menu_disabled=menu_disabled, item=item
         )
@@ -449,6 +459,62 @@ class WebSeparatorRenderer(WebRenderer[SeparatorAction]):
             ).format(self._root_attributes(oob=oob))
         return Markup('<li {} role="separator"><hr class="my-1 border-base-300 p-0"></li>').format(
             self._root_attributes(oob=oob)
+        )
+
+
+class WebMenuButtonRenderer(WebRenderer[MenuButtonView]):
+    """A button of the page opening a dropdown of its actions, as the header's menus do."""
+
+    _role = "menu_button"
+
+    def __init__(self, view: MenuButtonView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update({"text": self._mark_dirty, "variant": self._mark_dirty})
+
+    @override
+    def render(self) -> None:
+        super().render()
+        # disabled with the button, and swapped with it
+        self._adopt(self._view.children_views)
+
+    @override
+    def to_html(self, *, oob: bool = False) -> Markup:
+        view = self._view
+        items = _between_items(
+            [
+                (isinstance(child, SeparatorAction), child.renderer.to_html())
+                for child in view.children_views
+                if isinstance(child.renderer, WebRenderer)
+            ]
+        )
+        variant = _BUTTON_CLASSES[view.variant]
+        # a focusable `div`, as daisyUI asks: Safari doesn't focus a clicked button, and
+        # the dropdown opens while its trigger has the focus
+        trigger = (
+            Markup(
+                '<div tabindex="0" role="button" class="btn {variant} gap-1 pr-3"'
+                ' aria-haspopup="menu">{text}<span class="opacity-60">{chevron}</span></div>'
+            )
+            if self.is_enabled
+            else Markup(
+                '<div role="button" class="btn {variant} btn-disabled gap-1 pr-3"'
+                ' aria-disabled="true">{text}<span class="opacity-60">{chevron}</span></div>'
+            )
+        ).format(variant=variant, text=view.text, chevron=_icon("chevron"))
+        return Markup(
+            # `data-fit-dropdown`: the page's script keeps the list within the window
+            '<div {root_attributes} data-variant="{kind}" data-fit-dropdown'
+            ' class="dropdown self-start">'
+            "{trigger}"
+            # as wide as its longest item, its text and shortcut on one line
+            '<ul tabindex="-1" class="menu dropdown-content z-30 mt-1 w-max min-w-48'
+            ' rounded-box border border-base-300 bg-base-100 p-2 shadow-lg">{items}</ul>'
+            "</div>"
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            kind=view.variant.name.lower(),
+            trigger=trigger,
+            items=Markup("").join(item for (_, item) in items),
         )
 
 

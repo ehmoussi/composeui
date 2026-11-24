@@ -102,6 +102,7 @@ not in the package: run them from a clone of the repository (see
     - [Panes one above the other](user-guide/organizing-the-window.md#panes-one-above-the-other)
   - [A list of views](user-guide/organizing-the-window.md#a-list-of-views)
   - [Menus](user-guide/organizing-the-window.md#menus)
+    - [A button with a menu](user-guide/organizing-the-window.md#a-button-with-a-menu)
   - [Toolbars](user-guide/organizing-the-window.md#toolbars)
   - [Sidebar](user-guide/organizing-the-window.md#sidebar)
   - [Dialogs](user-guide/organizing-the-window.md#dialogs)

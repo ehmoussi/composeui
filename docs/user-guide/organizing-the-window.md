@@ -1,7 +1,7 @@
 # Organizing the window
 
-These views organize the window: pages, tabs, panes, a list of views, menus, toolbars, a
-sidebar, and dialogs.
+These views organize the window: pages, tabs, panes, a list of views, menus, buttons with a
+menu, toolbars, a sidebar, and dialogs.
 
 ## Pages
 
@@ -294,6 +294,58 @@ The File menu is built in (see
 [`LanguageMenu`](translation.md) lets the user switch languages. In
 [`src/examples/pipeform.py`](../../src/examples/pipeform.py), the Pipe menu resets the
 dimensions.
+
+### A button with a menu
+
+A `MenuButtonView` is a button of a page that opens a list of actions, for example a More
+button that keeps the actions a page seldom needs out of the way. Its `ActionView` and
+`SeparatorAction` fields are its entries, in order, as in a menu. Put it in a page or a row,
+as a `ButtonView`:
+
+```python
+from attrs import Factory
+
+from composeui.core.view import (
+    ActionView,
+    ButtonView,
+    HorizontalView,
+    MenuButtonView,
+    SeparatorAction,
+    define_view,
+)
+
+
+@define_view
+class MoreButton(MenuButtonView):
+    reload: ActionView = Factory(ActionView)
+    separator: SeparatorAction = Factory(SeparatorAction)
+    profiles: ActionView = Factory(ActionView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.text = "More"
+        self.reload.text = "Reload original study"
+        self.profiles.text = "Save or load profiles"
+
+
+@define_view
+class StudyActions(HorizontalView):
+    export: ButtonView = Factory(ButtonView)
+    more: MoreButton = Factory(MoreButton)
+```
+
+- An entry's `triggered` emits when the user picks it, or presses its `shortcut`, as in a
+  menu.
+- `variant` sets how much the button stands out, as for a `ButtonView`. It is
+  `ButtonVariant.SECONDARY` by default.
+- While the button is disabled or hidden, its entries are disabled too, their shortcuts
+  included.
+
+Qt shows a `QPushButton` with an arrow, which opens a `QMenu`. The web shows a button with a
+chevron, which opens a drop-down list. Textual shows a button with a ▾ sign, which opens a
+list of the entries under it. On Textual, the user picks an entry with a click, or with the
+arrow keys and Enter. Escape or a click outside closes the list. Unlike a menu's, every
+entry is within the user's reach on Textual, with or without a shortcut.
 
 ## Toolbars
 

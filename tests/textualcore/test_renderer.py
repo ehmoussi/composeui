@@ -53,6 +53,7 @@ from tests.hours import HoursMainView
 from tests.listview import PipesMainView
 from tests.markdown import HelpMainView
 from tests.markup import MARKUP, MarkupMainView
+from tests.menubutton import MenuButtonMainView
 from tests.metrics import JobsMainView
 from tests.ranges import RangesMainView
 from tests.sidebar import SidebarMainView
@@ -292,6 +293,7 @@ def _textual_widgets_of(view: View) -> list[object]:
         SplitterMainView,
         TabsMainView,
         ToolBarMainView,
+        MenuButtonMainView,
         CellWidgetsMainView,
         RoomsDataMainView,
         HelpMainView,

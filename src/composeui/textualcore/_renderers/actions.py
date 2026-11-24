@@ -1,4 +1,4 @@
-"""Textual actions, toolbars and the app that dispatches their events."""
+"""Textual actions, menu buttons, toolbars and the app that dispatches their events."""
 
 from __future__ import annotations
 
@@ -17,19 +17,24 @@ from composeui.core._views.actions import OpenFileAction, SaveAction, SaveAsActi
 from composeui.core.renderer import Renderer, ViewLike
 from composeui.core.view import (
     ActionView,
+    ButtonVariant,
     MainView,
     Menu,
+    MenuButtonView,
     PickFileAction,
     SeparatorAction,
     ToolBar,
     View,
 )
+from composeui.textualcore._renderers.controls import _BUTTON_VARIANTS
 from composeui.textualcore.textualrenderer import (
     TextualWidgetRenderer,
     _app_of,
     _call_on_app_thread,
     _refresh_tree,
 )
+from composeui.textualcore.widgets.composebutton import ComposeButton
+from composeui.textualcore.widgets.composemenubutton import ComposeMenuPopup
 from composeui.textualcore.widgets.composetoolbar import (
     ComposeToolbar,
     ComposeToolbarButton,
@@ -37,7 +42,7 @@ from composeui.textualcore.widgets.composetoolbar import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from textual.widget import Widget
 
@@ -88,6 +93,9 @@ class TextualActionRenderer(_TextualNoopRenderer[ActionView]):
         #: set by the toolbar showing the action (`TextualToolBarRenderer`, or
         #: `TextualRouterRenderer` for a page's action): its button
         self.button: ComposeToolbarButton | None = None
+        #: set by the menu button listing the action: the action's key works only while it
+        #: does, as on Qt and the web
+        self.menu_button: ComposeButton | None = None
         self._refresh_dispatcher.update(
             {
                 name: functools.partial(self._refresh_label, name)
@@ -107,6 +115,22 @@ class TextualActionRenderer(_TextualNoopRenderer[ActionView]):
         if isinstance(view, PickFileAction):
             # read by the picker each time it opens
             self._refresh_dispatcher["extensions"] = self._noop
+
+    @property
+    def takes_input(self) -> bool:
+        """Whether the user may trigger the action: as its menu button, if any, shows it.
+
+        The entry and its button shown, the button enabled. A list opened earlier can still
+        offer an entry hidden since, as its key can.
+        """
+        button = self.menu_button
+        if button is None:
+            return True
+        return (
+            self._view.is_visible
+            and not button.is_disabled
+            and all(node.display for node in button.ancestors_with_self)
+        )
 
     def _refresh_label(
         self, name: str, view: ActionView, _rendered_object: ActionView, value: Any
@@ -175,6 +199,70 @@ class TextualMenuRenderer(_TextualNoopRenderer[Menu]):
         super().__init__(view)
         # nowhere to show it: its actions are key bindings
         self._refresh_dispatcher.update({"title": self._noop})
+
+
+class TextualMenuButtonRenderer(TextualWidgetRenderer[MenuButtonView, ComposeButton]):
+    """A button opening a popup list of its actions under it."""
+
+    def __init__(self, view: MenuButtonView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {"text": self._refresh_text, "variant": self._refresh_variant}
+        )
+
+    @override
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = button = ComposeButton()
+            button.clicked.connect(self._open)
+            for child_view in self._view.children_views:
+                if isinstance(child_view.renderer, TextualActionRenderer):
+                    child_view.renderer.menu_button = button
+
+    def _open(self) -> None:
+        """List the shown entries under the button, as they are now."""
+        button = self._rendered_object
+        assert button is not None
+        shown = [
+            child
+            for child in self._view.children_views
+            if isinstance(child, (ActionView, SeparatorAction)) and child.is_visible
+        ]
+        entries = [
+            None
+            if isinstance(child, SeparatorAction)
+            else (
+                _action_label(
+                    text=child.text, is_checkable=child.is_checkable, is_checked=child.is_checked
+                ),
+                child.is_enabled,
+            )
+            for child in shown
+        ]
+        button.app.push_screen(
+            ComposeMenuPopup(entries, button.region),
+            functools.partial(self._pick, shown),
+        )
+
+    def _pick(self, shown: Sequence[View], index: int | None) -> None:
+        if index is None:
+            return
+        action = shown[index]
+        assert isinstance(action, ActionView)
+        app = self._get_app()
+        assert isinstance(app, _ComposeUIApp)
+        app.trigger(action)
+
+    @staticmethod
+    def _refresh_text(_view: MenuButtonView, rendered_object: ComposeButton, value: str) -> None:
+        # the triangle tells it from a plain button, as Qt's arrow and the web's chevron
+        rendered_object.label = Content(f"{value} ▾")
+
+    @staticmethod
+    def _refresh_variant(
+        _view: MenuButtonView, rendered_object: ComposeButton, value: ButtonVariant
+    ) -> None:
+        rendered_object.variant = _BUTTON_VARIANTS[value]
 
 
 class TextualToolBarRenderer(TextualWidgetRenderer[ToolBar, ComposeToolbar]):
@@ -298,7 +386,11 @@ class _ComposeUIApp(App[None]):
 
     def trigger(self, action_view: ActionView) -> None:
         """Trigger an action from its key binding or its toolbar button."""
-        if not action_view.is_enabled:  # its key stays bound while its button is disabled
+        renderer = action_view.renderer
+        # its key stays bound while its button is disabled or its page hidden
+        if not action_view.is_enabled or (
+            isinstance(renderer, TextualActionRenderer) and not renderer.takes_input
+        ):
             return
         if isinstance(action_view, _FILE_DIALOG_ACTIONS):
             # `ask_open_filepath`/`ask_save_filepath` block waiting for a modal file

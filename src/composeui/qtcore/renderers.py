@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from composeui.qtcore._renderers.actions import (
     QtActionRenderer,
+    QtMenuButtonRenderer,
     QtMenuRenderer,
     QtSeparatorRenderer,
     QtToolBarRenderer,
@@ -123,6 +124,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "markdown": QtMarkdownRenderer,
     "console": QtConsoleRenderer,
     "menu": QtMenuRenderer,
+    "menu_button": QtMenuButtonRenderer,
     "metric": QtMetricRenderer,
     "multi_combobox": QtMultiComboBoxRenderer,
     "notification_bar": QtNotificationBarRenderer,

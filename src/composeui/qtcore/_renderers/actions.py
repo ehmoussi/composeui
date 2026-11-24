@@ -1,14 +1,23 @@
-"""Qt action, menu, separator and toolbar renderers."""
+"""Qt action, menu, menu button, separator and toolbar renderers."""
 
 from __future__ import annotations
 
 from typing import Any
 
 from qtpy.QtGui import QAction, QIcon, QKeySequence
-from qtpy.QtWidgets import QMenu, QToolBar, QWidget
+from qtpy.QtWidgets import QMenu, QPushButton, QToolBar, QWidget
 from typing_extensions import override
 
-from composeui.core.view import ActionView, Menu, PickFileAction, SeparatorAction, ToolBar
+from composeui.core.view import (
+    ActionView,
+    ButtonVariant,
+    Menu,
+    MenuButtonView,
+    PickFileAction,
+    SeparatorAction,
+    ToolBar,
+)
+from composeui.qtcore._renderers.controls import show_variant
 from composeui.qtcore.qtrenderer import QtWidgetRenderer
 from composeui.qtcore.widgets.qplaintext import plain_tool_tip
 
@@ -128,6 +137,45 @@ class QtMenuRenderer(QtWidgetRenderer[Menu, QMenu]):
     @staticmethod
     def _refresh_title(_view: Menu, rendered_object: QMenu, title: str) -> None:
         rendered_object.setTitle(title)
+
+
+class QtMenuButtonRenderer(QtWidgetRenderer[MenuButtonView, QPushButton]):
+    """A push button that pops up a menu of its actions, an arrow showing it has one."""
+
+    def __init__(self, view: MenuButtonView) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {"text": self._refresh_text, "variant": self._refresh_variant}
+        )
+
+    @override
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = button = QPushButton()
+            menu = QMenu(button)
+            entries = [
+                child_view.renderer
+                for child_view in self._view.children_views
+                if isinstance(child_view.renderer, (QtActionRenderer, QtSeparatorRenderer))
+            ]
+            for entry in entries:
+                entry.set_parent_rendered_object(menu)
+                entry.render()
+                action = entry.qt_object
+                assert action is not None
+                menu.addAction(action)
+            button.setMenu(menu)
+            self.refresh()
+
+    @staticmethod
+    def _refresh_text(_view: MenuButtonView, rendered_object: QPushButton, value: str) -> None:
+        rendered_object.setText(value)
+
+    @staticmethod
+    def _refresh_variant(
+        _view: MenuButtonView, rendered_object: QPushButton, value: ButtonVariant
+    ) -> None:
+        show_variant(rendered_object, value)
 
 
 class QtToolBarRenderer(QtWidgetRenderer[ToolBar, QToolBar]):

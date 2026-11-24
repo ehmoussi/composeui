@@ -76,6 +76,7 @@ from tests.listview import PipesMainView
 from tests.lonerows import LoneRowsMainView
 from tests.maps import MapMainView
 from tests.markdown import HelpMainView
+from tests.menubutton import MenuButtonMainView
 from tests.metrics import JobsMainView
 from tests.pages import InputsPage, PagesMainView
 from tests.ranges import RangesMainView
@@ -348,6 +349,7 @@ _MAIN_VIEW_TYPES: list[type[MainView]] = [
     SidebarMainView,
     TabsMainView,
     ToolBarMainView,
+    MenuButtonMainView,
     WorkersMainView,
     OpacityMainView,
     LoneRowsMainView,

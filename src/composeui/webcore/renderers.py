@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Callable, Final
 
 from composeui.webcore._renderers.actions import (
     WebActionRenderer,
+    WebMenuButtonRenderer,
     WebMenuRenderer,
     WebSeparatorRenderer,
     WebToolBarRenderer,
@@ -120,6 +121,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "markdown": WebMarkdownRenderer,
     "console": WebConsoleRenderer,
     "menu": WebMenuRenderer,
+    "menu_button": WebMenuButtonRenderer,
     "metric": WebMetricRenderer,
     "multi_combobox": WebMultiComboBoxRenderer,
     "page": WebPageRenderer,
