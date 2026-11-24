@@ -251,6 +251,15 @@ class QtCheckBoxRenderer(QtWidgetRenderer[CheckBoxViewLike, QCheckBox]):
             self._view.is_checked = is_checked
 
 
+def show_variant(button: QPushButton, variant: ButtonVariant) -> None:
+    """Show a button's variant."""
+    # Qt has no variants: the style draws a default button emphasized, and a destroying
+    # one is red like an invalid field
+    button.setDefault(variant is ButtonVariant.PRIMARY)
+    is_danger = variant is ButtonVariant.DANGER
+    button.setStyleSheet("QPushButton { color: red; }" if is_danger else "")
+
+
 class ButtonViewLike(ViewLike, Protocol):
     text: str
     variant: ButtonVariant
@@ -280,11 +289,7 @@ class QtButtonRenderer(QtWidgetRenderer[ButtonViewLike, QPushButton]):
     def _refresh_variant(
         _view: ButtonViewLike, rendered_object: QPushButton, value: ButtonVariant
     ) -> None:
-        # Qt has no variants: the style draws a default button emphasized, and a
-        # destroying one is red like an invalid field
-        rendered_object.setDefault(value is ButtonVariant.PRIMARY)
-        is_danger = value is ButtonVariant.DANGER
-        rendered_object.setStyleSheet("QPushButton { color: red; }" if is_danger else "")
+        show_variant(rendered_object, value)
 
     def _emit_clicked(self) -> None:
         self._view.clicked.emit()

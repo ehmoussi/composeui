@@ -110,7 +110,6 @@ The SQLite model is complete otherwise: do not rebuild it.
   Pygments, on the web and Qt.
 - **Context menus** (Next). On tree nodes and table rows, built from `Menu`, with keyboard
   access, and a "⋮" button on the web.
-- **A button with a menu** (Next). "Add ▾", with the same popup menu as the context menus.
 - **Commands** (Next). One action, with its text, shortcut and enabled state, shared by a
   button, a menu entry and a toolbar entry.
 - **A wizard** (Next). Steps with Back, Continue, Finish, Cancel and Help, each step checked

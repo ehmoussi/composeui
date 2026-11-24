@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from composeui.textualcore._renderers.actions import (
     TextualActionRenderer,
+    TextualMenuButtonRenderer,
     TextualMenuRenderer,
     TextualSeparatorRenderer,
     TextualToolBarRenderer,
@@ -125,6 +126,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "markdown": TextualMarkdownRenderer,
     "console": TextualConsoleRenderer,
     "menu": TextualMenuRenderer,
+    "menu_button": TextualMenuButtonRenderer,
     "metric": TextualMetricRenderer,
     "multi_combobox": TextualMultiComboBoxRenderer,
     "page": TextualPageRenderer,

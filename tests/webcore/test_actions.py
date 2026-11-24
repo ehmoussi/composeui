@@ -38,6 +38,7 @@ from composeui.webcore.webrenderer import (
 )
 from examples.webhello import GreetingStyle, HelloMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
+from tests.menubutton import MenuButtonMainView
 
 if TYPE_CHECKING:
     if sys.version_info >= (3, 11):
@@ -333,6 +334,46 @@ def test_another_menu_is_a_dropdown_under_its_title() -> None:
     for action in (menu.zoom_in, menu.zoom_out):
         assert _element(dropdown, _action_id(action)).tag == "li"
     assert 'role="separator"' in dropdown
+
+
+def test_a_menu_button_is_a_dropdown_of_its_actions_disabled_with_it() -> None:
+    views: list[MenuButtonMainView] = []
+
+    class MenuButtonApp(WebApplication[MenuButtonMainView]):
+        def __init__(self) -> None:
+            super().__init__(build_main_view=MenuButtonMainView)
+
+        @override
+        def setup_session(self, main_view: MenuButtonMainView) -> None:
+            views.append(main_view)
+
+    with _Browser(MenuButtonApp().create_starlette_app()) as client:
+        page = client.get("/").text
+        (main_view,) = views
+        more = main_view.actions.more
+        button_id = _widget_id(more.renderer)
+        button = _element(page, button_id)
+        trigger = next(a for tag, a in button.descendants if a.get("role") == "button")
+        assert trigger["aria-haspopup"] == "menu"
+        assert "More" in button.text
+        dropdown = page[page.index(button_id) : page.index("</ul>", page.index(button_id))]
+        for action in (more.reload, more.preview, more.wrap):
+            assert _element(dropdown, _action_id(action)).tag == "li"
+        assert 'role="separator"' in dropdown
+        reload_url = f"/_composeui/widget/{_action_id(more.reload)}"
+
+        response = client.post(reload_url, data={"event": "triggered"})
+
+        assert _swapped(response.text, _widget_id(main_view.last.renderer)).text == "Reloaded"
+
+        with collect_dirty() as dirty:
+            more.is_enabled = False
+            swapped = _swapped(render_dirty(dirty), button_id)
+        assert any(a.get("aria-disabled") == "true" for _, a in swapped.descendants)
+        assert all("disabled" in a for tag, a in swapped.descendants if tag == "button")
+        main_view.last.text = ""
+        refused = client.post(reload_url, data={"event": "triggered"})
+        assert (refused.status_code, main_view.last.text) == (400, "")
 
 
 @pytest.mark.parametrize(("action", "key"), [("new", "N"), ("open_file", "O"), ("save", "S")])

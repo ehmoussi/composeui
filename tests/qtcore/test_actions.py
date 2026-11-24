@@ -17,6 +17,7 @@ from qtpy.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMenu,
+    QPushButton,
     QToolBar,
 )
 
@@ -30,6 +31,7 @@ from composeui.qtcore._renderers.actions import QtActionRenderer
 from composeui.qtcore.qtrenderer import QtWidgetRenderer
 from examples.pipeform import PipeMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
+from tests.menubutton import MenuButtonMainView
 from tests.pages import (
     InputsPage,
 )
@@ -111,6 +113,25 @@ def test_menu_renderer_builds_a_real_qmenu_with_actions_and_shortcuts(qtbot: QtB
     open_action = next(a for a in file_menu.actions() if a.text() == "Open")
     assert open_action.shortcut().toString() == "Ctrl+O"
     assert any(a.isSeparator() for a in file_menu.actions())
+
+
+def test_a_menu_button_pops_up_its_actions_and_runs_the_one_picked(qtbot: QtBot) -> None:
+    view = MenuButtonMainView()
+    view.render(RendererType.QT)
+    qtbot.addWidget(_widget(view))
+    button = _widget(view.actions.more)
+    assert isinstance(button, QPushButton)
+    menu = button.menu()
+    assert isinstance(menu, QMenu)
+
+    assert button.text() == "More"
+    assert [a.text() for a in menu.actions()] == ["Reload", "Preview", "", "Wrap"]
+    reload, _preview, separator, _wrap = menu.actions()
+    assert separator.isSeparator()
+
+    reload.trigger()
+
+    assert view.last.text == "Reloaded"
 
 
 def test_a_checkable_action_and_its_qaction_toggle_together(qtbot: QtBot) -> None:
