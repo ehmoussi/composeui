@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
     from textual.pilot import Pilot
+    from textual.widget import Widget
 
     from composeui.core.view import MainView, View
 
@@ -38,8 +39,7 @@ class TextualDriver:
             yield
 
     async def type(self, view: View, text: str) -> None:
-        text_input = _input(view)
-        text_input.focus()
+        await self._focus(_input(view))
         await self._press("ctrl+shift+a", *text)  # select all, then type over it
 
     async def leave(self, view: View) -> None:
@@ -50,18 +50,26 @@ class TextualDriver:
         return _input(view).value
 
     async def toggle(self, view: View) -> None:
-        _checkbox(view).focus()
+        await self._focus(_checkbox(view))
         await self._press("space")
 
     def is_checked(self, view: View) -> bool:
         return _checkbox(view).value
 
     async def slide(self, view: View, end: Literal["start", "end"]) -> None:
-        _slider(view).focus()
+        await self._focus(_slider(view))
         await self._press("home" if end == "start" else "end")
 
     def slider_text(self, view: View) -> str:
         return _slider(view).shown_text()
+
+    async def _focus(self, widget: Widget) -> None:
+        assert self._pilot is not None
+        # `focus()` only asks the app to focus it later: a key could come first, and an input's
+        # `Focus`, which selects all its text, after it. `set_focus` posts `Focus` now, and the
+        # pause waits for the messages already posted to each widget.
+        self._pilot.app.screen.set_focus(widget)
+        await self._pilot.pause()
 
     async def _press(self, *keys: str) -> None:
         assert self._pilot is not None
