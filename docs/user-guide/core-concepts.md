@@ -80,9 +80,14 @@ assert button.text == "Clicked"
 ```
 
 `Application.connect(view=..., signals=...)` supplies the explicit `view` instead. It need
-not own those signals. A standalone signal, such as a model's signal, has no owning view.
-If a callback asks for `view` when none is available, it uses its parameter's default.
-Without a default, the call raises `ValueError`. Signals do not keep their owning views alive.
+not own those signals. The callback also gets the app's own `main_view`, and a
+`ModelApplication`'s own `model`, even from a signal of another app or a standalone signal.
+A standalone signal, such as a model's signal, has no owning view. If a callback asks for
+`view`, `main_view`, or `model` when none is available, it uses its parameter's default.
+Without a default, the call raises `ValueError`. On the web, `app.connect` refuses a view or
+a signal outside the app's main view (see
+[How the web differs from a window](running-the-app.md#how-the-web-differs-from-a-window)).
+Signals do not keep their owning views alive.
 A signal belongs to one view: giving it to another view, as in `b.clicked = a.clicked`,
 raises `ValueError`.
 

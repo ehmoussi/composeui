@@ -226,6 +226,11 @@ backends' modules included, can change in any release without an entry here.
   save or a download beside the user's file. Two saves of one study at once no longer share their
   unfinished file.
 
+- A callback connected with `Application.connect` gets the app's own `main_view`, and a
+  `ModelApplication`'s own `model`, from a signal of another app or a standalone signal:
+  before, it got the other app's, or raised `ValueError`. A callback's default for
+  `main_view` is used when a signal has none, as it is for `view` and `model`.
+
 - A web session with a `session_ttl` longer than 14 days ends after `session_ttl` without a
   request, up to the 400 days that a browser keeps a cookie: before, its cookie lasted 14 days,
   and the session ended with it.

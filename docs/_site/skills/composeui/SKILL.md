@@ -174,8 +174,9 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
 - **A signal callback asks for `view`, `main_view`, or `model` by parameter name,** and
   `connect` injects them. Spell the names exactly. With `signal.connect`, `view` is the
   signal's owning view, available even before an app is built. With `Application.connect`,
-  it is the explicit `view` argument instead. A standalone signal has no owning view:
-  a callback's `view` default is used, or the call raises `ValueError` without one.
+  it is the explicit `view` argument instead, and `main_view` (and a `ModelApplication`'s
+  `model`) are the app's own, whatever signal emits. A standalone signal has no owning view: a callback's default is
+  used for what is missing, or the call raises `ValueError` without one.
   A signal belongs to one view: giving it to another view raises `ValueError`.
   A callback may take fewer of the signal's arguments than it emits.
 - **Check a form with a validator:** `self.set_validator(self._check, self.text_edited)`

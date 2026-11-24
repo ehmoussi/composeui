@@ -360,7 +360,8 @@ For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhel
   its connections. Two other places also run once per session:
   - `app.connect(view=..., signals=[...])` records a connection on `app.main_view`, a
     template that no browser shows. The app replays it on the main view of every new
-    session, and the callback gets the `view` and `main_view` of that session.
+    session, and the callback gets the `view` and `main_view` of that session. So it raises
+    `ValueError` for a view or a signal outside `app.main_view`, such as a standalone signal.
   - `WebApplication.setup_session(main_view)` runs for the main view of each new session.
     Override it in a subclass.
 - **Models are per session too.** `run(..., build_model=..., setup_model=...)` builds one
