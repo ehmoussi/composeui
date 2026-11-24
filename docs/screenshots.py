@@ -110,7 +110,7 @@ def _pipeform(main_view: Any, _model: Optional[Model]) -> None:
     form.name.text = "Junction A"
     form.material.value = pipeform.Material.Copper
     form.insulated.is_checked = True
-    form.insulated.toggled.emit(True)  # noqa: FBT003
+    form.insulated.toggled.emit(True)  # noqa: FBT003 (the signal's argument)
     form.main_pipe.radius.value, form.main_pipe.width.value = 50.0, 10.0
     form.main_pipe.half_length.value = 200.0
     form.incident_pipe.radius.value, form.incident_pipe.width.value = 30.0, 8.0
@@ -571,19 +571,19 @@ def main() -> None:
         if "qt" in example.backends:
             path = IMAGES / f"{example.name}-qt.png"
             qt_screenshot(example, path)
-            print(path.relative_to(ROOT))  # noqa: T201
+            print(path.relative_to(ROOT))  # noqa: T201 (the command's output)
         if "textual" in example.backends:
             svgs[IMAGES / f"{example.name}-textual.png"] = textual_svg(example)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         for path, svg in svgs.items():
             svg_to_png(browser, svg, path)
-            print(path.relative_to(ROOT))  # noqa: T201
+            print(path.relative_to(ROOT))  # noqa: T201 (the command's output)
         for example in examples:
             if "web" in example.backends:
                 path = IMAGES / f"{example.name}-web.png"
                 web_screenshot(browser, example, path)
-                print(path.relative_to(ROOT))  # noqa: T201
+                print(path.relative_to(ROOT))  # noqa: T201 (the command's output)
         browser.close()
 
 

@@ -559,10 +559,10 @@ It shows:
   slider's hour, which [`show_frame`](user-guide/dashboards.md#a-frame-in-a-table) shows:
   Polars sorts, searches, and filters them.
 - a [loading task](user-guide/threads.md#reusable-loading-tasks) that only reads the CSV
-  file, once for every session. Two [reactive methods](user-guide/reactive-methods.md) read its result, a frame, on
-  the main thread. One gives the chart its series. The other follows the slider: it gives the
-  table and the map the pickups of the hour, and marks the hour on the chart. The model keeps
-  no copy of the frame.
+  file, once for every session. Two [reactive methods](user-guide/reactive-methods.md) read its
+  result, a frame, on the main thread. One gives the chart its series. The other follows the slider:
+  it gives the table and the map the pickups of the hour, and marks the hour on the chart. The model
+  keeps no copy of the frame.
 - the status line, the chart, the map, and the sidebar of [Uber pickups](#uber-pickups).
   The chart's series comes from [`Series.bars`](user-guide/charts.md#kinds-of-chart), and
   the map's points from the frame, with

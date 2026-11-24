@@ -97,9 +97,11 @@ dev = [
     "pytest-repeat>=0.9.4",
     "pytest-xdist>=3.6.1",
     "ruff>=0.15.17",
-    "textual-dev>=1.8.0",
     "watchfiles>=1.1.1",
 ]
+# Textual's console for debugging an app (`textual console`): its own group, as it installs
+# Textual, which the dev group must not, so that the tests run without the `tui` extra
+textual-dev = ["textual-dev>=1.8.0"]
 docs = [
     "furo>=2024.8.6",
     "myst-parser>=3.0.1",

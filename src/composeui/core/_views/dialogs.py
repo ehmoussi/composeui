@@ -299,7 +299,7 @@ class OkCancelDialogView(DialogView):
         self.kind = DialogKind.CONFIRM
         self.log_view.is_visible = False
         for button in self.buttons:
-            button._answer_click = functools.partial(self.click, button)  # noqa: SLF001
+            button._answer_click = functools.partial(self.click, button)  # noqa: SLF001 (the dialog's answer to the button)
 
     @property
     def buttons(self) -> list[DialogButtonView]:

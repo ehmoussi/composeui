@@ -522,11 +522,12 @@ def test_a_new_image_swaps_its_address_and_the_old_one_answers_no_other_image(
         assert browser.get(old_address).status_code == 404
 
 
-def test_an_image_s_height_sets_its_size_on_the_page() -> None:
-    @define_view
-    class TallPictureMainView(MainView):
-        picture: ImageView = child(ImageView, image=_PNG, height=120)
+@define_view
+class TallPictureMainView(MainView):
+    picture: ImageView = child(ImageView, image=_PNG, height=120)
 
+
+def test_an_image_s_height_sets_its_size_on_the_page() -> None:
     app: WebApplication[TallPictureMainView] = WebApplication(build_main_view=TallPictureMainView)
     with _Browser(app.create_starlette_app()) as browser:
         assert 'style="height: 120px"' in browser.get("/").text
@@ -548,11 +549,12 @@ def test_an_image_is_only_served_to_its_own_session() -> None:
     assert "no-store" in with_another_session.headers["cache-control"]
 
 
-def test_a_widget_that_is_no_image_serves_nothing_at_an_image_s_address() -> None:
-    @define_view
-    class LabelMainView(MainView):
-        note: LabelView = child(LabelView, text="Note")
+@define_view
+class LabelMainView(MainView):
+    note: LabelView = child(LabelView, text="Note")
 
+
+def test_a_widget_that_is_no_image_serves_nothing_at_an_image_s_address() -> None:
     views: list[LabelMainView] = []
 
     class LabelApp(WebApplication[LabelMainView]):

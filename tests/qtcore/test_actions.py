@@ -174,7 +174,7 @@ def test_open_file_action_runs_the_native_dialog_and_loads_state(
     monkeypatch.setattr(
         QFileDialog,
         "getOpenFileName",
-        staticmethod(lambda *args, **kwargs: (str(filepath), ".pipe (*.pipe)")),  # noqa: ARG005
+        staticmethod(lambda *args, **kwargs: (str(filepath), ".pipe (*.pipe)")),  # noqa: ARG005 (QFileDialog's arguments)
     )
 
     open_action_renderer = view.file_menu.open_file.renderer
@@ -205,7 +205,7 @@ def test_save_file_action_runs_the_native_dialog_and_saves_state(
     monkeypatch.setattr(
         QFileDialog,
         "getSaveFileName",
-        staticmethod(lambda *args, **kwargs: (str(target), ".pipe (*.pipe)")),  # noqa: ARG005
+        staticmethod(lambda *args, **kwargs: (str(target), ".pipe (*.pipe)")),  # noqa: ARG005 (QFileDialog's arguments)
     )
 
     save_action_renderer = view.file_menu.save.renderer

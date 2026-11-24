@@ -422,7 +422,7 @@ async def test_a_picker_s_folder_list_reads_its_styles_on_the_app_s_thread() -> 
 
     def read_styles(navigation: DirectoryNavigation) -> None:
         try:
-            read.append(navigation._styles)  # noqa: SLF001  # what its loading thread reads
+            read.append(navigation._styles)  # noqa: SLF001 (what its loading thread reads)
         except KeyError as error:
             read.append(error)
 
@@ -434,7 +434,7 @@ async def test_a_picker_s_folder_list_reads_its_styles_on_the_app_s_thread() -> 
         await pilot.pause()
         navigation = app.screen.query_one(DirectoryNavigation)
         # as Textual applies the list's styles again: none, until the app's thread is done
-        styles = navigation._component_styles  # noqa: SLF001  # nothing else reaches them
+        styles = navigation._component_styles  # noqa: SLF001 (nothing else reaches them)
         kept = dict(styles)
         styles.clear()
         thread = threading.Thread(target=read_styles, args=(navigation,))

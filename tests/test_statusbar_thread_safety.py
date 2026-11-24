@@ -21,10 +21,10 @@ from typing import TYPE_CHECKING, ClassVar
 import pytest
 
 qtpy = pytest.importorskip("qtpy")
-from qtpy.QtWidgets import QApplication  # noqa: E402
+from qtpy.QtWidgets import QApplication  # noqa: E402 (after the skip without qtpy)
 
-from composeui.core.registry import RendererType  # noqa: E402
-from composeui.core.view import StatusBar  # noqa: E402
+from composeui.core.registry import RendererType  # noqa: E402 (after the skip without qtpy)
+from composeui.core.view import StatusBar  # noqa: E402 (after the skip without qtpy)
 
 if TYPE_CHECKING:
     from collections.abc import Callable

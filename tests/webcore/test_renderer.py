@@ -222,8 +222,23 @@ def test_every_view_text_is_escaped(main_view_type: type[MainView]) -> None:
         assert finder.shown > 0, state  # escaped, not dropped
 
 
+def _is_text_built(node: ast.expr) -> bool:
+    """Tell whether `node` builds a text from values, which `Markup` would then not escape."""
+    if isinstance(node, (ast.JoinedStr, ast.BinOp)):
+        return True
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "format"
+        and isinstance(node.func.value, ast.Constant)
+    )
+
+
 def test_the_web_backend_builds_its_html_with_markup() -> None:
-    """A text put in HTML by an f-string would go unescaped: `Markup.format` escapes it."""
+    """A text put in HTML by an f-string, or built before `Markup`, goes unescaped.
+
+    `Markup(template).format(...)` escapes each value.
+    """
     webcore = Path(__file__).parents[2] / "src/composeui/webcore"
     found: list[str] = []
     # the modules writing HTML, the renderers moved out of `webrenderer.py` included
@@ -240,6 +255,12 @@ def test_the_web_backend_builds_its_html_with_markup() -> None:
                     found.append(f"{path.relative_to(webcore)}:{node.lineno} f-string")
             elif isinstance(node, ast.Attribute) and ast.unparse(node) == "html.escape":
                 found.append(f"{path.relative_to(webcore)}:{node.lineno} html.escape")
+            elif (
+                isinstance(node, ast.Call)
+                and ast.unparse(node.func) in {"Markup", "markupsafe.Markup"}
+                and any(_is_text_built(argument) for argument in node.args)
+            ):
+                found.append(f"{path.relative_to(webcore)}:{node.lineno} Markup of a built text")
     assert found == []
 
 

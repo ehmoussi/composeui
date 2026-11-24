@@ -305,7 +305,7 @@ class _Folder:
 
 def _data_revision(model: Model | None) -> int:
     """Get the model's count of every change of its data, read before the data is pinned."""
-    return 0 if model is None else model._data_revision()  # noqa: SLF001
+    return 0 if model is None else model._data_revision()  # noqa: SLF001 (the model's data, which only autosave reads)
 
 
 def _study_file_of(main_view: MainView) -> tuple[str | None, int | None]:
@@ -313,7 +313,7 @@ def _study_file_of(main_view: MainView) -> tuple[str | None, int | None]:
     study = main_view.state_filepath
     if study is None:
         return None, None
-    known = main_view._study_file  # noqa: SLF001
+    known = main_view._study_file  # noqa: SLF001 (the main view's study, which only the core and backends keep)
     return str(study), known[1] if known is not None and known[0] == str(study) else None
 
 
@@ -514,7 +514,7 @@ class Autosave:
         study_mark = main_view._study_mark(file_data["views"])  # noqa: SLF001 (Save's own)
         # and every change of the data, the start's jobs' included, which a snapshot copies
         mark = (*study_mark, _data_revision(model))
-        saved = main_view._saved_study  # noqa: SLF001
+        saved = main_view._saved_study  # noqa: SLF001 (the main view's study, which only the core and backends keep)
         folder = self._folder
         if saved is None or saved == study_mark:  # nothing to lose, e.g. a change undone
             if folder.record is not None:
@@ -544,7 +544,7 @@ class Autosave:
                 data = f"data-{name}{Path(model.data_name or '').suffix}"
                 written.append(data)
                 try:
-                    pinned = model._pin_data()  # noqa: SLF001
+                    pinned = model._pin_data()  # noqa: SLF001 (the model's data, which only autosave reads)
                     if pinned is None:  # copied now, on the main thread
                         model.save_data(folder.path / data)
                 except (OSError, sqlite3.Error) as error:

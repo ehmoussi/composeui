@@ -123,6 +123,22 @@ def test_a_post_from_the_app_s_own_page_is_served(app: _HelloApp, headers: dict[
     assert session_view.form.name.text == "Ada"
 
 
+def test_the_session_cookie_stays_off_cross_site_posts_and_away_from_scripts(
+    app: _HelloApp,
+) -> None:
+    """A cross-site post carries no cookie, a page's script can't read it, no subdomain gets it."""
+    with _Browser(app.create_starlette_app()) as browser:
+        cookie = browser.get("/").headers["set-cookie"]
+
+    attributes: dict[str, str] = {}
+    for part in cookie.split(";")[1:]:
+        name, _, value = part.strip().lower().partition("=")
+        attributes[name] = value
+    assert attributes["samesite"] in {"lax", "strict"}
+    assert "httponly" in attributes
+    assert "domain" not in attributes
+
+
 def test_every_response_carries_the_security_headers(app: _HelloApp, tmp_path: Path) -> None:
     """Another site's frame would get the user's clicks past the origin check."""
     icon = tmp_path / "logo.svg"

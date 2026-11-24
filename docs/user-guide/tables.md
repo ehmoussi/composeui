@@ -69,8 +69,8 @@ A filter accepts these values:
   - with the `.*` toggle of the editor on, a regular expression, for example `Room [1-3]`.
     The chip reads "Room matches Room [1-3]". The app sets this filter as
     `as_pattern("Room [1-3]")`, between slashes.
-- In a number, a date, or a duration column (`1d 2h 30m`, or a number of seconds): `>20`, `>=20`, `<20`, `<=20`, `!=20`, a range `18..24`
-  (both ends included), or a bare value, which means `=`.
+- In a number, a date, or a duration column (`1d 2h 30m`, or a number of seconds): `>20`, `>=20`,
+  `<20`, `<=20`, `!=20`, a range `18..24` (both ends included), or a bare value, which means `=`.
 - In a boolean column: `true` or `false`.
 - In any column: `=` alone, for the empty cells.
 

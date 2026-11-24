@@ -129,7 +129,7 @@ async def test_a_range_slider_s_handles_move_by_keys_and_clicks_stopping_on_each
         assert hours.value == (19, 20)
         hours.value = (5, 5)
         await pilot.pause()
-        width = slider._track_width()  # noqa: SLF001
+        width = slider._track_width()  # noqa: SLF001 (where the slider draws its track)
         # beside both, past them: the high one, on the side of the click; then a page and a drag
         await pilot.click(slider, offset=(1 + round(9 * (width - 1) / 23), 1))
         await pilot.press("pagedown")
@@ -340,7 +340,7 @@ async def test_a_slider_reports_a_drag_once_its_handle_rests_and_on_release(
         slider = _field_widget(workers.renderer)
         assert isinstance(slider, ComposeSlider)
         await pilot.pause()
-        width = slider._track_width()  # noqa: SLF001
+        width = slider._track_width()  # noqa: SLF001 (where the slider draws its track)
 
         def at(position: int) -> tuple[int, int]:
             return (1 + round(position * (width - 1) / slider.last), 1)
@@ -383,7 +383,7 @@ async def test_a_rest_s_call_on_its_way_after_the_release_reports_nothing_again(
         slider = _field_widget(workers.renderer)
         assert isinstance(slider, ComposeSlider)
         await pilot.pause()
-        width = slider._track_width()  # noqa: SLF001
+        width = slider._track_width()  # noqa: SLF001 (where the slider draws its track)
         rests: list[Callable[[], None]] = []
         set_timer = slider.set_timer
 
@@ -415,7 +415,7 @@ async def test_a_range_slider_reports_a_drag_once_its_handle_rests_and_on_releas
         slider = _field_widget(hours.renderer)
         assert isinstance(slider, ComposeRangeSlider)
         await pilot.pause()
-        width = slider._track_width()  # noqa: SLF001
+        width = slider._track_width()  # noqa: SLF001 (where the slider draws its track)
 
         def at(position: int) -> tuple[int, int]:
             return (1 + round(position * (width - 1) / slider.last), 1)

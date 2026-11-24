@@ -57,7 +57,7 @@ _DOCS_REF = environ.get("COMPOSEUI_DOCS_REF", "main")
 _LATEST_TAG = environ.get("COMPOSEUI_DOCS_LATEST_TAG", "")
 if not _LATEST_TAG and (git := shutil.which("git")):
     # Fixed arguments only; use local tags so a normal `make docs` shows both choices.
-    tags = subprocess.run(  # noqa: S603 - the executable is resolved and arguments are fixed
+    tags = subprocess.run(  # noqa: S603 (the executable is resolved and arguments are fixed)
         [git, "tag", "--list", "v[0-9]*", "--sort=-version:refname"],
         cwd=Path(__file__).parent,
         capture_output=True,

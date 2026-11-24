@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+pytest.importorskip("PySide6")
 from composeui.qtcore.qtapplication import QtApplication
 from examples.pipeform import EdgeType, Material, PipeMainView
 

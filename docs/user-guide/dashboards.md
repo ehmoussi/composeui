@@ -96,8 +96,8 @@ be.
 The main view starts the task, and two [reactive methods](reactive-methods.md) read its result.
 `fill_filters` gives each filter the values of its column. `filtered` gives the rows that every
 filter keeps. Both find the filters in the view that they get and in its child views, at any
-depth: here, the main view and its sidebar. Each method runs again when a field that it reads changes, so the dashboard
-follows each change of a filter:
+depth: here, the main view and its sidebar. Each method runs again when a field that it reads
+changes, so the dashboard follows each change of a filter:
 
 ```python
 from composeui.core.application import run

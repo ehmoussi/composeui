@@ -287,8 +287,8 @@ entry point, callers, callees, sibling backend implementations, overlapping
 tests (including the examples in `src/examples/` the tests drive), and relevant
 `git log -p` history. Read `AGENTS.md` and, for web work, the
 [web backend design](../../../docs/technical-guide/web-backend.md) first. When the test claims
-toolkit-backed behavior (Qt signals, Textual message ordering, htmx swap semantics, cattrs hooks), inspect
-the dependency source or types under `.venv/` directly.
+toolkit-backed behavior (Qt signals, Textual message ordering, htmx swap semantics, cattrs hooks),
+inspect the dependency source or types under `.venv/` directly.
 
 ## Discovery
 

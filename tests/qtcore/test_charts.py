@@ -138,7 +138,7 @@ def test_hovering_the_chart_shows_the_values_at_the_cursor(qtbot: QtBot) -> None
     assert lines[0].endswith(" L/s")
     assert lines[1] == "Pressure: 20.00 kPa"  # its trailing zeros kept, as on the web
     if hasattr(QFont, "Tag"):  # digits of one width, from Qt 6.7
-        assert QFont.Tag("tnum") in chart._hover.textItem.font().featureTags()  # noqa: SLF001
+        assert QFont.Tag("tnum") in chart._hover.textItem.font().featureTags()  # noqa: SLF001 (the chart's hover label, which only Qt draws)
     _chart_scene(chart).sigMouseMoved.emit(QPointF(-10, -10))  # off the plot
     qtbot.waitUntil(lambda: chart.hover_text() == "")
 
@@ -226,7 +226,7 @@ def test_a_bar_chart_groups_a_bar_per_series_in_each_category(qtbot: QtBot) -> N
     assert list(np.asarray(cooling.opts["x0"])) == pytest.approx([0.0, 2.0])
     assert pg.mkBrush(heating.opts["brush"]).color().name() == SERIES_COLORS[False][0]
     assert chart.legend_names() == ["Heating", "Cooling"]
-    ticks = plot.getAxis("bottom")._tickLevels  # noqa: SLF001
+    ticks = plot.getAxis("bottom")._tickLevels  # noqa: SLF001 (pyqtgraph has no public call for the ticks)
     assert ticks == [[(0, "Kitchen"), (1, "Bedroom"), (2, "Office")]]
 
     energy = view.router.chart.energy
@@ -234,7 +234,7 @@ def test_a_bar_chart_groups_a_bar_per_series_in_each_category(qtbot: QtBot) -> N
     energy.series = [attrs.evolve(curve, kind=ChartKind.LINE) for curve in energy.series]
     assert sum(isinstance(item, pg.PlotDataItem) for item in plot.items) == 2
     assert not any(isinstance(item, pg.BarGraphItem) for item in plot.items)
-    assert plot.getAxis("bottom")._tickLevels == ticks  # noqa: SLF001
+    assert plot.getAxis("bottom")._tickLevels == ticks  # noqa: SLF001 (pyqtgraph has no public call for the ticks)
 
 
 def test_a_line_is_drawn_over_the_bars_of_the_same_categories(qtbot: QtBot) -> None:

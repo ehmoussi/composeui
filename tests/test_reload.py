@@ -493,7 +493,7 @@ def test_a_qt_app_with_reload_shows_the_changed_code_in_its_window_as_it_was_lef
     code = _QT_APP
     script.write_text(code)
     with output.open("w") as out:
-        program = subprocess.Popen(  # noqa: S603
+        program = subprocess.Popen(  # noqa: S603 (a command the code builds, no user input)
             [sys.executable, str(script), "--reload"],
             cwd=tmp_path,
             env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "RUNS_LOG": str(log)},
@@ -534,7 +534,7 @@ def test_a_qt_app_saves_its_state_and_exits_for_a_new_process_when_composeui_cha
         "RUNS_LOG": str(log),
         "COMPOSEUI_RELOADED": str(state),
     }
-    first = subprocess.Popen([sys.executable, str(script)], cwd=tmp_path, env=env)  # noqa: S603
+    first = subprocess.Popen([sys.executable, str(script)], cwd=tmp_path, env=env)  # noqa: S603 (a command the code builds, no user input)
     try:
         _wait_for(lambda: _lines(log) == 1)
         view_module = Path(composeui_package.__file__).parent / "core" / "view.py"
@@ -609,7 +609,7 @@ def test_a_qt_app_with_reload_closes_every_model_it_built(tmp_path: Path) -> Non
     log = tmp_path / "runs.log"
     script = tmp_path / "app.py"
     script.write_text(_LIFECYCLE_APP)
-    program = subprocess.Popen(  # noqa: S603
+    program = subprocess.Popen(  # noqa: S603 (a command the code builds, no user input)
         [sys.executable, str(script), "--reload"],
         cwd=tmp_path,
         env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "RUNS_LOG": str(log)},
@@ -652,7 +652,7 @@ def test_a_qt_app_without_reload_closes_its_model_once_its_window_is_closed(
     log = tmp_path / "runs.log"
     script = tmp_path / "app.py"
     script.write_text(_LIFECYCLE_APP.replace("VERSION = 1", "VERSION = 3"))
-    subprocess.run(  # noqa: S603
+    subprocess.run(  # noqa: S603 (a command the code builds, no user input)
         [sys.executable, str(script)],
         cwd=tmp_path,
         env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "RUNS_LOG": str(log)},
@@ -718,7 +718,7 @@ def test_a_qt_app_whose_changed_code_can_t_show_runs_it_again_in_a_new_process(
     failing = tmp_path / "fail-render"
     script = tmp_path / "app.py"
     script.write_text(_FAILING_RENDER_APP)
-    program = subprocess.Popen(  # noqa: S603
+    program = subprocess.Popen(  # noqa: S603 (a command the code builds, no user input)
         [sys.executable, str(script), "--reload"],
         cwd=tmp_path,
         env={
@@ -791,7 +791,7 @@ def test_a_qt_app_without_a_model_shows_the_changed_code_in_its_window(
     log = tmp_path / "runs.log"
     script = tmp_path / "app.py"
     script.write_text(_NO_MODEL_APP)
-    program = subprocess.Popen(  # noqa: S603
+    program = subprocess.Popen(  # noqa: S603 (a command the code builds, no user input)
         [sys.executable, str(script), "--reload"],
         cwd=tmp_path,
         env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "RUNS_LOG": str(log)},
@@ -857,7 +857,7 @@ def test_a_failed_save_of_the_state_keeps_the_qt_app_and_later_changes_reload(
     log = tmp_path / "runs.log"
     script = tmp_path / "app.py"
     script.write_text(_FAILED_SAVE_APP)
-    program = subprocess.Popen(  # noqa: S603
+    program = subprocess.Popen(  # noqa: S603 (a command the code builds, no user input)
         [sys.executable, str(script), "--reload"],
         cwd=tmp_path,
         env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "RUNS_LOG": str(log)},
@@ -917,7 +917,7 @@ def test_a_textual_app_with_reload_runs_again_in_a_new_process_as_it_was_left(
     log = tmp_path / "runs.log"
     script = tmp_path / "app.py"
     script.write_text(_TEXTUAL_APP)
-    program = subprocess.Popen(  # noqa: S603
+    program = subprocess.Popen(  # noqa: S603 (a command the code builds, no user input)
         [sys.executable, str(script), "--reload"],
         cwd=tmp_path,
         env={
@@ -985,7 +985,7 @@ def test_a_textual_app_with_reload_closes_every_model_it_built(tmp_path: Path) -
     log = tmp_path / "runs.log"
     script = tmp_path / "app.py"
     script.write_text(_TEXTUAL_MODEL_APP)
-    program = subprocess.Popen(  # noqa: S603
+    program = subprocess.Popen(  # noqa: S603 (a command the code builds, no user input)
         [sys.executable, str(script), "--reload"],
         cwd=tmp_path,
         env={
@@ -1026,7 +1026,7 @@ def test_a_textual_app_without_reload_closes_its_model_once_it_exits(tmp_path: P
     log = tmp_path / "runs.log"
     script = tmp_path / "app.py"
     script.write_text(_TEXTUAL_MODEL_APP.replace("VERSION = 1", "VERSION = 2"))
-    subprocess.run(  # noqa: S603
+    subprocess.run(  # noqa: S603 (a command the code builds, no user input)
         [sys.executable, str(script)],
         cwd=tmp_path,
         env={
@@ -1052,7 +1052,7 @@ def test_a_supervisor_told_to_stop_stops_its_app(tmp_path: Path) -> None:
         "import os, pathlib, time; "
         f"pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid())); time.sleep(60)"
     )
-    supervisor = subprocess.Popen(  # noqa: S603
+    supervisor = subprocess.Popen(  # noqa: S603 (a command the code builds, no user input)
         [
             sys.executable,
             "-c",

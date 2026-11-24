@@ -219,8 +219,8 @@ sales: ChartView = child(
 On Qt, when the mouse zooms or pans the first y axis, the second one follows in proportion:
 both show the same part of the plot. When the first axis fits its data again, for example
 after a double click, the second fits its own. On the web, a drag zooms the x axis, and each y
-axis fits what it shows. Textual shows the second axis at the right of the plot. A report image puts its
-legend beside the plot, because the legend can cover what either axis draws.
+axis fits what it shows. Textual shows the second axis at the right of the plot. A report image puts
+its legend beside the plot, because the legend can cover what either axis draws.
 
 ## Reference lines
 
@@ -255,9 +255,9 @@ with these exceptions:
 
 - **A color of its own.** A series can have a `color` (`"#rrggbb"`), the same in every theme, for
   example the color of a logo.
-- **Fill.** On a line, `fill=True` fills the area between the line of the series and 0, in the color of the
-  line. With `fill`, set `fill_color` (`"#rrggbb"`) to give the area its own color, for example a
-  pale area under a strong line. This color is the same in every theme.
+- **Fill.** On a line, `fill=True` fills the area between the line of the series and 0, in the color
+  of the line. With `fill`, set `fill_color` (`"#rrggbb"`) to give the area its own color, for
+  example a pale area under a strong line. This color is the same in every theme.
 - **Steps.** A line with `step=True` holds each value until its next point, for example the number
   of jobs running over time. With `fill`, it draws a step area. When the user hovers over the
   series, the chart shows the value held at the cursor.

@@ -7,20 +7,24 @@
     .\make.ps1 screenshots -Examples pipeform, batman
     .\make.ps1 css -TailwindPlatform windows-x64
     .\make.ps1 js-check -TscPlatform win32-x64
+    .\make.ps1 test -Workers 8
 #>
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
     [ValidateSet('format', 'check', 'check_fix', 'lint', 'mypy', 'typecheck',
         'pyright', 'pyrefly', 'ty', 'translations', 'test',
-        'browser-test', 'docs', 'screenshots', 'css', 'js-check', 'web-deps', 'clean', 'all')]
+        'browser-test', 'docs', 'screenshots', 'css', 'js-check', 'web-deps', 'hooks', 'clean',
+        'all')]
     [string[]] $Targets = @('all'),
     # the examples to take screenshots of (all of them when empty)
     [string[]] $Examples = @(),
     # Tailwind's release name for this machine, detected when empty
     [string] $TailwindPlatform = '',
     # TypeScript's release name for this machine, detected when empty
-    [string] $TscPlatform = ''
+    [string] $TscPlatform = '',
+    # the test workers (pytest-xdist): a number, or 'auto' for a worker per CPU
+    [string] $Workers = 'auto'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -267,8 +271,8 @@ function Invoke-Test {
     $env:COMPOSEUI_POSIX_ONLY = '# posix only'
     try {
         Invoke-Offscreen {
-            # in parallel, a worker per CPU (pytest-xdist)
-            Invoke-Native uv @('run', 'pytest', 'tests', '-m', 'not browser', '-n', 'auto',
+            # in parallel, a worker per CPU by default (pytest-xdist)
+            Invoke-Native uv @('run', 'pytest', 'tests', '-m', 'not browser', '-n', $Workers,
                 '--cov=src', '--cov-report=term-missing:skip-covered')
         }
     }
@@ -361,6 +365,9 @@ function Invoke-WebDeps {
     Remove-Item "$Static/cally.dist.js", "$Static/cally.LICENSE" -Force
 }
 
+# git's hooks of .githooks/ in this clone: a commit's message and branch follow AGENTS.md
+function Invoke-Hooks { Invoke-Native git @('config', 'core.hooksPath', '.githooks') }
+
 function Invoke-Clean {
     Get-ChildItem -Recurse -Force -Directory -Filter __pycache__ -ErrorAction SilentlyContinue |
         Remove-Item -Recurse -Force
@@ -398,6 +405,7 @@ $actions = @{
     'css'          = { Invoke-Css }
     'js-check'     = { Invoke-JsCheck }
     'web-deps'     = { Invoke-WebDeps }
+    'hooks'        = { Invoke-Hooks }
     'clean'        = { Invoke-Clean }
     'all'          = { Invoke-All }
 }

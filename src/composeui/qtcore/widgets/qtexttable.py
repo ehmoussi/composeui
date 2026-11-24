@@ -142,11 +142,11 @@ class QTextTableModel(QAbstractTableModel):
         return self.styles.get((row, column), PLAIN_CELL)
 
     @override
-    def rowCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008
+    def rowCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008 (Qt's default parent)
         return 0 if parent.isValid() else len(self._rows)
 
     @override
-    def columnCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008
+    def columnCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008 (Qt's default parent)
         return 0 if parent.isValid() else len(self._headers)
 
     def text(self, row: int, column: int) -> str:

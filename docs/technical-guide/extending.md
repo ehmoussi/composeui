@@ -58,8 +58,8 @@ This page explains how to add a widget or a backend to ComposeUI.
 
    A web renderer has no widget to keep. It renders its fragment in `to_html`, and applies the
    browser's events to the view in `dispatch`. Its handlers mark it dirty (`_mark_dirty`). See
-   [A button click on the web](web-backend.md#a-button-click-on-the-web). Put it in the module of its
-   family in `webcore/_renderers/`, or in a new module for a new family, and its entry in
+   [A button click on the web](web-backend.md#a-button-click-on-the-web). Put it in the module of
+   its family in `webcore/_renderers/`, or in a new module for a new family, and its entry in
    `webcore/renderers.py`, not in `webrenderer.py` (see
    [Requests and updates](web-backend.md#requests-and-updates)).
 
@@ -89,5 +89,5 @@ This page explains how to add a widget or a backend to ComposeUI.
    [user guide](../user-guide/running-the-app.md#backends). In each feature section of the user
    guide, say what the new backend shows, as the section does for Qt, Textual, and the web.
 
-The views (`core/view.py` and `core/_views/`) should not need changes. `run` reads the `--backend` choices from
-`RendererType`, so the new backend is one of them.
+The views (`core/view.py` and `core/_views/`) should not need changes. `run` reads the `--backend`
+choices from `RendererType`, so the new backend is one of them.

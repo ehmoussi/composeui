@@ -85,7 +85,8 @@ they are built:
 
 Prefer `renders`: its answer stays right when a backend adds a renderer. Both come from
 `composeui.core.application`. To open a folder or show a path, don't test the backend: use
-the actions of [Open folders, files and pages for the user](#open-folders-files-and-pages-for-the-user).
+the actions of
+[Open folders, files and pages for the user](#open-folders-files-and-pages-for-the-user).
 
 ```python
 from composeui.core.application import current_backend, renders
@@ -602,9 +603,9 @@ if __name__ == "__main__":
   colors.
 - **The stylesheets.** The page loads them after ComposeUI's stylesheet and the theme, in their
   order, so their rules win. The server serves `folder` at `/_composeui/style/files/`. A
-  stylesheet names a font or an image of the folder by its relative path, such as `url("fonts/inter.woff2")` in an
-  `@font-face` rule. The server serves no hidden file, no file outside the folder, and only
-  stylesheets, fonts, and images.
+  stylesheet names a font or an image of the folder by its relative path, such as
+  `url("fonts/inter.woff2")` in an `@font-face` rule. The server serves no hidden file, no file
+  outside the folder, and only stylesheets, fonts, and images.
 - **The checks at start.** The page's policy blocks files from other addresses. So the server
   refuses to start when a stylesheet is missing, uses `@import`, or names in `url(...)` an
   address or a file that the folder doesn't serve. List each stylesheet in `stylesheets`

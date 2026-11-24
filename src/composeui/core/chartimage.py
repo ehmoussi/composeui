@@ -138,7 +138,7 @@ def image_style(options: ImageOptions = DEFAULT_OPTIONS) -> Iterator[None]:
     thread at a time runs such a block: an export of another thread waits for it to end.
     """
     _require()
-    import matplotlib as mpl  # noqa: PLC0415
+    import matplotlib as mpl  # noqa: PLC0415 (an optional dependency, loaded when used)
 
     size = options.font_size
     with (
@@ -174,8 +174,11 @@ def chart_figure(chart: ChartView, options: ImageOptions = DEFAULT_OPTIONS) -> F
     Save it in `image_style` for its text to stay text, or with `save_chart_image`.
     """
     _require()
-    from matplotlib.dates import AutoDateLocator, ConciseDateFormatter  # noqa: PLC0415
-    from matplotlib.figure import Figure  # noqa: PLC0415
+    from matplotlib.dates import (  # noqa: PLC0415 (an optional dependency, loaded when used)
+        AutoDateLocator,
+        ConciseDateFormatter,
+    )
+    from matplotlib.figure import Figure  # noqa: PLC0415 (an optional dependency, loaded when used)
 
     with image_style(options):
         figure = Figure(

@@ -394,7 +394,7 @@ def test_a_signal_assigned_while_a_callback_connects_gives_it_the_owner(*, now: 
     def connect(signal: SignalNoArgs, callback: _PausingCallback, errors: list[Exception]) -> None:
         try:
             signal.connect(callback, now=now)
-        except Exception as error:  # noqa: BLE001 - the main thread asserts the error
+        except Exception as error:  # noqa: BLE001 (the main thread asserts the error)
             errors.append(error)
 
     counted = _PausingCallback()

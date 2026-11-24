@@ -285,7 +285,7 @@ class TabView(View):
             for dialog in dialogs_in(tab):
                 dialog.render(renderer_type)
             if tab.renderer is None:
-                tab._create_renderer(renderer_type)  # noqa: SLF001
+                tab._create_renderer(renderer_type)  # noqa: SLF001 (a tab rendered with the tabs)
             # a backend building tabs once shown renders the tabs themselves
             assert tab.renderer is not None
             tab.renderer.render()

@@ -337,7 +337,7 @@ def split_pattern(text: str) -> tuple[str, bool]:
 
     The user writes a pattern without them, a toggle saying it is one (see `as_pattern`).
     """
-    is_pattern = len(text) >= 2 and text.startswith("/") and text.endswith("/")  # noqa: PLR2004
+    is_pattern = len(text) >= 2 and text.startswith("/") and text.endswith("/")  # noqa: PLR2004 (a clear button for two filters or more)
     return (text[1:-1], True) if is_pattern else (text, False)
 
 

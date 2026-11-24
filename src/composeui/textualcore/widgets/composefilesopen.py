@@ -30,7 +30,7 @@ def _replace_prompt(navigation: DirectoryNavigation, index: int, prompt: VisualT
     try:
         # (one row's redraw: Textual has no public call for it)
         cache = navigation._option_render_cache  # noqa: SLF001
-        option._set_prompt(prompt)  # noqa: SLF001
+        option._set_prompt(prompt)  # noqa: SLF001 (Textual has no public call for it)
         # a marked row keeps the height of its own: one line, its columns cut, not wrapped
         for key in [key for key in cache.keys() if key[0] is option]:  # noqa: SIM118 (an LRUCache)
             cache.discard(key)

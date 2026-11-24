@@ -12,7 +12,6 @@ import pytest
 from attrs import Factory, evolve
 from hypothesis import given
 from hypothesis import strategies as st
-from rich.cells import cell_len
 from typing_extensions import override
 
 from composeui.core.model import InvalidStateError
@@ -683,6 +682,7 @@ async def _running(
 ) -> AsyncGenerator[tuple[Any, Any, ComposeDrawing], None]:
     """Run a main view on Textual, and give its app, its pilot and its drawing's widget."""
     pytest.importorskip("textual")
+    # the Textual backend, an optional dependency
     from composeui.textualcore._renderers.navigation import TextualMainRenderer  # noqa: PLC0415
     from composeui.textualcore.widgets.composedrawing import (  # noqa: PLC0415 (optional)
         ComposeDrawing,
@@ -934,6 +934,7 @@ async def test_textual_keeps_the_row_s_width_when_a_label_overwrites_a_wide_char
     shapes.append(TextShape((x, 32), "x"))  # every row of the 15 is taken
 
     rows, _ = await _textual_rows(shapes, description="d")
+    from rich.cells import cell_len  # noqa: PLC0415 (Textual's, once the test found it)
 
     assert any("x" in row for row in rows[:-1])
     assert all(cell_len(row) == 40 for row in rows)
@@ -1160,6 +1161,8 @@ async def test_textual_follows_the_theme_without_a_change_of_the_shapes() -> Non
 
 
 def test_textual_keeps_its_widget_when_rendered_again() -> None:
+    pytest.importorskip("textual")
+    # the Textual backend, an optional dependency
     from composeui.textualcore._renderers.graphics import TextualDrawingRenderer  # noqa: PLC0415
 
     view = DrawingView()

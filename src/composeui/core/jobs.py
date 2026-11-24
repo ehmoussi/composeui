@@ -1001,7 +1001,7 @@ class Jobs:
         if job is not None:  # a task's run is running until its outcome resets it
             self._forget(job)
             if not self.is_running:
-                self.running_changed.emit(False)  # noqa: FBT003
+                self.running_changed.emit(False)  # noqa: FBT003 (the signal's argument)
 
     def _live_tasks(self) -> list[Task[Any, Any, Any]]:
         """Get the tasks still held, by their views or the app, in the order they came."""
@@ -1036,7 +1036,7 @@ class Jobs:
 
     def _new_job(self, work: Callable[Concatenate[Job[R, ProgressT], P], R]) -> Job[R, ProgressT]:
         job: Job[R, ProgressT] = Job(self._hand_over)
-        job._is_the_study_s = threading.get_ident() in self._starting_study  # noqa: SLF001
+        job._is_the_study_s = threading.get_ident() in self._starting_study  # noqa: SLF001 (set by the jobs for the study's job)
         name = getattr(work, "__name__", "job")
         self._bind_signal(job.finished, f"{name}.finished")
         self._bind_signal(job.failed, f"{name}.failed")
@@ -1052,7 +1052,7 @@ class Jobs:
     ) -> None:
         self._running.add(job)
         if len(self._running) == 1:
-            self.running_changed.emit(True)  # noqa: FBT003
+            self.running_changed.emit(True)  # noqa: FBT003 (the signal's argument)
         with self._workers_lock:
             self._workers += 1
         # a daemon: closing the app doesn't wait for it
@@ -1063,7 +1063,7 @@ class Jobs:
             self._worker_ended()
             self._running.discard(job)
             if not self.is_running:
-                self.running_changed.emit(False)  # noqa: FBT003
+                self.running_changed.emit(False)  # noqa: FBT003 (the signal's argument)
             raise
 
     @property
@@ -1139,7 +1139,7 @@ class Jobs:
         for task in tasks:
             task._reset()  # noqa: SLF001 (reset all tasks before notifying their callbacks)
         if was_running:
-            self.running_changed.emit(False)  # noqa: FBT003
+            self.running_changed.emit(False)  # noqa: FBT003 (the signal's argument)
         for task in tasks:
             # unless a callback before removed its list's row: its widgets may be deleted
             if task._jobs is self:  # noqa: SLF001 (shared task lifecycle)
@@ -1320,7 +1320,7 @@ class Jobs:
             self._deliver(job, functools.partial(signal.emit, outcome))
         finally:  # a callback that raises leaves the jobs over all the same
             if not self.is_running:
-                self.running_changed.emit(False)  # noqa: FBT003
+                self.running_changed.emit(False)  # noqa: FBT003 (the signal's argument)
 
     def _deliver(self, job: Job[Any, Any], deliver: Callable[[], None]) -> None:
         """Call `deliver`, what `job` gives the main thread.
@@ -1333,12 +1333,12 @@ class Jobs:
             deliver()
             return
         main_view = self._main_view()
-        is_saved = main_view is not None and main_view._is_saved()  # noqa: SLF001
+        is_saved = main_view is not None and main_view._is_saved()  # noqa: SLF001 (the main view's study, which only the core and backends keep)
         with starting_study(self):
             deliver()
         if is_saved:
             assert main_view is not None  # saved
-            main_view._mark_saved()  # noqa: SLF001
+            main_view._mark_saved()  # noqa: SLF001 (the main view's study, which only the core and backends keep)
 
     def _abort(self, job: Job[Any, Any]) -> None:
         """Clear a programming error's runtime state without emitting a business failure."""
@@ -1352,4 +1352,4 @@ class Jobs:
                     task.changed.emit()
         finally:
             if not self.is_running:
-                self.running_changed.emit(False)  # noqa: FBT003
+                self.running_changed.emit(False)  # noqa: FBT003 (the signal's argument)

@@ -74,7 +74,7 @@ class _RendererMeta(ABCMeta):
     @override
     def __call__(cls, *args: Any, **kwargs: Any) -> Any:
         renderer = super().__call__(*args, **kwargs)
-        renderer._share_handlers()  # noqa: SLF001
+        renderer._share_handlers()  # noqa: SLF001 (a renderer of the same class)
         return renderer
 
 

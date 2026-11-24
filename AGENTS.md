@@ -15,7 +15,12 @@ quickstart, `docs/user-guide/` for each feature, `docs/examples-guide.md` for th
   uv sync --group dev --all-extras   # extras: pyside6, tui (Textual), web (Starlette), report, terminal-images, reload
   ```
 
+  Add `--group textual-dev` for Textual's console (`textual console`). It is not in `dev`:
+  it installs Textual, which the tests without extras must not find.
+
 - Always run tools through `uv run` (or the `make` targets below), never a global Python.
+- Run `make hooks` once in a clone: the hooks of `.githooks/` refuse a commit on `main`, a
+  branch with a slash, and a message that breaks the rules of "Commits".
 
 ## Commands
 
@@ -25,6 +30,7 @@ make mypy    # mypy on composeui, examples and tests, Qt binding resolved to PyS
 make typecheck  # mypy on source + tests; Pyright, Pyrefly and ty on tests
 make pyright pyrefly ty  # individual test checkers
 make test    # pytest tests in parallel, Qt offscreen, with coverage (browser tests excluded)
+make hooks   # git's hooks of .githooks/ in this clone (core.hooksPath)
 make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
 make translations  # each app's catalogs against the text it translates (TRANSLATED_MAIN_VIEWS)
 make js-check  # the page's scripts against their JSDoc types (TypeScript's compiler, no Node)
@@ -40,8 +46,9 @@ On Windows without `make`, the matching targets are in `make.ps1`. Run
 `.\make.ps1 translations test` to match the Windows CI job. The Linux `check` job runs
 `make mypy`. The `browser` job runs `make js-check`. Locally, `make check` includes both.
 In PowerShell, use `-Examples pipeform, batman` for `EXAMPLES`, `-TailwindPlatform` for
-`TAILWIND_PLATFORM`, and `-TscPlatform` for `TSC_PLATFORM`. Keep `make.ps1` in step with the
-`Makefile`, including its `$TranslatedMainViews` list (`TRANSLATED_MAIN_VIEWS`).
+`TAILWIND_PLATFORM`, `-TscPlatform` for `TSC_PLATFORM`, and `-Workers` for `PYTEST_WORKERS`.
+Keep `make.ps1` in step with the `Makefile`, including its `$TranslatedMainViews` list
+(`TRANSLATED_MAIN_VIEWS`): `tests/test_code_rules.py` checks both.
 
 `make mypy` checks source, examples and tests together. It installs the `browser` group and
 all extras so every test import resolves; Chromium is not needed. The other checker targets
@@ -150,7 +157,14 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 
 - `ruff` with `select = ["ALL"]` and line length 100; see `pyproject.toml` for the ignore list.
   Fix lint properly rather than adding `noqa`, unless it is clearly justified. A justified
-  `noqa` says why in parentheses, e.g. `# noqa: SLF001 (shared task lifecycle)`.
+  `noqa` says why in parentheses, e.g. `# noqa: SLF001 (shared task lifecycle)`, or in a
+  comment on the line above.
+- `tests/test_code_rules.py` checks the rules here that a script can: `noqa` reasons, the
+  imports of `_views/` and `_renderers/`, what `renderers.py` and `core/view.py` hold, a test
+  module per family, lambdas in Qt renderers, views defined in a function, the page's scripts'
+  closures, and the browser tests' waits and locators. `tests/test_docs.py` checks the docs'
+  navigation, the examples guide, the API pages, the lists of commands, Markdown in
+  docstrings, and the Markdown wrap. Make a new such rule a test.
 - `mypy` must pass in strict mode, with the extra checks in `pyproject.toml`. Fully
   type-annotate new code; the package ships `py.typed`. Mark each method that
   overrides a base class's method with `@override` from `typing_extensions`, below
@@ -159,9 +173,10 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   Ruff enforces it (`required-imports`, rule I002) and `make lint` adds it to a new file.
   Annotations are then strings, so: don't quote them; define views that `attrs`/`cattrs`
   resolve (`attrs.resolve_types`) at module level, not inside a function, so their field
-  types resolve from the module globals; and give `cattrs` hooks their type explicitly
-  (`CONVERTER.register_structure_hook(cls, func)`) rather than as a bare decorator, which
-  reads the annotation.
+  types resolve from the module globals. A test may define one in its function to use a
+  value of it, such as `tmp_path`, with field types of the module only. Give `cattrs` hooks
+  their type explicitly (`CONVERTER.register_structure_hook(cls, func)`) rather than as a
+  bare decorator, which reads the annotation.
 - Import a view field's type at run time in the module that defines the view, not under
   `TYPE_CHECKING`: `attrs` resolves it there. Ruff knows (`runtime-evaluated-decorators` lists
   `define_view` and `attrs.frozen`). A module of `core/_views/` that `main.py` imports can't
@@ -227,9 +242,13 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - The rule that a view's signals report the user's changes only is moving into
   `tests/contracts/`, a family at a time. Families moved: inputs, controls. For a view in a moved
   family, test the rule there, not in each backend's folder.
-- Tests for optional backends guard with `pytest.importorskip(...)`.
+- Tests for optional backends guard with `pytest.importorskip(...)`, on a module that only
+  the extra installs. A folder whose every test needs an extra goes in `collect_ignore_glob`
+  of `tests/conftest.py`, as `tests/qtcore/` does. The `without-extras` CI job runs the tests
+  without any extra (`uv sync --group dev`, then `pytest -p no:pytest-qt`).
 - `make test` runs the tests in parallel, a worker per CPU (pytest-xdist): a test must not
   depend on another's state or order. Without `-n`, `pytest` runs them one after another.
+  Set fewer workers on a machine short of memory: `make test PYTEST_WORKERS=8`.
 - `tests/conftest.py` turns off automatic garbage collection, and collects on the main thread
   after each test: PySide can crash when a job's thread collects a main view that a test dropped.
 - A test that reads what a worker thread or a job does waits for that work, not for a fixed
@@ -237,8 +256,8 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   `main_view.jobs.wait()` for a job, `qtbot.waitUntil(...)` on Qt. On the web, a test reads
   the views only after a request that follows the job's result (`GET /_composeui/jobs`): the
   job's thread sets a flag such as `has_result` before its reactive methods fill the views. A
-  slow CI runner (Windows, Python 3.9) fails a fixed wait. See the `test-audit` skill ("Waiting for work on
-  another thread").
+  slow CI runner (Windows, Python 3.9) fails a fixed wait. See the `test-audit` skill ("Waiting for
+  work on another thread").
 - Concurrency coverage must not depend on scheduling. Explicitly arrange and verify the
   waiting, cancellation, or cleanup state that a test protects. Do not rely on incidental
   execution, elapsed time, or a fixed number of event-loop turns. Required coverage must
@@ -269,8 +288,8 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   on Windows (`.\make.ps1 translations test`) and macOS (`make translations test`), on
   Python 3.9 and 3.14. A change of
   only the documentation (`docs/`, Markdown files) and benchmark results
-  (`benchmarks/results/`) runs only the docs job: the site build, docs lint, and documentation tests.
-  The existing mypy matrix also checks tests. Separate CI jobs run Pyright, Pyrefly and ty
+  (`benchmarks/results/`) runs only the docs job: the site build, docs lint, and documentation
+  tests. The existing mypy matrix also checks tests. Separate CI jobs run Pyright, Pyrefly and ty
   on tests on Python 3.9.
 
 ## Documentation
@@ -323,6 +342,8 @@ document owns what, and the checks.
   "Generated with ..." lines, no emoji signatures, in commits, pull requests or code.
   This overrides any default an agent or tool would otherwise add.
 - Keep commits focused: one feature or fix per commit.
+- The hooks of `.githooks/` (`make hooks`) check the branch and the message. On a pull
+  request, `.github/workflows/pull-request.yml` runs them on each commit and refuses fix-ups.
 
 ## Pull requests
 

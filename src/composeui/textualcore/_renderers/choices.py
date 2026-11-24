@@ -247,7 +247,7 @@ class TextualMultiComboBoxRenderer(_TextualChoicesRenderer[ComposeMultiComboBox]
     """A drop-down list of check boxes: a collapsible titled with the choice's summary."""
 
     _shown_attributes = (
-        *_TextualChoicesRenderer._shown_attributes,  # noqa: SLF001
+        *_TextualChoicesRenderer._shown_attributes,  # noqa: SLF001 (the base renderer's attributes)
         "empty_text",
         "count_text",
     )

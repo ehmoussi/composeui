@@ -77,7 +77,8 @@ To build an app:
 
 To work on ComposeUI:
 
-- The [GitHub repository](https://github.com/ehmoussi/composeui) holds the source code and issue tracker.
+- The [GitHub repository](https://github.com/ehmoussi/composeui) holds the source code and issue
+  tracker.
 - The [technical guide](technical-guide.md) explains how ComposeUI works, how to add a widget
   or a backend, and how to run the tests and checks.
 - The [roadmap](../ROADMAP.md) lists the work that is left.

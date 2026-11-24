@@ -108,8 +108,8 @@ When you assess a need, say which case it is:
 - **Supported by composition:** existing views do it together, such as a `ListView` whose
   rows are each a `HorizontalView` of labels and buttons.
 - **Needs a new widget:** a new view and a renderer on each backend, which is a change to
-  ComposeUI (https://ehmoussi.github.io/composeui/technical-guide/extending.html#add-a-widget). Do not
-  draw it with a toolkit in the app: the app then runs on one backend only.
+  ComposeUI (https://ehmoussi.github.io/composeui/technical-guide/extending.html#add-a-widget). Do
+  not draw it with a toolkit in the app: the app then runs on one backend only.
 - **Not in the checked version:** a newer release or `main` can have it. Read the changelog.
 
 Name the version or the commit that you checked, and say what you searched: "not found" is
@@ -175,8 +175,8 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   `connect` injects them. Spell the names exactly. With `signal.connect`, `view` is the
   signal's owning view, available even before an app is built. With `Application.connect`,
   it is the explicit `view` argument instead, and `main_view` (and a `ModelApplication`'s
-  `model`) are the app's own, whatever signal emits. A standalone signal has no owning view: a callback's default is
-  used for what is missing, or the call raises `ValueError` without one.
+  `model`) are the app's own, whatever signal emits. A standalone signal has no owning view: a
+  callback's default is used for what is missing, or the call raises `ValueError` without one.
   A signal belongs to one view: giving it to another view raises `ValueError`.
   A callback may take fewer of the signal's arguments than it emits.
 - **Check a form with a validator:** `self.set_validator(self._check, self.text_edited)`
@@ -199,7 +199,8 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   not with a session id or a cookie of your own: it stays across the browser's sessions for
   `WebSettings.browser_ttl`. It is the account's name on Qt and Textual. It is not a user:
   never grant access by it.
-  See https://ehmoussi.github.io/composeui/user-guide/running-the-app.html#show-a-browser-its-own-work
+  See
+  https://ehmoussi.github.io/composeui/user-guide/running-the-app.html#show-a-browser-its-own-work
 - **Give the user a file with `DownloadView`**, or `main_view.download(...)` from a callback,
   not a `SavePathInputView`: on the web, a save path writes a file on the server, not on the
   user's computer. Its `content` returns the bytes, or a `DownloadedFile(filename, content,
@@ -304,7 +305,8 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   the block once a slot is free, first come first served. `on_wait` gets the job's place in
   the line, in the job's thread. A job canceled while waiting raises `JobCanceledError`.
   Call it only in the job's function, one slot per job.
-  See https://ehmoussi.github.io/composeui/user-guide/threads.html#a-limit-on-the-jobs-that-run-at-once
+  See
+  https://ehmoussi.github.io/composeui/user-guide/threads.html#a-limit-on-the-jobs-that-run-at-once
 - **Keep the model out of the views.** The optional model (`Model`, `DatabaseModel`) holds
   the data and knows no view. The app gives it to `run` with `build_model=` and
   `setup_model=`. A `DatabaseModel` declares databases, never tables of its own: a

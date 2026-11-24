@@ -126,11 +126,11 @@ class ComposeTree(Tree["TreePath"]):
     def on_tree_node_expanded(self, event: Tree.NodeExpanded[TreePath]) -> None:
         # the hidden root's data is None: no event from it, as only the code expands it
         if event.node.data is not None:  # pragma: no branch
-            self.toggled.emit(event.node.data, True)  # noqa: FBT003
+            self.toggled.emit(event.node.data, True)  # noqa: FBT003 (the signal's argument)
 
     def on_tree_node_collapsed(self, event: Tree.NodeCollapsed[TreePath]) -> None:
         if event.node.data is not None:  # pragma: no branch
-            self.toggled.emit(event.node.data, False)  # noqa: FBT003
+            self.toggled.emit(event.node.data, False)  # noqa: FBT003 (the signal's argument)
 
     def _branch_nodes(self) -> Iterator[TextualTreeNode[TreePath]]:
         """Get the nodes under the root, depth first."""

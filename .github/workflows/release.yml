@@ -37,6 +37,14 @@ jobs:
           python-version: "3.13"
           enable-cache: true
           cache-dependency-glob: uv.lock
+      # a release is main's squash commit: a tag on a branch's commit would publish code that
+      # main doesn't have
+      - name: Check that the tagged commit is on main
+        if: github.ref_type == 'tag'
+        run: |
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::$GITHUB_REF_NAME is not on main"; exit 1; }
       - run: uv sync --locked --group dev --all-extras
       - run: make translations test
 

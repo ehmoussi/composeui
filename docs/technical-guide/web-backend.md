@@ -107,8 +107,8 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   and keeps what it changed in the session's `pending`. They are sent with the next event's
   response or fetch (a full page drops them). While the main view's jobs run, the page's
   `cui-jobs` poller fetches `/_composeui/jobs` every `JOBS_POLL_MS`, which brings them. The
-  server pushes nothing, so an idle page sends nothing. A response whose event starts or ends the jobs swaps
-  the poller in, as it does the page's marker.
+  server pushes nothing, so an idle page sends nothing. A response whose event starts or ends the
+  jobs swaps the poller in, as it does the page's marker.
 - **Choices of several values.** Each box of a check list posts its key and its state, not a
   flip, and the check-all box posts its state too. A post that arrives twice leaves the same
   choice, and a click on a stale page does what the page showed. The user's change swaps only
@@ -377,13 +377,13 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   does.
 - **Icons.** An action's `icon` is a file path, as Qt reads it: `icons.py` serves the file at
   `/_composeui/icon/<digest><suffix>`, an address naming its content, cached for good. Only
-  image files that a view has named are served, and `icon` is never loaded from a study, so no request can
-  name a file. An SVG is drawn as a CSS mask in the text's color, so it follows the theme like
-  the built-in New, Open, and Save icons. Another image shows as it is.
+  image files that a view has named are served, and `icon` is never loaded from a study, so no
+  request can name a file. An SVG is drawn as a CSS mask in the text's color, so it follows the
+  theme like the built-in New, Open, and Save icons. Another image shows as it is.
 - **Images.** An `ImageView` has its own route, `/_composeui/widget/{id}/picture`, that answers
-  its session only: an image can be private, so it stays out of the process's registry of icons. A `data:`
-  address would send it again with each swap. The address names the content by its digest, so a
-  browser can keep it, and an older digest answers 404, never another image. The route serves
+  its session only: an image can be private, so it stays out of the process's registry of icons. A
+  `data:` address would send it again with each swap. The address names the content by its digest,
+  so a browser can keep it, and an older digest answers 404, never another image. The route serves
   only what starts as an image, as an app may set a path that a user typed. `image` is never
   loaded from a study, as `icon` is not.
 - **Drawings.** A `DrawingView` is SVG that the server makes from validated shapes, with no

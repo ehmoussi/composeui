@@ -117,20 +117,20 @@ def test_a_range_slider_s_handles_move_by_keys_and_clicks_stopping_on_each_other
     assert moves == [(9, 18), (9, 23), (9, 22), (9, 20), (0, 20)]
 
     def click(position: int) -> None:
-        x = slider._handle_rect(position).center().x()  # noqa: SLF001
+        x = slider._handle_rect(position).center().x()  # noqa: SLF001 (where the slider draws its handle)
         qtbot.mousePress(slider, Qt.MouseButton.LeftButton, pos=QPoint(x, slider.height() // 2))
         qtbot.mouseRelease(slider, Qt.MouseButton.LeftButton, pos=QPoint(x, slider.height() // 2))
 
     click(12)  # nearer the high handle
     assert hours.value == (0, 12)
-    x = slider._handle_rect(12).center().x()  # noqa: SLF001
+    x = slider._handle_rect(12).center().x()  # noqa: SLF001 (where the slider draws its handle)
     y = slider.height() // 2
     qtbot.mousePress(slider, Qt.MouseButton.RightButton, pos=QPoint(x, y))  # not a move
     # the high handle dragged, released, then the mouse moved: no move
     qtbot.mousePress(slider, Qt.MouseButton.LeftButton, pos=QPoint(x, y))
-    qtbot.mouseMove(slider, QPoint(slider._handle_rect(16).center().x(), y))  # noqa: SLF001
+    qtbot.mouseMove(slider, QPoint(slider._handle_rect(16).center().x(), y))  # noqa: SLF001 (where the slider draws its handle)
     qtbot.mouseRelease(slider, Qt.MouseButton.LeftButton, pos=QPoint(x, y))
-    qtbot.mouseMove(slider, QPoint(slider._handle_rect(18).center().x(), y))  # noqa: SLF001
+    qtbot.mouseMove(slider, QPoint(slider._handle_rect(18).center().x(), y))  # noqa: SLF001 (where the slider draws its handle)
     assert hours.value == (0, 16)
     hours.value = (20, 20)
     # on one another near the end: the low handle, which can still move down
@@ -161,7 +161,7 @@ def test_a_range_slider_reports_a_drag_once_its_handle_rests_and_on_release(
     hours.value_changed.connect(moves.append)
 
     def at(position: int) -> QPoint:
-        return QPoint(slider._handle_rect(position).center().x(), slider.height() // 2)  # noqa: SLF001
+        return QPoint(slider._handle_rect(position).center().x(), slider.height() // 2)  # noqa: SLF001 (where the slider draws its handle)
 
     _press(slider, at(18))  # the high handle of (8, 18)
     for position in (19, 20, 21):

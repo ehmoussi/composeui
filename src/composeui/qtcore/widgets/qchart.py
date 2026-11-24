@@ -80,17 +80,17 @@ class _XExtent(pg.GraphicsObject):  # type: ignore[misc]
         self._bounds = bounds
         self.informViewBoundsChanged()
 
-    def dataBounds(  # noqa: N802
+    def dataBounds(  # noqa: N802 (pyqtgraph's name)
         self,
         ax: int,
         frac: float = 1.0,
-        orthoRange: object = None,  # noqa: N803
+        orthoRange: object = None,  # noqa: N803 (pyqtgraph's name)
     ) -> list[float] | None:
         """Get its bounds along the x axis (0), as pyqtgraph asks an item: none along y."""
         del frac, orthoRange
         return self._bounds if ax == 0 else None
 
-    def boundingRect(self) -> QRectF:  # noqa: N802
+    def boundingRect(self) -> QRectF:  # noqa: N802 (pyqtgraph's name)
         return QRectF()
 
 
@@ -422,7 +422,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
             return None
         return _values(self._view2.viewRange()[1], is_log=self._y2.is_log)
 
-    def sizeHint(self) -> QSize:  # noqa: N802
+    def sizeHint(self) -> QSize:  # noqa: N802 (Qt's name)
         # not its scene's, which follows its own size: a height it was given once would stay
         return QSize(*_SIZE_HINT)
 
@@ -433,7 +433,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         """Get the values the hover shows, empty while the cursor is off the chart."""
         return str(self._hover.toPlainText()) if self._hover.isVisible() else ""
 
-    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802 (Qt's name)
         super().changeEvent(event)
         if event.type() == QEvent.Type.PaletteChange and self._is_built:
             self._apply_palette()

@@ -75,11 +75,11 @@ class QSourceTableModel(QAbstractTableModel):
             self.dataChanged.emit(self.index(0, 0), last)
 
     @override
-    def rowCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008
+    def rowCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008 (Qt's default parent)
         return 0 if parent.isValid() else self._table.row_count
 
     @override
-    def columnCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008
+    def columnCount(self, parent: _Index = QModelIndex()) -> int:  # noqa: B008 (Qt's default parent)
         return 0 if parent.isValid() else len(self._table.headers)
 
     @override

@@ -67,7 +67,7 @@ def _run_file(path: Path) -> None:
     previous_backend = _Running.backend
     _Running.backend = None
     try:
-        exec(code, program.__dict__)  # noqa: S102
+        exec(code, program.__dict__)  # noqa: S102 (runs the app's file, as python does)
         if _Running.backend is None:
             run(
                 _find_main_view(

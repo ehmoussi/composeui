@@ -325,7 +325,7 @@ def test_the_command_shows_the_changed_code_of_a_file_without_run(
     log = tmp_path / "runs.log"
     app_file = tmp_path / "app.py"
     app_file.write_text(_LOGGED_APP)
-    program = subprocess.Popen(  # noqa: S603
+    program = subprocess.Popen(  # noqa: S603 (a command the code builds, no user input)
         [command, "run", "app.py", "--backend", backend],
         cwd=tmp_path,
         env={

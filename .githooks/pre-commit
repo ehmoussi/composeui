@@ -1,0 +1,17 @@
+#!/bin/sh
+# Refuse a commit on main, or on a branch whose name has a slash (AGENTS.md, "Commits").
+# Git runs it before each commit once `make hooks` set core.hooksPath; CI runs it on a pull
+# request's branch, given as the argument.
+# Usage: pre-commit [<branch>]
+branch=${1:-$(git symbolic-ref --quiet --short HEAD)}
+case $branch in
+    "") ;; # no branch, e.g. during a rebase
+    main)
+        echo "pre-commit: never commit on main: git switch -c <feature-branch> first" >&2
+        exit 1
+        ;;
+    */*)
+        echo "pre-commit: hyphens, not slashes, in a branch name: git branch -m <name> ($branch)" >&2
+        exit 1
+        ;;
+esac

@@ -303,7 +303,7 @@ class WebFilterBarRenderer(WebRenderer[TView]):
             self._chip_html(column) for column in sorted(self._filtered.filters)
         )
         clear = ""
-        if len(self._filtered.filters) >= 2:  # noqa: PLR2004
+        if len(self._filtered.filters) >= 2:  # noqa: PLR2004 (a clear button for two filters or more)
             clear = Markup(
                 '<button type="button" class="btn btn-sm btn-ghost"{post}{disabled}>{get}</button>'
             ).format(

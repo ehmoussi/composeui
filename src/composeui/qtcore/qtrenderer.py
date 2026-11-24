@@ -107,7 +107,7 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
     def refresh(self) -> None:
         if self._rendered_object is None:
             raise NoRenderedObjectError
-        was_blocked = self._rendered_object.blockSignals(True)  # noqa: FBT003
+        was_blocked = self._rendered_object.blockSignals(True)  # noqa: FBT003 (Qt's API)
         try:
             super().refresh()
         finally:
@@ -118,7 +118,7 @@ class QtWidgetRenderer(Renderer[TView, TWidget]):
         """Show `value`, the new value of `attr_name`, without the widget emitting signals."""
         if self._rendered_object is None:
             raise NoRenderedObjectError
-        was_blocked = self._rendered_object.blockSignals(True)  # noqa: FBT003
+        was_blocked = self._rendered_object.blockSignals(True)  # noqa: FBT003 (Qt's API)
         try:
             super().refresh_attribute(attr_name, value)
         finally:

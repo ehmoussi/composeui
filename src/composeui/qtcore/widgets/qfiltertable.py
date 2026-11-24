@@ -261,7 +261,7 @@ class QTableFilterBar(QWidget):
                 # once shown: the layout shows a widget it takes on the next pass
                 QTimer.singleShot(0, chip.open_button.setFocus)
         self._focused_chip = None
-        self.clear.setVisible(len(filters) >= 2)  # noqa: PLR2004
+        self.clear.setVisible(len(filters) >= 2)  # noqa: PLR2004 (a clear button for two filters or more)
 
     @property
     def chips(self) -> list[QFilterChip]:

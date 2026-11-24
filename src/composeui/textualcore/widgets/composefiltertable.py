@@ -29,7 +29,7 @@ EDIT = "\u270e"
 class _ValueInput(Input):
     """The filter editor's value field: Escape closes the editor."""
 
-    BINDINGS = [Binding("escape", "close_editor", "Close", show=False)]  # noqa: RUF012
+    BINDINGS = [Binding("escape", "close_editor", "Close", show=False)]  # noqa: RUF012 (Textual's class variable)
 
     def __init__(self) -> None:
         super().__init__(compact=True)
@@ -320,7 +320,7 @@ class ComposeFilterBar(Horizontal):
                 self.open_editor(chip.column, typed)
 
     def _show_chips(self) -> None:
-        self.clear.display = len(self._filters) >= 2  # noqa: PLR2004
+        self.clear.display = len(self._filters) >= 2  # noqa: PLR2004 (a clear button for two filters or more)
         if not self.is_mounted:
             return
         self.chips.remove_children()

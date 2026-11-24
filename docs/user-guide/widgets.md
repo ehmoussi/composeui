@@ -308,10 +308,11 @@ What the "…" button opens:
   [Files on the server](#files-on-the-server)).
 - **The web, with `upload_folder`,** puts the uploaded file in that folder, under the name the
   user gave, reduced to letters, digits, `.`, `_` and `-`. When a file has that name already,
-  the upload gets a number, such as `data-1.csv`: it never replaces a file. The field shows the file's path, relative to `base_folder` when it
-  is in it. The file is the app's: the session never deletes it. When the folder can't take
-  the file, for example because it doesn't exist, the field keeps its path, and the status
-  bar says why. Qt and Textual ignore `upload_folder`: the user picks a file of their own.
+  the upload gets a number, such as `data-1.csv`: it never replaces a file. The field shows the
+  file's path, relative to `base_folder` when it is in it. The file is the app's: the session never
+  deletes it. When the folder can't take the file, for example because it doesn't exist, the field
+  keeps its path, and the status bar says why. Qt and Textual ignore `upload_folder`: the user picks
+  a file of their own.
 
 [`src/examples/markdownviewer.py`](../../src/examples/markdownviewer.py) opens a Markdown file
 with a file path input, and reads the file again when the user presses reload.
@@ -907,8 +908,8 @@ A `SliderView` picks a whole number when the user drags a handle, for example a 
 workers. The number goes from `minimum` to `maximum` by `step`. The handle stops only on a
 step. The value shows beside the track, so the row is no taller than the other rows.
 `value_changed` reports the user's moves. A drag reports its value once the handle rests for
-150 ms (`DRAG_REPORT_DELAY_MS`), and on release: the app's work on each step, such as a dashboard drawn
-again, would make the handle lag. A key or a click reports at once.
+150 ms (`DRAG_REPORT_DELAY_MS`), and on release: the app's work on each step, such as a dashboard
+drawn again, would make the handle lag. A key or a click reports at once.
 
 Qt shows a horizontal `QSlider`, Textual ComposeUI's own slider, which the arrow keys
 move, and the web a range input.
