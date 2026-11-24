@@ -1030,6 +1030,24 @@ The view hides while `log_message` is empty. An error shows in red and a warning
 [check of a row](building-views.md#check-a-form) writes the same two fields of the row, and the row
 shows its message under its field.
 
+The message is study data: a study saves and opens it, and New resets it. This fits a message
+about the study, such as the error of an import or of a check. For a message of the app, such
+as the status of a run, tag the two fields `UI_TEXT` in a subclass. A study then never saves
+or opens them. New still sets them back to their first value, as it does with each text of the
+views:
+
+```python
+import attrs
+
+from composeui.core.view import UI_TEXT, LogType, LogView, define_view
+
+
+@define_view
+class StatusView(LogView):
+    log_message: str = attrs.field(default="", metadata={UI_TEXT: True})
+    log_type: LogType = attrs.field(default=LogType.INFO, metadata={UI_TEXT: True})
+```
+
 Qt shows a `QLabel`, Textual a `Label`, and the web a paragraph that screen readers read
 when it changes (`aria-live="polite"`).
 

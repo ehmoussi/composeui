@@ -231,6 +231,10 @@ class LogView(LogMixin, View):
     """A message to the user, for example an error, styled by its `log_type`.
 
     A new message replaces the last one. For a stream of output, see `ConsoleView`.
+
+    The message is study data: a study saves and opens it, and New resets it. For a message
+    of the app, such as the status of a run, tag `log_message` and `log_type` with `UI_TEXT`
+    in a subclass.
     """
 
     _renderer_key = "log"
