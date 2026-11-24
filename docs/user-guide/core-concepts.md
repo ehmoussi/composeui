@@ -87,9 +87,13 @@ A standalone signal, such as a model's signal, has no owning view. If a callback
 Without a default, the call raises `ValueError`. On the web, `app.connect` refuses a view or
 a signal outside the app's main view (see
 [How the web differs from a window](running-the-app.md#how-the-web-differs-from-a-window)).
-Signals do not keep their owning views alive.
+A signal keeps its callbacks, and a callback keeps alive what it refers to. For example,
+`model.changed.connect(view.show)` keeps `view` in memory until the signal is disconnected.
 A signal belongs to one view: giving it to another view, as in `b.clicked = a.clicked`,
 raises `ValueError`.
 
 A callback can take fewer of the signal's arguments than the signal emits. It then gets the
-first ones, or none. `connect(callback, now=True)` also calls the callback once, right away.
+first ones, or none. `connect(callback, now=True)` also calls the callback once, right away,
+without the signal's arguments. Use it for a callback that reads the current state, such as
+one that shows a model's rows. A callback that takes the signal's arguments needs defaults
+for them.
