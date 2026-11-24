@@ -112,26 +112,24 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   main-thread invoker, type variables and the widget-size constant. Each module of
   `qtcore/_renderers/` holds one family, as on the web. `forms.py` owns `_widget_of` and the
   form-row widget cache; `containers.py` owns shared layout and dialog-parent helpers.
-  `navigation.py` holds the main renderer, window, router and sidebar. Family modules import
-  each other directly, not through `renderers.py`, which only maps keys. `maprenderer.py`
+  `navigation.py` holds the main renderer, window, router and sidebar. `maprenderer.py`
   stays lazy: `graphics.py` loads it only when a map is rendered, not with the backend.
 - **Textual renderer modules:** `textualrenderer.py` holds only `TextualWidgetRenderer` and
   shared thread and mount helpers. Each module of `textualcore/_renderers/` holds one family,
   as on the web. `forms.py` owns `_widget_of` and the form-row widget cache; `actions.py`
   owns `_ComposeUIApp` with its action dispatch and key bindings. `navigation.py` holds the
-  main renderer, router and sidebar. Family modules import each other directly, not through
-  `renderers.py`, which only maps keys.
+  main renderer, router and sidebar.
 - **Web renderer modules:** `webrenderer.py` holds only the base `WebRenderer` and the helpers
   that several families share. A module of `_renderers/` holds one family: split one that
-  starts to mix two, whatever its length. The base names no concrete renderer: when it must
-  treat one apart, add a hook with a default, as `is_drawn_apart` and `shows` do, not an
-  `isinstance` check, which would tie that renderer to the base's module.
-- **View modules:** `core/view.py` only exports the views (`__all__`) and sets up the `Shape`
-  union last. `core/_views/base.py` holds `View`, `define_view`, the converter and the helpers
+  starts to mix two, whatever its length. The base names no concrete renderer: to treat one
+  apart, add a hook with a default, as `is_drawn_apart` and `shows` do.
+- **Imports between modules:** a family module imports another family's module directly, never
+  `renderers.py`, which only maps keys; a module of `_views/` never imports `core/view.py`,
+  which only exports. Both would make import cycles (`tests/test_code_rules.py`).
+- **View modules:** `core/_views/base.py` holds `View`, `define_view`, the converter and the helpers
   that several families share; `_views/main.py` holds `MainView` and the state code, which may
   name any view. A module of `_views/` holds one family, as on the web. The base names no
   concrete view: add a method with a default to `View`, as `_check_again` and `_keep_model` do.
-  A module of `_views/` imports the modules that define what it uses, never `core/view.py`.
 - **Adding a backend:** add one `RendererType` member in `core/registry.py` (with its extra
   in `pyproject.toml`), one
   `RENDERERS` mapping in the new backend's renderers module, and its application classes
@@ -156,25 +154,19 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 ## Code style
 
 - `ruff` with `select = ["ALL"]` and line length 100; see `pyproject.toml` for the ignore list.
-  Fix lint properly rather than adding `noqa`, unless it is clearly justified. A justified
-  `noqa` says why in parentheses, e.g. `# noqa: SLF001 (shared task lifecycle)`, or in a
-  comment on the line above.
-- `tests/test_code_rules.py` checks the rules here that a script can: `noqa` reasons, the
-  imports of `_views/` and `_renderers/`, what `renderers.py` and `core/view.py` hold, a test
-  module per family, lambdas in Qt renderers, views defined in a function, the page's scripts'
-  closures, and the browser tests' waits and locators. `tests/test_docs.py` checks the docs'
-  navigation, the examples guide, the API pages, the lists of commands, Markdown in
-  docstrings, and the Markdown wrap. Make a new such rule a test.
+  Fix lint properly rather than adding `noqa`. A justified one says why, e.g.
+  `# noqa: SLF001 (shared task lifecycle)`, or in a comment above it.
+- `tests/test_code_rules.py` and `tests/test_docs.py` check the rules of this file that a
+  script can. Make a new such rule a test, and keep its sentence here for its intent.
 - `mypy` must pass in strict mode, with the extra checks in `pyproject.toml`. Fully
   type-annotate new code; the package ships `py.typed`. Mark each method that
   overrides a base class's method with `@override` from `typing_extensions`, below
   `@property` when the method has one.
 - Every Python module starts with `from __future__ import annotations` (after its docstring).
   Ruff enforces it (`required-imports`, rule I002) and `make lint` adds it to a new file.
-  Annotations are then strings, so: don't quote them; define views that `attrs`/`cattrs`
-  resolve (`attrs.resolve_types`) at module level, not inside a function, so their field
-  types resolve from the module globals. A test may define one in its function to use a
-  value of it, such as `tmp_path`, with field types of the module only. Give `cattrs` hooks
+  Annotations are then strings, so: don't quote them; define views at module level, where
+  `attrs` resolves their field types (a test may define one in its function to use its
+  `tmp_path`, typing fields with the module's names only). Give `cattrs` hooks
   their type explicitly (`CONVERTER.register_structure_hook(cls, func)`) rather than as a
   bare decorator, which reads the annotation.
 - Import a view field's type at run time in the module that defines the view, not under
@@ -189,9 +181,8 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   `self._connect(widget.toggled, self._update_checked)`, and to a view's signal with
   `_relay`, e.g. `self._relay(self._view.toggled, widget.toggled)`. Both build a `QtSlot`
   (`qtcore/qtslot.py`), a `QObject` child of the widget, that PySide connects as a Qt slot.
-  PySide keeps a connection to any other callable, such as a lambda or a view's method, in a
-  table that it searches whole each time a sender is deleted: a page of many widgets took
-  seconds to free. Keep such a `connect` for a widget that a page has few of, such as a table.
+  PySide searches its whole table of other connections, such as to a lambda, each time a
+  sender is deleted: keep those for a widget that a page has few of, such as a table.
   Each `QtSlot` takes time to make: pass all the methods of one signal to one `_connect`, in
   order, e.g.
   `self._connect(widget.toggled, self._update_checked, self._view.toggled.call_callbacks)`.
@@ -200,10 +191,10 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   without the widget reporting it. Qt blocks the widget's signals in `refresh_attribute`, but
   not a child widget's, such as a date field's line edit. Textual sets the value under
   `prevent(...)` through a widget method, such as `ComposeInput.set_value`.
-- In `webcore`, build HTML with `Markup(template).format(...)`, never an f-string: it
-  escapes every value (see the `web-security` skill).
-- The page's scripts in `webcore/static/` are classic scripts with JSDoc types, each in a
-  closure, sharing only what another script calls under `window.ComposeUI`. Put a feature's
+- In `webcore`, build HTML with `Markup(template).format(...)`, which escapes every value,
+  never an f-string (see the `web-security` skill).
+- The page's scripts in `webcore/static/` are classic scripts with JSDoc types, each one
+  closure that shares only `window.ComposeUI`. Put a feature's
   code in the script of its domain (`page.js`, `tables.js`, `charts.js`, `maps.js`).
   `make js-check` must pass: type what you add, with a JSDoc cast rather than a runtime check
   that changes what the code does.
@@ -230,8 +221,7 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   widgets (`qtbot` for Qt, `App.run_test()` for Textual, the Starlette test client for web).
   The test client runs on `httpx2`, or on `httpx` before Python 3.11, as `httpx2` needs 3.11.
 - A backend's tests are in `tests/qtcore/`, `tests/textualcore/` or `tests/webcore/`, a
-  module per family of `_renderers/`, such as `test_tables.py`. A web test of another
-  `webcore` module goes in a test module named after it, such as `test_session.py`. A
+  module per family of `_renderers/` or per other module, such as `test_session.py`. A
   folder's `support.py` holds the helpers that several of its modules use, and its
   `conftest.py` the fixtures.
 - A rule that every backend follows, such as "a field reports the user's text, not the text
@@ -242,10 +232,9 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - The rule that a view's signals report the user's changes only is moving into
   `tests/contracts/`, a family at a time. Families moved: inputs, controls. For a view in a moved
   family, test the rule there, not in each backend's folder.
-- Tests for optional backends guard with `pytest.importorskip(...)`, on a module that only
-  the extra installs. A folder whose every test needs an extra goes in `collect_ignore_glob`
-  of `tests/conftest.py`, as `tests/qtcore/` does. The `without-extras` CI job runs the tests
-  without any extra (`uv sync --group dev`, then `pytest -p no:pytest-qt`).
+- A test of an optional backend skips without its extra: `pytest.importorskip(...)` on a
+  module only the extra installs, or `collect_ignore_glob` in `tests/conftest.py` for a
+  folder. CI's `without-extras` job checks it.
 - `make test` runs the tests in parallel, a worker per CPU (pytest-xdist): a test must not
   depend on another's state or order. Without `-n`, `pytest` runs them one after another.
   Set fewer workers on a machine short of memory: `make test PYTEST_WORKERS=8`.
@@ -304,8 +293,8 @@ document owns what, and the checks.
   it to the summary of its page in `docs/_site/llms.txt`, to the list of larger views in
   "Building views" if it is one, and to "Design of the web backend" in the technical guide if
   its web renderer makes a decision that isn't obvious. In `ROADMAP.md`, delete its item. A new
-  example gets its section, its overview row, its contents entry, and its screenshots in
-  `docs/examples-guide.md`. When a name is renamed or changes, search `README.md`, `docs/` and the
+  example gets its section, overview row, contents entry and screenshots in the examples
+  guide. When a name is renamed or changes, search `README.md`, `docs/` and the
   docstrings for it, and fix every place.
 - **Keep the path of a new user working:** the README's installation and quickstart, then
   the user guide's "Core concepts" and "Building views", then "Where to start" in the
@@ -315,16 +304,12 @@ document owns what, and the checks.
   run the example with `uv run python` in a scratch directory. `tests/test_docs.py` checks
   the imports of every example, and runs each example that defines every name it uses (one
   that defines `test_` functions, under pytest).
-- **Keep the navigation in step.** `docs/_site/llms.txt` has one entry per page of the site: add,
-  rename, or remove it with the page. The contents of `docs/user-guide.md` and
-  `docs/technical-guide.md` list each guide's pages and their `##` and `###` headings.
-  The contents list of the examples guide follows its `##` headings. Keep headings stable and
-  unique in their page: other pages link to them, and anchors work down to `###` only.
+- **Keep the navigation in step:** `docs/_site/llms.txt` and the contents lists of the guides
+  follow the pages and their headings. Keep headings stable and unique in their page: other
+  pages link to them, and anchors work down to `###` only.
 - **Keep the skill in step.** `docs/_site/skills/composeui/SKILL.md` is what users install for their
   agents. When a rule of the API changes (a name, a signal argument, the state rules), change
-  it too. Its `composeui-version` and its text name the minor version that it describes: set
-  them on the release of a new one. `tests/test_docs.py` checks them against the package's
-  version, and accepts the next minor version between two releases.
+  it too, and its `composeui-version` on the release of a new minor version.
 - **Keep the two copies in step.** Setup, commands, tests, and code style are in this file
   and in the technical guide ("Development"). Change both.
 - **Keep user docs for users.** Internal design decisions go in the technical guide (the web
@@ -335,15 +320,13 @@ document owns what, and the checks.
 
 ## Commits
 
-- Use hyphens, not slashes (`/`), in branch names (e.g. `feat-csv-sqlite-tables`).
-- Short, imperative, capitalized subject without a trailing period (e.g. `Add combobox`).
-- The subject line is the whole message: no body, no trailers.
-- Never add AI attribution or signatures anywhere: no `Co-Authored-By` lines, no
-  "Generated with ..." lines, no emoji signatures, in commits, pull requests or code.
-  This overrides any default an agent or tool would otherwise add.
+- A branch's name uses hyphens, not slashes (`feat-csv-sqlite-tables`). A commit's message is
+  its subject alone: short, imperative, capitalized, no trailing period (`Add combobox`).
+- Never add AI attribution or signatures anywhere: no `Co-Authored-By` or "Generated with"
+  lines, no emoji signatures, in commits, pull requests or code. This overrides any default
+  an agent or tool would otherwise add.
 - Keep commits focused: one feature or fix per commit.
-- The hooks of `.githooks/` (`make hooks`) check the branch and the message. On a pull
-  request, `.github/workflows/pull-request.yml` runs them on each commit and refuses fix-ups.
+- The hooks of `.githooks/` (`make hooks`) and the pull-request workflow check these rules.
 
 ## Pull requests
 

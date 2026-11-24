@@ -161,9 +161,8 @@ An example section in `docs/examples-guide.md` usually has this content, in this
 3. A table of its screenshots on Qt, Textual, and the web, from `docs/images/`.
 4. A list of what it shows, each feature linked to its section in the user guide.
 
-When you add an example, also add its row to the overview table, with its default backend
-(the `default_backend` of its `run` call, else web), and its entry in the contents list.
-When you add an example, also add its setup to `docs/screenshots.py` and run
+When you add an example, also add its row to the overview table and its entry in the contents
+list (`tests/test_docs.py` checks them), and its setup to `docs/screenshots.py` and run
 `make screenshots EXAMPLES=<example>`. When the README's quickstart changes, run
 `make screenshots EXAMPLES=quickstart`: the script runs the quickstart's code from the README.
 When an example changes what it shows, update its section, its row, and its screenshots. The
@@ -199,8 +198,8 @@ Aim for no more than 20 words in procedural sentences and 25 words in descriptiv
 sentences where practical. Split a longer sentence or use a list. Do not shorten
 an exact identifier, command, or technical term to meet a word limit.
 
-Wrap Markdown prose at 100 characters or less, as the code is. Do not wrap a
-line inside a link, inline code, or a table row.
+Wrap Markdown prose at 100 characters or less, as the code is, but never inside a link,
+inline code, or a table row (`tests/test_docs.py` checks it).
 
 ## Preserve the technical contract
 
@@ -256,7 +255,8 @@ presenting them as wording-only edits.
 7. When a Python example changes, check each name against `composeui.core`. If
    practical, run the example with `uv run python` in the scratchpad directory.
 8. Run `git diff --check`. When you change a file of `docs/` or a docstring, run
-   `make docs`. Run focused checks for changed commands or behavior if needed.
+   `make docs` and `tests/test_docs.py`, which checks the rules above that a script can.
+   Run focused checks for changed commands or behavior if needed.
 9. Report the changes and checks briefly. Do not claim checks that were not run.
 
 Documentation-only changes do not require `make test` or `make check`, but they require
