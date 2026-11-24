@@ -79,6 +79,7 @@ tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pil
   qtcore/        # the Qt backend's tests, a module per family, as in _renderers/
   textualcore/   # the Textual backend's tests, a module per family, as in _renderers/
   webcore/       # the web backend's tests, a module per family or per other webcore module
+  contracts/     # the rules every backend follows, each test run on each backend
 docs/            # user guide, examples guide, technical guide; Sphinx site (conf.py, api/, _ext/)
 ```
 
@@ -218,6 +219,14 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   `webcore` module goes in a test module named after it, such as `test_session.py`. A
   folder's `support.py` holds the helpers that several of its modules use, and its
   `conftest.py` the fixtures.
+- A rule that every backend follows, such as "a field reports the user's text, not the text
+  code sets", is tested once in `tests/contracts/`, a module per family. Its `driver`
+  fixture runs each test on each backend, through a driver per backend that works the real
+  widgets. A rule that one backend alone can break, such as an order of a toolkit's events,
+  stays in that backend's folder.
+- The rule that a view's signals report the user's changes only is moving into
+  `tests/contracts/`, a family at a time. Families moved: inputs. For a view in a moved
+  family, test the rule there, not in each backend's folder.
 - Tests for optional backends guard with `pytest.importorskip(...)`.
 - `make test` runs the tests in parallel, a worker per CPU (pytest-xdist): a test must not
   depend on another's state or order. Without `-n`, `pytest` runs them one after another.

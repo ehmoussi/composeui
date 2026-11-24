@@ -22,6 +22,7 @@ tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pil
   qtcore/        # the Qt backend's tests, a module per family, as in _renderers/
   textualcore/   # the Textual backend's tests, a module per family, as in _renderers/
   webcore/       # the web backend's tests, a module per family or per other webcore module
+  contracts/     # the rules every backend follows, each test run on each backend
 docs/            # the user guide (user-guide/), the examples guide, this guide, the Sphinx site
 ```
 

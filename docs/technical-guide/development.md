@@ -64,6 +64,14 @@ Every behavior change needs a test in `tests/`.
   `webcore` module goes in a test module named after it, such as `test_session.py`. A
   folder's `support.py` holds the helpers that several of its modules use, and its
   `conftest.py` the fixtures.
+- A rule that every backend follows, such as "a field reports the user's text, not the text
+  code sets", is tested once in `tests/contracts/`, a module per family. Its `driver`
+  fixture runs each test on each backend, through a driver per backend that works the real
+  widgets. A rule that one backend alone can break, such as an order of a toolkit's events,
+  stays in that backend's folder.
+- The rule that a view's signals report the user's changes only is moving into
+  `tests/contracts/`, a family at a time. Families moved: inputs. For a view in a moved
+  family, test the rule there, not in each backend's folder.
 - Tests for an optional backend guard with `pytest.importorskip(...)`.
 - `make test` runs the tests in parallel, a worker per CPU (pytest-xdist). So a test must
   not depend on the state or the order of another. `pytest` without `-n` runs them one

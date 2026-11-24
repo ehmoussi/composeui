@@ -19,11 +19,7 @@ from textual.widgets import (
 
 from composeui.core.registry import RendererType
 from composeui.core.view import (
-    DateInputView,
-    FilePathInputView,
-    FloatInputView,
     InputView,
-    IntInputView,
     MainView,
     define_view,
 )
@@ -33,9 +29,6 @@ from composeui.textualcore.widgets.composedateinput import (
     ComposeCalendar,
     ComposeDateInput,
     ComposeMonth,
-)
-from composeui.textualcore.widgets.composefilepathinput import (
-    ComposeFilePathInput,
 )
 from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composerange import ComposeDateRangeInput
@@ -47,8 +40,6 @@ from tests.memory import MemoryMainView
 from tests.ranges import FIRST_DAY, RangesMainView
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-
     from textual.app import App
 
 
@@ -379,72 +370,6 @@ async def test_a_failing_pipe_check_marks_the_fields_it_names() -> None:
 @define_view
 class _TextFieldsMainView(MainView):
     name: InputView = Factory(InputView)
-    ratio: FloatInputView = Factory(FloatInputView)
-    count: IntInputView = Factory(IntInputView)
-    day: DateInputView = Factory(DateInputView)
-    path: FilePathInputView = Factory(FilePathInputView)
-
-
-def _set_name(view: _TextFieldsMainView) -> None:
-    view.name.text = "Ada"
-
-
-def _set_ratio(view: _TextFieldsMainView) -> None:
-    view.ratio.value = 2.5
-
-
-def _set_count(view: _TextFieldsMainView) -> None:
-    view.count.value = 3
-
-
-def _set_day(view: _TextFieldsMainView) -> None:
-    view.day.value = datetime.date(2026, 1, 2)
-    view.day.date_format = "dd/MM/yyyy"
-
-
-def _set_path(view: _TextFieldsMainView) -> None:
-    view.path.text = "flows.csv"
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("name", "set_by_code"),
-    [
-        ("name", _set_name),
-        ("ratio", _set_ratio),
-        ("count", _set_count),
-        ("day", _set_day),
-        ("path", _set_path),
-    ],
-)
-async def test_a_text_field_reports_the_text_the_user_types_not_the_text_code_sets(
-    name: str, set_by_code: Callable[[_TextFieldsMainView], None]
-) -> None:
-    view = _TextFieldsMainView()
-    view.render(RendererType.TEXTUAL)
-    assert isinstance(view.renderer, TextualMainRenderer)
-    app = view.renderer.app
-    assert app is not None
-    field = getattr(view, name)
-    seen: list[tuple[str, str]] = []
-    field.text_changed.connect(lambda text: seen.append(("changed", text)))
-    field.text_edited.connect(lambda text: seen.append(("edited", text)))
-
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        assert isinstance(field.renderer, TextualWidgetRenderer)
-        widget = field.renderer.widget
-        text_input = (
-            widget.input if isinstance(widget, (ComposeDateInput, ComposeFilePathInput)) else widget
-        )
-        assert isinstance(text_input, ComposeInput)
-        set_by_code(view)
-        # typed after: the field's change for the code's text would come first
-        text_input.focus()
-        await pilot.press("end", "1")
-        await pilot.pause()
-
-        assert seen == [("changed", text_input.value), ("edited", text_input.value)]
 
 
 @pytest.mark.asyncio
