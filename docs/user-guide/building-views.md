@@ -58,7 +58,7 @@ class PipeForm(FormView):
 class FormButtons(HorizontalView):
     align = Align.END
 
-    save: ButtonView = child(ButtonView, text="Save")
+    validate: ButtonView = child(ButtonView, text="Validate")
 
 
 @define_view
@@ -71,12 +71,12 @@ class PipeMainView(MainView):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.buttons.save.clicked.connect(self._save)
+        self.buttons.validate.clicked.connect(self._validate)
 
-    def _save(self) -> None:
+    def _validate(self) -> None:
         self.form.check()
         if self.form.is_valid:
-            self.status_bar.show_message(f"Saved {self.form.name.text}")
+            self.status_bar.show_message(f"{self.form.name.text} is valid")
 
 
 if __name__ == "__main__":
@@ -195,6 +195,7 @@ The fields:
 | `FloatSliderView` | `value`, a decimal number from `minimum` to `maximum` by `step` (see [Decimal slider](widgets.md#decimal-slider)) | Drags a handle |
 | `RangeSliderView` | `value`, a pair of ends from `minimum` to `maximum` by `step` (see [Range slider](widgets.md#range-slider)) | Drags two handles |
 | `FloatRangeSliderView` | `value`, a pair of decimal ends | Drags two handles |
+| `FileUploadView` | `files`, which the study does not save (see [File upload](widgets.md#file-upload)) | Gives the app a file (`uploaded`) |
 
 Each field has its row views too, for example `RowFloatInputView` and
 `LabelRowFloatInputView`, or `LabelRowDateInputView` for a date. The
@@ -211,7 +212,13 @@ rows only.
 - **The text fields** emit `text_edited` on each change that the user types, and
   `editing_finished` when the user is done with the field, for example on Enter, or as a
   text area loses the focus. `text_changed` also reports a path or a date that the user
-  picks. Text or a value that code sets emits neither signal.
+  picks. Text or a value that code sets emits neither signal. On the web, `text_edited`
+  waits until the user stops typing for 300 ms, or leaves the field. A callback can then get
+  `"abc"` only, not `"a"` and `"ab"` before it.
+- **A date range** has no text signals. `value_changed` gives the pair of dates, the start
+  and the end, either one `None`.
+- **A file upload** gives each file as an `UploadedFile`: its `name`, its `size`, and the
+  `path` to read it from. The study does not save the file.
 - **A check box** shows other views only while it is checked, with `shows`:
   `self.show_raw_data.shows(self.table)`. It sets their `is_visible` at once, and again
   each time the box changes: as the user clicks it, as code sets `is_checked`, and as a
@@ -240,6 +247,16 @@ value is good:
   end, and marks the fields of `rows` as invalid.
 - **Before an action.** `form.check()` runs every check of the form and its nested forms
   now. Then `form.is_valid` tells whether they all pass.
+- **Bounds are not checks.** The `minimum` and `maximum` of a `FloatInputView` do not make
+  a check: `form.check()` does not refuse a value out of them, such as a radius of `-1`.
+  Each backend treats such text differently while the user types:
+  - Qt refuses some of it, such as a minus sign when `minimum` is 0, but not a number
+    over `maximum`.
+  - Textual shows the field as invalid, without a message.
+  - The web takes it as typed.
+
+  To refuse the value on every backend, add a check with `set_validator`, as `NameRow`
+  does.
 
 In a [form dialog](organizing-the-window.md#form-dialogs), OK stays disabled while a check fails.
 [`src/examples/pipeform.py`](../../src/examples/pipeform.py) checks its name field, and has two
@@ -496,22 +513,29 @@ hook of its own.
 
 The text that the user reads rather than enters (labels, titles, headers, button and menu
 text) is tagged `UI_TEXT`, and is skipped too. This text comes from the app's code, in its
-language, not from a study. Tag a text field of your own views the same way:
+language, not from a study. Open keeps this text as it is. New sets it back to the text of
+the view that `build_initial_view` gives. Tag a text field of your own views the same way:
 `attrs.field(default="", metadata={UI_TEXT: True})`.
 
 A study holds what the user enters and what the app computes from it: the values of the
 fields, the rows and records of a table with its sort and its filters, and the series of a
-chart. Saving, opening, and New leave the rest alone:
+chart. It also holds the message of the [status bar](#the-status-bar), which Open shows
+again. Save does not write the rest, and Open and New keep it, except where this list says
+otherwise:
 
 - **Navigation:** the [page](organizing-the-window.md#pages) and the
   [tab](organizing-the-window.md#tabs) shown, and an open
   [dialog](organizing-the-window.md#dialogs).
 - **Layout:** the sizes of [resizable panes](organizing-the-window.md#resizable-panes), and whether
   the [sidebar](organizing-the-window.md#sidebar) is retracted.
-- **The app's setup:** class variables, the `icon` of an [action](organizing-the-window.md#toolbars)
-  or a [tree node](widgets.md#tree), the `extensions` of a
-  [file path input](widgets.md#file-path-input), and the `cell_widgets`, `cell_styles`,
-  `header_groups`, and `row_headers` of a [table](tables.md#a-table-of-records).
+- **The app's setup:** class variables, the `icon` of an
+  [action](organizing-the-window.md#toolbars), the `extensions` of a
+  [file path input](widgets.md#file-path-input), and the `cell_widgets` and `cell_styles` of
+  a [table](tables.md#a-table-of-records). The `header_groups` and `row_headers` of a table
+  are `UI_TEXT`: New sets them back.
+- **The `icon` of a [tree node](widgets.md#tree):** a study holds the nodes, but not their
+  icons. Open replaces the nodes, so they show no icon. Set the icons again in a callback of
+  `loaded`. New sets the nodes back, with their icons.
 - **What the app gives again:** the source and the rows of a
   [large table](tables.md#a-large-table), and the views of a
   [list of views](organizing-the-window.md#a-list-of-views), which belong to the model.
@@ -530,6 +554,10 @@ after each New and Open. On the web, each session emits it as it starts. Connect
 give again what a study does not hold, from the fields that it does hold, such as a filter:
 
 ```python
+from attrs import frozen
+
+from composeui.core.application import run
+from composeui.core.model import Model
 from composeui.core.view import (
     ListSource,
     MainView,
@@ -538,6 +566,17 @@ from composeui.core.view import (
     child,
     define_view,
 )
+
+
+@frozen
+class Reading:
+    sensor: str
+    value: int
+
+
+class ReadingsModel(Model):
+    def __init__(self) -> None:
+        self.readings = [Reading("A", 3), Reading("B", 8)]
 
 
 @define_view
@@ -554,6 +593,10 @@ class ReadingsMainView(MainView):
     def _show_above(self, *, model: ReadingsModel) -> None:
         records = [r for r in model.readings if r.value > self.threshold.value]
         self.above.source = ListSource(Reading, {"sensor": "Sensor"}, records)
+
+
+if __name__ == "__main__":
+    run(ReadingsMainView, build_model=ReadingsModel)
 ```
 
 A load sets the fields without emitting their signals, such as the slider's `value_changed`,
@@ -600,11 +643,15 @@ changes. Discard them?", with Discard and Cancel. Cancel leaves the study as it 
 are those since the study was last saved, opened, or started. An app without a File menu
 (`has_file_menu = False`) never asks, as the user can't save.
 
-A change is what Save would write differently: a field of the study, or the model's data. A change
-undone is no change. UI text, a dialog, the status bar's message, a notification, and the tab shown
-are not changes (see the list above). A model tells its changes with `Model.data_version`:
-`DatabaseModel` counts its committed writes, but not those of the jobs that the study's start
-started (see below). A model of your own with data changes it as its data changes.
+A change is what Save would write differently: a field of the study, or the model's data. A
+field changed back to its saved value is no change. UI text, a dialog, a notification, and the tab
+shown are not changes (see the list above). The status bar's message is not a change either,
+though Save writes it.
+
+A model tells its changes with `Model.data_version`. `DatabaseModel` counts its committed writes,
+but not those of the jobs that the study's start started (see below). It does not compare the
+data: a write that puts a value back is a change too. A model of your own with data changes
+`data_version` as its data changes.
 
 What the app does on its own as the study starts is not a change: its setup, the callbacks of
 `loaded`, its command-line options, and the jobs they start, such as a download of the data a
@@ -676,9 +723,11 @@ class PipeMainView(MainView):
   [unsaved changes](#unsaved-changes) that the last autosave does not hold. An idle app writes
   nothing. The log says "Autosaved the unsaved work in" and the folder at each autosave. A
   thread writes the views' state, and copies the data of a `DatabaseModel`, so the window does
-  not wait. The data is copied only when `Model.data_version` changed. The data of a model of
-  your own is copied by its `save_data`, on the main thread: at each autosave, unless the model
-  changes its `data_version`.
+  not wait. The first autosave copies the data. A later one copies the data of a
+  `DatabaseModel` only after a committed write, also a write of a job that the study's start
+  started, which `data_version` does not count. The data of a model of your own is copied by
+  its `save_data`, on the main thread: at each autosave, unless the model changes its
+  `data_version`.
 - **What it is not.** An autosave is not the user's save: the study keeps its unsaved
   changes, and its file name. Save, New, and Open delete the autosave, and a clean close
   deletes the folder. A clean close is Exit, or the window closed, after the user saved or
