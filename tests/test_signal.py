@@ -119,6 +119,23 @@ def test_app_connect_injects_the_view_and_main_view() -> None:
     assert calls[0][1] is app.main_view
 
 
+def test_app_connect_gives_its_own_main_view_and_model_whatever_signal_emits() -> None:
+    """Not those of the signal, from another app, or none for a signal that no view owns."""
+    app = ModelApplication(build_main_view=_WiredMainView, build_model=Model)
+    other = ModelApplication(build_main_view=_WiredMainView, build_model=Model)
+    standalone = SignalNoArgs()
+    given: list[tuple[object, ...]] = []
+
+    @app.connect(view=app.main_view.early, signals=[other.main_view.early.clicked, standalone])
+    def record(*, view: ButtonView, main_view: MainView, model: Model) -> None:
+        given.append((view, main_view, model))
+
+    other.main_view.early.clicked.emit()
+    standalone.emit()
+
+    assert given == [(app.main_view.early, app.main_view, app.model)] * 2
+
+
 def test_a_signal_injects_its_owning_view_without_an_app() -> None:
     table = TableView()
     calls: list[tuple[object, ...]] = []
@@ -429,6 +446,9 @@ def test_a_callback_asking_for_what_the_signal_hasn_t_is_told() -> None:
     def maybe_sign(value: int, *, model: Model | None = None) -> None:
         pass
 
+    def maybe_show(value: int, *, main_view: MainView | None = None) -> None:
+        pass
+
     for callback, error in (
         (show, "The main view is missing."),
         (sign, "The model is missing."),
@@ -440,7 +460,8 @@ def test_a_callback_asking_for_what_the_signal_hasn_t_is_told() -> None:
             signal.emit(1)
     optional: Signal[int] = Signal()
     optional.connect(maybe_sign)
-    optional.emit(1)  # its default instead
+    optional.connect(maybe_show)
+    optional.emit(1)  # their defaults instead
 
 
 def test_a_view_refuses_a_signal_another_view_owns() -> None:

@@ -393,9 +393,10 @@ class Signal(Generic[Unpack[Ts]]):
     @staticmethod
     def _requested_bounds(callback: Callable[..., None]) -> frozenset[str]:
         names: tuple[str, ...] = ("view", "main_view", "model")
-        if isinstance(callback, functools.partial) and "view" in callback.keywords:
-            # `Application.connect(view=...)` explicitly picks a view, not always the owner.
-            names = ("main_view", "model")
+        if isinstance(callback, functools.partial):
+            # what the partial gives wins: `Application.connect` gives its own `view`, not
+            # always the owner, and its app's `main_view` and `model`, not the signal's
+            names = tuple(name for name in names if name not in callback.keywords)
         try:
             params = inspect.signature(callback).parameters
         except (TypeError, ValueError):
@@ -517,10 +518,11 @@ class InjectedCallback(Generic[Unpack[Ts]]):
                 raise ValueError(msg)
         if "main_view" in self._requested_bounds:
             main_view = None if self._main_view is None else self._main_view()
-            if main_view is None:
+            if main_view is not None:
+                kwargs["main_view"] = main_view
+            elif "main_view" not in self._optional_bounds:
                 msg = "The main view is missing."
                 raise ValueError(msg)
-            kwargs["main_view"] = main_view
         if "model" in self._requested_bounds:
             model = None if self._model is None else self._model()
             if model is not None:
