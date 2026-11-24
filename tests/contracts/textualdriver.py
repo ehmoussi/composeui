@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
+
+from textual.widgets import Checkbox
 
 from composeui.core.registry import RendererType
 from composeui.textualcore._renderers.navigation import TextualMainRenderer
 from composeui.textualcore.widgets.composeinput import ComposeInput
+from composeui.textualcore.widgets.composerange import ComposeRangeSlider
+from composeui.textualcore.widgets.composeslider import ComposeSlider
 from tests.textualcore.support import _widget
 
 if TYPE_CHECKING:
@@ -45,6 +49,20 @@ class TextualDriver:
     def shown_text(self, view: View) -> str:
         return _input(view).value
 
+    async def toggle(self, view: View) -> None:
+        _checkbox(view).focus()
+        await self._press("space")
+
+    def is_checked(self, view: View) -> bool:
+        return _checkbox(view).value
+
+    async def slide(self, view: View, end: Literal["start", "end"]) -> None:
+        _slider(view).focus()
+        await self._press("home" if end == "start" else "end")
+
+    def slider_text(self, view: View) -> str:
+        return _slider(view).shown_text()
+
     async def _press(self, *keys: str) -> None:
         assert self._pilot is not None
         await self._pilot.press(*keys)
@@ -56,3 +74,15 @@ def _input(view: View) -> ComposeInput:
     """Find the input that the user types in: the field, or its own (a date's, a file path's)."""
     field = _widget(view)
     return field if isinstance(field, ComposeInput) else field.query_one(ComposeInput)
+
+
+def _checkbox(view: View) -> Checkbox:
+    checkbox = _widget(view)
+    assert isinstance(checkbox, Checkbox)
+    return checkbox
+
+
+def _slider(view: View) -> ComposeSlider | ComposeRangeSlider:
+    slider = _widget(view)
+    assert isinstance(slider, (ComposeSlider, ComposeRangeSlider))
+    return slider

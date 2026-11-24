@@ -53,6 +53,10 @@ class QValueSlider(QSlider):
     def shown_value(self) -> float:
         return self._value_at(self.value())  # type: ignore[no-any-return]
 
+    def shown_text(self) -> str:
+        """Get the value's text, painted beside the track."""
+        return self._text_at(self.value())
+
     def _value_at(self, position: int) -> Any:
         return self.steps.value_at(position, self.first, self.step)
 
@@ -87,7 +91,7 @@ class QValueSlider(QSlider):
         if not self.is_filled:
             self._paint_unfilled(painter)
         align = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
-        painter.drawText(self.value_rect(), align, self._text_at(self.value()))
+        painter.drawText(self.value_rect(), align, self.shown_text())
         painter.end()
 
     def _paint_unfilled(self, painter: QPainter) -> None:

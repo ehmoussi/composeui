@@ -67,8 +67,7 @@ def test_a_slider_stops_on_its_steps_its_value_painted_beside_the_track(qtbot: Q
     assert (workers.value, moves) == (14, [8, 14])  # the last step, short of 16
     assert slider.value_rect() == slot  # as wide whatever the value: the track keeps its length
 
-    workers.value = 6  # set in code: shown at its nearest step, and not reported
-    assert (slider.shown_value(), moves) == (5, [8, 14])
+    workers.value = 6  # between two steps: shown at its nearest, exactly once on a step
     workers.step = 1
     workers.minimum = 0
     assert (slider.maximum(), slider.shown_value()) == (16, 6)
@@ -90,9 +89,6 @@ def test_a_decimal_slider_stops_on_exact_decimal_steps(qtbot: QtBot) -> None:
     qtbot.keyClick(slider, Qt.Key.Key_End)
     assert (opacity.value, moves) == (0.3, [0.3])
 
-    opacity.value = 0.14  # set in code: shown at its nearest step, and not reported
-    assert (slider.shown_value(), moves) == (0.1, [0.3])
-
 
 def test_a_range_slider_s_handles_move_by_keys_and_clicks_stopping_on_each_other(
     qtbot: QtBot,
@@ -105,7 +101,7 @@ def test_a_range_slider_s_handles_move_by_keys_and_clicks_stopping_on_each_other
     qtbot.addWidget(slider)
     moves: list[tuple[int, int]] = []
     hours.value_changed.connect(moves.append)
-    assert (slider.low, slider.high, slider.ends_text()) == (8, 18, "8 \u2013 18")
+    assert (slider.low, slider.high, slider.shown_text()) == (8, 18, "8 \u2013 18")
     plain = QSlider(Qt.Orientation.Horizontal).sizeHint()
     assert slider.sizeHint().height() == plain.height()  # as tall as a plain slider
 
@@ -136,9 +132,7 @@ def test_a_range_slider_s_handles_move_by_keys_and_clicks_stopping_on_each_other
     qtbot.mouseRelease(slider, Qt.MouseButton.LeftButton, pos=QPoint(x, y))
     qtbot.mouseMove(slider, QPoint(slider._handle_rect(18).center().x(), y))  # noqa: SLF001
     assert hours.value == (0, 16)
-    reported = len(moves)
-    hours.value = (20, 20)  # set in code: shown, and not reported
-    assert (slider.low, slider.high, len(moves)) == (20, 20, reported)
+    hours.value = (20, 20)
     # on one another near the end: the low handle, which can still move down
     click(20)
     qtbot.keyClick(slider, Qt.Key.Key_Left)
@@ -257,7 +251,7 @@ def test_a_decimal_range_slider_stops_on_exact_decimal_steps(qtbot: QtBot) -> No
     assert isinstance(slider, QRangeSlider)
     qtbot.addWidget(slider)
     assert (slider.maximum(), slider.low, slider.high) == (6, 1, 4)
-    assert slider.ends_text() == "0.5 \u2013 2.0"
+    assert slider.shown_text() == "0.5 \u2013 2.0"
 
     slider.show()
     slider.setFocus()
@@ -326,11 +320,6 @@ def test_clicking_the_checkbox_checks_the_view_and_enables_its_row(qtbot: QtBot)
 
     assert insulated.is_checked is True
     assert thickness_widget.isEnabled()  # toggled -> the thickness row
-    assert toggled == [True]
-
-    # set in code: the box follows, but only the user's toggles are reported
-    insulated.is_checked = False
-    assert not checkbox.isChecked()
     assert toggled == [True]
 
 

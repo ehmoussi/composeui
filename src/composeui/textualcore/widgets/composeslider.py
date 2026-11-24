@@ -124,6 +124,10 @@ class ComposeSlider(DragReportMixin, can_focus=True):
     def shown_value(self) -> float:
         return self._value_at(self.position)  # type: ignore[no-any-return]
 
+    def shown_text(self) -> str:
+        """Get the value's text, drawn beside the track."""
+        return self._text_at(self.position)
+
     def _value_at(self, position: int) -> Any:
         return self.steps.value_at(position, self.first, self.step)
 
@@ -150,7 +154,7 @@ class ComposeSlider(DragReportMixin, can_focus=True):
         text.append("●", style=self.get_component_rich_style("slider--handle"))
         empty = "─" * (width - handle - 1)
         text.append(empty, style=self.get_component_rich_style("slider--empty"))
-        value = self._text_at(self.position).rjust(self._slot_width())
+        value = self.shown_text().rjust(self._slot_width())
         text.append(f" {value}", style=self.get_component_rich_style("slider--value"))
         return text
 
