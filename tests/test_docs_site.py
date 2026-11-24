@@ -59,7 +59,7 @@ def test_each_built_site_includes_its_stylesheets_and_scripts(
 
 @pytest.mark.parametrize("version", ["", "stable"])
 def test_each_sitemap_omits_pages_that_refuse_indexing(site_root: Path, version: str) -> None:
-    sitemap = ET.parse(site_root / version / "sitemap.xml")  # noqa: S314 - local build
+    sitemap = ET.parse(site_root / version / "sitemap.xml")  # noqa: S314 (a local build)
     locations = [
         element.text
         for element in sitemap.findall(

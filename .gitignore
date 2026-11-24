@@ -11,6 +11,8 @@ wheels/
 
 # coverage
 *.coverage
+# a worker's data, left when a run of the tests stops
+.coverage.*
 
 *.pipe
 # downloaded by `make css`, not committed

@@ -443,7 +443,7 @@ def _call_reporting(callback: Callable[..., object], args: tuple[object, ...]) -
     """
     try:
         callback(*args)
-    except Exception:  # noqa: BLE001 - reported through the hook, as by PySide
+    except Exception:  # noqa: BLE001 (reported through the hook, as by PySide)
         sys.excepthook(*sys.exc_info())
 
 

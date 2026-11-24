@@ -85,7 +85,7 @@ def test_a_failed_refresh_leaves_the_widget_s_signals_as_they_were(qtbot: QtBot)
         view.renderer.refresh_attribute("no_such_attribute", 1)
     qtbot.keyClicks(widget, "!")
     assert view.text == "before!"
-    widget.blockSignals(True)  # noqa: FBT003
+    widget.blockSignals(True)  # noqa: FBT003 (Qt's API)
     with pytest.raises(AttributeError):
         view.renderer.refresh_attribute("no_such_attribute", 1)
     assert widget.signalsBlocked()

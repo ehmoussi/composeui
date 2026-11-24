@@ -221,8 +221,8 @@ The state changes under one `threading.Condition`:
 - **Checked once.** `_sharer` checks the value as the load ends, and returns how each job gets
   it: a clone, a shallow copy, a view, or the value itself. A NumPy array is never copied:
   `_shared_array` makes it and each array it is a view of read-only, then refuses it if a view
-  can still be made writeable, as NumPy allows over memory that can be written. Narwhals tells the frame types apart,
-  so the core imports no frame library.
+  can still be made writeable, as NumPy allows over memory that can be written. Narwhals tells the
+  frame types apart, so the core imports no frame library.
 - **No registry.** The value lives as long as its `SharedData`, a module's global. A reload runs
   the module again, and the old value goes with the sessions that hold it.
 

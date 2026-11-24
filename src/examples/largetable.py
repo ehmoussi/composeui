@@ -80,7 +80,7 @@ def made_up(count: int) -> Iterator[tuple[str, str, float, Optional[float], str]
             choice(sensors),
             choice(SITES),
             round(gauss(21, 4), 2),
-            None if uniform() < 0.1 else round(gauss(101.3, 1.5), 2),  # noqa: PLR2004
+            None if uniform() < 0.1 else round(gauss(101.3, 1.5), 2),  # noqa: PLR2004 (one value in ten missing)
             choice(statuses),
         )
 

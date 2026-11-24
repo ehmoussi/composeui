@@ -252,7 +252,7 @@ class QtMultiComboBoxRenderer(_QtChoicesRenderer[QMultiComboBox]):
     """A drop-down list of check boxes: a button showing the choice, its menu the list."""
 
     _invalid_style = "QPushButton { border: 1px solid red; }"
-    _shown_attributes = (*_QtChoicesRenderer._shown_attributes, "empty_text", "count_text")  # noqa: SLF001
+    _shown_attributes = (*_QtChoicesRenderer._shown_attributes, "empty_text", "count_text")  # noqa: SLF001 (the base renderer's attributes)
 
     @override
     @staticmethod

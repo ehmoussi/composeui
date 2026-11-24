@@ -57,7 +57,7 @@ def _ask_folder(parent: QWidget, title: str, start: Path | None) -> str:
     return QFileDialog.getExistingDirectory(parent, title, "" if start is None else str(start))
 
 
-def _ask_save(  # noqa: PLR0913
+def _ask_save(  # noqa: PLR0913 (QFileDialog's options)
     parent: QWidget,
     title: str,
     start: Path | None,

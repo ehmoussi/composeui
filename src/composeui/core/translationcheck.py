@@ -382,12 +382,12 @@ def check_and_report(
     """Write the catalogs of `languages`, print the reports, and give the exit status."""
     for language in languages:
         path, added = write_catalog(main_view_class, language)
-        print(f"{path}: {len(added)} entries added to translate")  # noqa: T201
+        print(f"{path}: {len(added)} entries added to translate")  # noqa: T201 (the command's output)
     reports = check_main_view(main_view_class)
     for report in reports:
-        print(report)  # noqa: T201
+        print(report)  # noqa: T201 (the command's output)
     if not reports:
-        print(f"no catalog in {main_view_class.translations_dir}")  # noqa: T201
+        print(f"no catalog in {main_view_class.translations_dir}")  # noqa: T201 (the command's output)
     if strict:
         return 0 if all(report.is_complete for report in reports) else 1
     return 0 if all(report.is_ok for report in reports) else 1

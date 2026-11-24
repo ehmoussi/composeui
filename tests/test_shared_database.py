@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Optional, Union
 
 import pytest
+from attrs import Factory
 from typing_extensions import override
 
 from composeui.core import sqlitemodel
@@ -34,8 +35,7 @@ from composeui.core.sqlitemodel import (
     shared,
     table,
 )
-from composeui.core.view import MainView
-from examples.webhello import HelloMainView
+from composeui.core.view import LabelView, MainView, define_view
 
 if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
@@ -272,18 +272,25 @@ def test_a_session_whose_callback_fails_is_still_told_of_the_next_changes(
         ] * 2
 
 
-def _save(app: ModelApplication[HelloMainView, Any], path: Path) -> None:
+@define_view
+class _SummaryMainView(MainView):
+    """A main view whose summary shows what the model shares."""
+
+    summary: LabelView = Factory(LabelView)
+
+
+def _save(app: ModelApplication[_SummaryMainView, Any], path: Path) -> None:
     app.main_view.file_view.filepath = path
     app.main_view.file_menu.save.triggered.emit()
 
 
-def _open(app: ModelApplication[HelloMainView, Any], path: Path) -> None:
+def _open(app: ModelApplication[_SummaryMainView, Any], path: Path) -> None:
     app.main_view.file_view.filepath = path
     app.main_view.file_menu.open_file.triggered.emit()
 
 
 def test_a_study_leaves_the_shared_database_out(tmp_path: Path) -> None:
-    app = ModelApplication(build_main_view=HelloMainView, build_model=_book_model())
+    app = ModelApplication(build_main_view=_SummaryMainView, build_model=_book_model())
     model = app.model
     try:
         main_view = app.main_view
@@ -363,7 +370,7 @@ def test_a_kept_file_is_made_once_then_reopened_and_brought_up_to_date_once(
     path = tmp_path / "crm.sqlite"
 
     def run(version: int) -> str:
-        done = subprocess.run(  # noqa: S603
+        done = subprocess.run(  # noqa: S603 (a command the code builds, no user input)
             [sys.executable, "-c", _RUN, str(path), str(version)],
             capture_output=True,
             text=True,
@@ -781,11 +788,11 @@ def test_a_misuse_of_a_shared_database_is_refused_with_why(
 
 def _book_app(
     model_type: type[_BookModel],
-) -> tuple[ModelApplication[HelloMainView, _BookModel], list[threading.Thread]]:
+) -> tuple[ModelApplication[_SummaryMainView, _BookModel], list[threading.Thread]]:
     """Get an app whose summary shows the shared names, and the threads that showed them."""
     threads: list[threading.Thread] = []
 
-    def show_names(main_view: HelloMainView, model: _BookModel) -> None:
+    def show_names(main_view: _SummaryMainView, model: _BookModel) -> None:
         def show() -> None:
             main_view.summary.text = ", ".join(model.book.names.texts())
             threads.append(threading.current_thread())
@@ -793,7 +800,7 @@ def _book_app(
         model.book.names.changed.connect(show)
 
     app = ModelApplication(
-        build_main_view=HelloMainView, build_model=model_type, setup_model=show_names
+        build_main_view=_SummaryMainView, build_model=model_type, setup_model=show_names
     )
     return app, threads
 

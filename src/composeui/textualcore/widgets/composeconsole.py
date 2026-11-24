@@ -268,7 +268,7 @@ class ComposeConsoleBox(Vertical):
         self.search.value = ""  # its highlights go
         self.log_view.focus()
 
-    def action_step(self, is_backwards: bool = False) -> None:  # noqa: FBT002
+    def action_step(self, is_backwards: bool = False) -> None:  # noqa: FBT002 (Textual passes the action's argument by position)
         self.log_view.step(is_backwards=is_backwards)
 
     def on_input_changed(self, event: Input.Changed) -> None:

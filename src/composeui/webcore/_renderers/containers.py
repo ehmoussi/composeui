@@ -481,7 +481,7 @@ class WebListRenderer(WebRenderer["ListView[Any]"]):
             shown = [
                 child
                 for child in renderers
-                if isinstance(child, WebRenderer) and child._rendered_object is not None  # noqa: SLF001
+                if isinstance(child, WebRenderer) and child._rendered_object is not None  # noqa: SLF001 (a renderer of this backend)
             ]
             for child in shown:
                 if child in self.children:

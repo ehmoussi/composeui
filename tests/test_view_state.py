@@ -1161,8 +1161,8 @@ def test_save_state_does_not_crash_with_a_live_status_bar_timer(tmp_path: Path) 
         view.save_state(filepath)  # must not raise TypeError: Timer not JSON serializable
         assert '"_timer"' not in filepath.read_text()
     finally:
-        if view.status_bar._timer is not None:  # noqa: SLF001
-            view.status_bar._timer.cancel()  # noqa: SLF001
+        if view.status_bar._timer is not None:  # noqa: SLF001 (the timer the test stops, which no API reaches)
+            view.status_bar._timer.cancel()  # noqa: SLF001 (the timer the test stops, which no API reaches)
 
 
 def test_load_state_warns_and_clears_value_when_label_no_longer_exists(
@@ -2105,13 +2105,13 @@ def test_a_study_keeps_no_uploaded_file(tmp_path: Path) -> None:
     assert reopened.form.dataset.file is None
 
 
+@define_view
+class ImageMainView(MainView):
+    picture: ImageView = child(ImageView, image=Path("logo.png"), description="Logo")
+
+
 def test_a_study_neither_saves_nor_sets_an_image(tmp_path: Path) -> None:
     """A study comes from a user: an image's path in it would show a file of the server."""
-
-    @define_view
-    class ImageMainView(MainView):
-        picture: ImageView = child(ImageView, image=Path("logo.png"), description="Logo")
-
     view = ImageMainView()
     filepath = tmp_path / "state.json"
     view.save_state(filepath)

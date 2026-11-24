@@ -57,10 +57,14 @@ translations:
 .PHONY: check
 check: lint mypy translations js-check
 
+# the test workers (pytest-xdist): a number, such as `make test PYTEST_WORKERS=8` on a machine
+# that runs out of memory with a worker per CPU
+PYTEST_WORKERS ?= auto
+
 .PHONY: test
-# in parallel, a worker per CPU (pytest-xdist); the lines only Windows runs left out
+# in parallel, a worker per CPU by default; the lines only Windows runs left out
 test:
-	QT_QPA_PLATFORM=offscreen COMPOSEUI_WINDOWS_ONLY='# windows only' uv run pytest tests -m "not browser" -n auto --cov=src --cov-report=term-missing:skip-covered
+	QT_QPA_PLATFORM=offscreen COMPOSEUI_WINDOWS_ONLY='# windows only' uv run pytest tests -m "not browser" -n $(PYTEST_WORKERS) --cov=src --cov-report=term-missing:skip-covered
 
 # the web backend in headless Chromium; skipped unless Chromium is installed:
 # uv run --group browser playwright install chromium
@@ -220,6 +224,11 @@ web-deps:
 		sed -e 's/^/ * /' -e 's/ *$$//' $(STATIC)/cally.LICENSE; echo ' */'; \
 		cat $(STATIC)/cally.dist.js; } > $(STATIC)/cally.js
 	rm -f $(STATIC)/cally.dist.js $(STATIC)/cally.LICENSE
+
+# git's hooks of .githooks/ in this clone: a commit's message and branch follow AGENTS.md
+.PHONY: hooks
+hooks:
+	git config core.hooksPath .githooks
 
 .PHONY: clean
 clean:

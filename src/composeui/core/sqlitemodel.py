@@ -1493,7 +1493,7 @@ class _Engine:
                     if db.total_changes != before:
                         self.writes += 1
                         job = current_job()
-                        if job is None or not job._is_the_study_s:  # noqa: SLF001
+                        if job is None or not job._is_the_study_s:  # noqa: SLF001 (set by the jobs for the study's job)
                             self.user_writes += 1
             except BaseException:
                 if outermost:

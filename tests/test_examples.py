@@ -12,7 +12,6 @@ import pytest
 from composeui.core.application import BACKEND_VARIABLE, Application
 from composeui.core.registry import RendererType
 from examples.studyinputs import PATH, StudyInputsMainView
-from examples.webhello import HelloMainView
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -56,7 +55,8 @@ def test_each_example_starts_on_the_backend_the_examples_guide_lists(
 
 
 def test_the_hello_app_s_age_may_be_left_empty() -> None:
-    age = HelloMainView().form.age
+    hello = pytest.importorskip("examples.webhello")  # a web app: the web extra
+    age = hello.HelloMainView().form.age
     age.value = 12.0
     age.run_validator()
 

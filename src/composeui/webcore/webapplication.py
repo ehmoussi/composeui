@@ -480,7 +480,7 @@ def create_reloaded_starlette_app() -> Starlette:
     apps: list[WebApplication[Any]] = []
     token = _RELOADED_APPS.set(apps)
     try:
-        exec(code, program.__dict__)  # noqa: S102
+        exec(code, program.__dict__)  # noqa: S102 (runs the app's file, as python does)
     finally:
         _RELOADED_APPS.reset(token)
     if len(apps) == 0:

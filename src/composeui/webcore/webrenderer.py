@@ -137,7 +137,7 @@ class WebRenderer(Renderer[TView, str]):
 
     @property
     def _is_view_shown(self) -> bool:
-        return self._view.is_visible and (self.parent is None or self.parent._is_view_shown)  # noqa: SLF001
+        return self._view.is_visible and (self.parent is None or self.parent._is_view_shown)  # noqa: SLF001 (a renderer of the same class)
 
     @property
     def is_enabled(self) -> bool:

@@ -316,13 +316,14 @@ def test_an_app_without_studies_has_no_file_buttons() -> None:
     assert main_view.file_menu.renderer is None  # never rendered
 
 
-def test_another_menu_is_a_dropdown_under_its_title() -> None:
-    @define_view
-    class ViewMenu(Menu):
-        zoom_in: ActionView = Factory(lambda: ActionView(text="Zoom in"))
-        separator: SeparatorAction = Factory(SeparatorAction)
-        zoom_out: ActionView = Factory(lambda: ActionView(text="Zoom out"))
+@define_view
+class ViewMenu(Menu):
+    zoom_in: ActionView = Factory(lambda: ActionView(text="Zoom in"))
+    separator: SeparatorAction = Factory(SeparatorAction)
+    zoom_out: ActionView = Factory(lambda: ActionView(text="Zoom out"))
 
+
+def test_another_menu_is_a_dropdown_under_its_title() -> None:
     menu = ViewMenu(title="View")
     menu.render(RendererType.WEB)
     assert isinstance(menu.renderer, WebRenderer)
@@ -405,11 +406,12 @@ def test_actions_a_browser_already_has_are_left_out(
     assert "data-shortcut" not in left_out.attributes
 
 
-def test_save_as_alone_in_its_menu_is_its_download_button() -> None:
-    @define_view
-    class ExportMenu(Menu):
-        save_as: SaveAsAction = Factory(SaveAsAction)
+@define_view
+class ExportMenu(Menu):
+    save_as: SaveAsAction = Factory(SaveAsAction)
 
+
+def test_save_as_alone_in_its_menu_is_its_download_button() -> None:
     export = ExportMenu(title="Export")
     export.render(RendererType.WEB)
     assert isinstance(export.renderer, WebRenderer)

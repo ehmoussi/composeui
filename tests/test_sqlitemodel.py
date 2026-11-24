@@ -35,6 +35,9 @@ from composeui.core.sqlitemodel import (
 )
 from composeui.core.study import new_study, open_study
 from composeui.core.view import ButtonView, MainView, TableView, define_view
+
+# its studies are the hello app's, a web app: the web extra
+pytest.importorskip("composeui.webcore.webapplication")
 from examples.webhello import HelloMainView
 
 if TYPE_CHECKING:

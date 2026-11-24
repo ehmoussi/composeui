@@ -1111,7 +1111,7 @@ def test_the_row_class_s_own_checks_refuse_a_frame_s_row(
         list(fill_from_frame(csv_table, pl.DataFrame({"count": [2, 3]})))
 
     with csv_table.connection() as db:
-        assert db.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0] == 0  # noqa: S608
+        assert db.execute(f"SELECT COUNT(*) FROM {name}").fetchone()[0] == 0  # noqa: S608 (the test's own table names)
 
 
 @pytest.mark.parametrize(("name", "stored"), [("absolute", [2, 3]), ("tenfold", [-20, 30])])
@@ -1124,7 +1124,7 @@ def test_the_app_s_own_conversions_change_a_frame_s_values(
     list(fill_from_frame(csv_table, pl.DataFrame({"count": [-2, 3]})))
 
     with csv_table.connection() as db:
-        assert [count for (count,) in db.execute(f"SELECT count FROM {name}")] == stored  # noqa: S608
+        assert [count for (count,) in db.execute(f"SELECT count FROM {name}")] == stored  # noqa: S608 (the test's own table names)
 
 
 @define_csv_row
@@ -1230,7 +1230,7 @@ def _outcome(
     with model.study.samples.connection() as db:
         names = [field.name for field in attrs.fields(_Sample)]
         cells = ", ".join(f"{name}, typeof({name})" for name in names)
-        rows = [tuple(row) for row in db.execute(f"SELECT {cells} FROM samples ORDER BY rowid")]  # noqa: S608
+        rows = [tuple(row) for row in db.execute(f"SELECT {cells} FROM samples ORDER BY rowid")]  # noqa: S608 (the test's own table names)
         db.execute("DELETE FROM samples")
     return refused, rows
 

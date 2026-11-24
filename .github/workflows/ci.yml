@@ -139,6 +139,28 @@ jobs:
       - run: uv sync --locked --group dev --all-extras
       - run: make translations test
 
+  # the tests without the extras, as an app with one backend installs ComposeUI: a test of a
+  # backend skips without its extra (`pytest.importorskip`) rather than failing. No coverage:
+  # the skipped tests leave lines out
+  without-extras:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags: setuptools-scm makes the version from them
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.9"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked --group dev
+      # pytest-qt refuses to start without a Qt binding
+      - run: uv run --locked pytest tests -m "not browser" -n auto -p no:pytest-qt
+        env:
+          QT_QPA_PLATFORM: offscreen
+
   browser:
     needs: changes
     if: needs.changes.outputs.code == 'true'

@@ -36,17 +36,18 @@ def test_a_record_keeps_its_view_by_its_key_and_a_new_one_gets_a_view() -> None:
     assert ret not in pipes.children_views  # gone with its record
 
 
+@define_view
+class Names(ListView[str]):
+    @override
+    def build_item(self, item: str) -> View:
+        return LabelView(text=item)
+
+    @override
+    def item_key(self, item: str) -> str:
+        return item.lower()
+
+
 def test_a_changed_record_gets_a_new_view_unless_it_is_updated_in_place() -> None:
-    @define_view
-    class Names(ListView[str]):
-        @override
-        def build_item(self, item: str) -> View:
-            return LabelView(text=item)
-
-        @override
-        def item_key(self, item: str) -> str:
-            return item.lower()
-
     names = Names()
     names.items = ["ann"]
     (first,) = names.item_views

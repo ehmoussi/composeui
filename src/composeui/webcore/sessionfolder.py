@@ -65,7 +65,7 @@ def _lock(file: IO[bytes]) -> None:
         file.seek(0)
         msvcrt.locking(file.fileno(), msvcrt.LK_NBLCK, 1)
         return
-    import fcntl  # noqa: PLC0415  # posix only: Windows lacks the module
+    import fcntl  # noqa: PLC0415 (Windows lacks the module)  # posix only
 
     fcntl.flock(file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)  # posix only
 

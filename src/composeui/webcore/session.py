@@ -840,7 +840,7 @@ class WebSession(RenderTarget):
             # the browser's file is wherever it saves the download, not this scratch one
             main_view.state_filepath = state_filepath
             if not is_save:
-                main_view._saved_study = saved_study  # noqa: SLF001
+                main_view._saved_study = saved_study  # noqa: SLF001 (the main view's study, which only the core and backends keep)
             media_type = "application/zip" if has_data(self.model) else "application/json"
             return safe_filename(name), path.read_bytes(), media_type
 

@@ -36,8 +36,8 @@ class ComposeCollapsible(Collapsible):
 
     def on_collapsible_expanded(self, event: Collapsible.Expanded) -> None:
         if event.collapsible is self:
-            self.toggled.emit(True)  # noqa: FBT003
+            self.toggled.emit(True)  # noqa: FBT003 (the signal's argument)
 
     def on_collapsible_collapsed(self, event: Collapsible.Collapsed) -> None:
         if event.collapsible is self:
-            self.toggled.emit(False)  # noqa: FBT003
+            self.toggled.emit(False)  # noqa: FBT003 (the signal's argument)

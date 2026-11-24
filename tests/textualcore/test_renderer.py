@@ -130,7 +130,7 @@ async def test_a_language_set_once_rendered_relabels_the_widgets() -> None:
         # Selection is restored after refresh; pause() can return before that callback.
         await asyncio.wait_for(combobox.wait_for_refresh(), timeout=5)
         await pilot.pause()
-        assert [str(prompt) for prompt, _ in combobox._options[1:]] == ["Petite", "Grande"]  # noqa: SLF001
+        assert [str(prompt) for prompt, _ in combobox._options[1:]] == ["Petite", "Grande"]  # noqa: SLF001 (Textual has no public call for the options)
         assert combobox.selection is Size.LARGE
         assert size.value is Size.LARGE
         assert seen == []

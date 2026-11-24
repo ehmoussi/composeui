@@ -11,7 +11,14 @@ pins 3.9. Install every backend, because the tests cover Qt, Textual, and the we
 uv sync --group dev --all-extras   # extras: pyside6, tui (Textual), web (Starlette), report, terminal-images, reload
 ```
 
-Always run the tools through `uv run` or the `make` targets, never a global Python.
+Always run the tools through `uv run` or the `make` targets, never a global Python. For
+Textual's console (`textual console`), add `--group textual-dev`. It is not in `dev`: it
+installs Textual, which the tests without extras must not find.
+
+Run `make hooks` once in a clone. It sets git's `core.hooksPath` to `.githooks/`, whose hooks
+refuse a commit on `main` or on a branch with a slash in its name. They also refuse a message
+that is more than its subject, or a subject that is not capitalized, ends with a period, or
+credits an AI.
 
 ## Commands
 
@@ -21,6 +28,7 @@ make mypy          # mypy on composeui, examples and tests, Qt binding resolved 
 make typecheck     # mypy on source + tests; Pyright, Pyrefly and ty on tests
 make pyright pyrefly ty  # individual test checkers
 make test          # pytest in parallel, with coverage (browser tests excluded)
+make hooks         # git's hooks of .githooks/ in this clone
 make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
 make translations  # each app's catalogs against the text it translates
 make js-check      # the page's scripts against their JSDoc types (TypeScript's compiler)
@@ -37,8 +45,9 @@ the Windows job in CI, run `.\make.ps1 translations test`. The Linux `check` job
 `make mypy`. The `browser` job runs `make js-check`. Locally, `make check` includes both.
 
 In PowerShell, pass `EXAMPLES` as `-Examples pipeform, batman`, `TAILWIND_PLATFORM` as
-`-TailwindPlatform`, and `TSC_PLATFORM` as `-TscPlatform`. When you change a target in the
-`Makefile`, change it in `make.ps1` too.
+`-TailwindPlatform`, `TSC_PLATFORM` as `-TscPlatform`, and `PYTEST_WORKERS` as `-Workers`.
+When you change a target in the `Makefile`, change it in `make.ps1` too:
+`tests/test_code_rules.py` checks that both have the same targets and translated apps.
 
 `make mypy` checks source, examples, and tests together. It installs the `browser` group and
 all extras so every test import resolves; Chromium is not needed. The other checker targets
@@ -72,10 +81,14 @@ Every behavior change needs a test in `tests/`.
 - The rule that a view's signals report the user's changes only is moving into
   `tests/contracts/`, a family at a time. Families moved: inputs, controls. For a view in a moved
   family, test the rule there, not in each backend's folder.
-- Tests for an optional backend guard with `pytest.importorskip(...)`.
+- Tests for an optional backend guard with `pytest.importorskip(...)`, on a module that only
+  the extra installs. A folder whose every test needs an extra goes in `collect_ignore_glob`
+  of `tests/conftest.py`, as `tests/qtcore/` does. The `without-extras` CI job runs the tests
+  without any extra, with `-p no:pytest-qt`: pytest-qt refuses to start without Qt.
 - `make test` runs the tests in parallel, a worker per CPU (pytest-xdist). So a test must
   not depend on the state or the order of another. `pytest` without `-n` runs them one
-  after another.
+  after another. On a machine that runs out of memory with a worker per CPU, set fewer, such
+  as `make test PYTEST_WORKERS=8`.
 - `tests/conftest.py` turns off automatic garbage collection, and collects on the main thread
   after each test. PySide can crash when a job's thread collects a main view that a test dropped.
 - A test that reads what a worker thread or a job does waits for that work, not for a fixed
@@ -83,8 +96,8 @@ Every behavior change needs a test in `tests/`.
   call `await app.workers.wait_for_complete()`. For a job, call `main_view.jobs.wait()`. On
   Qt, use `qtbot.waitUntil(...)`. On the web, read the views only after a request that follows
   the job's result (`GET /_composeui/jobs`). The job's thread sets a flag such as `has_result`
-  under the session's lock, before its reactive methods fill the views. A fixed wait passes on a fast
-  machine and fails on a slow CI runner, such as Windows with Python 3.9.
+  under the session's lock, before its reactive methods fill the views. A fixed wait passes on a
+  fast machine and fails on a slow CI runner, such as Windows with Python 3.9.
 - Concurrency coverage must not depend on scheduling. Explicitly arrange and verify the
   waiting, cancellation, or cleanup state that a test protects. Do not rely on incidental
   execution, elapsed time, or a fixed number of event-loop turns. Required coverage must
@@ -169,7 +182,11 @@ files, and delete `js/vendor/`.
 
 - `ruff` lints with `select = ["ALL"]` and a line length of 100. `pyproject.toml` has the
   ignore list. Fix lint properly rather than adding `noqa`, unless it is clearly justified.
-  A justified `noqa` says why in parentheses, e.g. `# noqa: SLF001 (shared task lifecycle)`.
+  A justified `noqa` says why in parentheses, e.g. `# noqa: SLF001 (shared task lifecycle)`,
+  or in a comment on the line above. `tests/test_code_rules.py` checks it, and the rules of
+  the architecture and code style that a script can check: the imports of the views and the
+  renderers, what the key maps hold, a test module per family, the Qt renderers' lambdas,
+  views defined in a function, the page's scripts' closures, and the browser tests' waits.
 - `mypy` must pass in strict mode, with the extra checks in `pyproject.toml`. Fully
   type-annotate new code: the package ships `py.typed`. Mark each method that
   overrides a base class's method with `@override` from `typing_extensions`, below
@@ -179,7 +196,9 @@ files, and delete `js/vendor/`.
   new file. The annotations are then strings:
   - Do not quote them.
   - Define the views that `attrs` and `cattrs` resolve at module level, not inside a
-    function, so that their field types resolve from the module's globals.
+    function, so that their field types resolve from the module's globals. A test may
+    define one in its function to use a value of it, such as `tmp_path`, with field types
+    of the module only.
   - Give a `cattrs` hook its type explicitly, with
     `CONVERTER.register_structure_hook(cls, func)`, not as a bare decorator, which reads
     the annotation.
@@ -187,7 +206,8 @@ files, and delete `js/vendor/`.
     that defines the view: `attrs` resolves it there. Ruff checks it:
     `runtime-evaluated-decorators` lists `define_view` and `attrs.frozen`. A module of
     `core/_views/` that `main.py` imports cannot name `MainView` in a field. Only `base.py`
-    has it, which `main.py` gives it (see [Views and renderers](architecture.md#views-and-renderers)).
+    has it, which `main.py` gives it (see
+    [Views and renderers](architecture.md#views-and-renderers)).
 - Stay compatible with Python 3.9. In the annotations that `attrs` and `cattrs` evaluate at
   runtime, such as view fields, use `Optional[...]` and `Union[...]`, not `X | Y`.
 - In `qtcore`, import Qt from `qtpy`, never from `PySide6` or `PyQt*`.
@@ -272,12 +292,16 @@ uv sync --group dev --group docs --all-extras
 the lint, `make mypy`, `make translations`, and `make test` on Python 3.9 to 3.14, and
 `make js-check`, `make browser-test` and `make docs` on Python 3.13. On Windows, it runs
 `.\make.ps1 translations test`, and on macOS `make translations test`, on Python 3.9 and
-3.14. Run `make check test` before you commit.
+3.14. The `without-extras` job runs the tests on Python 3.9 without any extra, as an app with
+one backend installs ComposeUI. Run `make check test` before you commit.
 
 The existing mypy matrix checks source, examples, and tests together. Separate jobs run
 `make pyright`, `make pyrefly`, and `make ty` on tests on Python 3.9, matching their
 configuration. Failures in these jobs fail the workflow. Run `make typecheck` locally to
 run all four type checkers.
+
+`.github/workflows/pull-request.yml` runs on each pull request. It runs `.githooks/` on its
+branch and on each of its commits, and refuses a fix-up commit.
 
 A change of the documentation and the benchmarks' results only, in `docs/`, the Markdown files
 and `benchmarks/results/`, runs only the `docs` job. That job also lints the Python files of
@@ -325,7 +349,8 @@ To release a version, for example 0.3.0:
 3. In the run of the Release workflow, approve the deployment to `testpypi`, then the one to
    `pypi` (Review deployments). Each environment asks for a reviewer.
 
-The tag runs the tests again, then builds the package. Before it publishes, the workflow
+The tag's commit must be on `main`: the workflow stops otherwise. It runs the tests again,
+then builds the package. Before it publishes, the workflow
 checks that the build's version is the tag's, and that `CHANGELOG.md` has a dated entry for
 it; the tests check the skill's version. Then it publishes to TestPyPI. On Python 3.9 and
 3.13, it installs the version from there with the `web` extra, takes its dependencies from

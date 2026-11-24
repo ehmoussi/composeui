@@ -133,7 +133,7 @@ def _attach_jobs(root: View, jobs: Jobs) -> None:
         view = views.popleft()
         # once: a view is in the main view as it is built, or a list builds it
         view._task_jobs = reference  # noqa: SLF001
-        for task in view._own_tasks or ():  # noqa: SLF001
+        for task in view._own_tasks or ():  # noqa: SLF001 (the view's jobs, which this module keeps)
             jobs._adopt(task)  # noqa: SLF001 (shared task lifecycle)
         views.extend(view.children_views)
 
@@ -143,10 +143,10 @@ def _release_tasks(root: View) -> None:
     views: deque[View] = deque([root])
     while len(views) > 0:
         view = views.popleft()
-        jobs = None if view._task_jobs is None else view._task_jobs()  # noqa: SLF001
-        view._task_jobs = None  # noqa: SLF001
+        jobs = None if view._task_jobs is None else view._task_jobs()  # noqa: SLF001 (the view's jobs, which this module keeps)
+        view._task_jobs = None  # noqa: SLF001 (the view's jobs, which this module keeps)
         if jobs is not None:
-            for task in view._own_tasks or ():  # noqa: SLF001
+            for task in view._own_tasks or ():  # noqa: SLF001 (the view's jobs, which this module keeps)
                 jobs._release(task)  # noqa: SLF001 (shared task lifecycle)
         views.extend(view.children_views)
 
@@ -160,11 +160,11 @@ def set_references(root: View, main_view: MainView, model: Optional[Model]) -> N
     views: deque[View] = deque([root])
     main_view_reference = weakref.ref(main_view)
     if model is not None:
-        main_view._model_reference = weakref.ref(model)  # noqa: SLF001
+        main_view._model_reference = weakref.ref(model)  # noqa: SLF001 (set as the main view is built)
     while len(views) > 0:
         current_view = views.popleft()
-        current_view._main_view = main_view_reference  # noqa: SLF001
-        current_view._keep_model(model)  # noqa: SLF001
+        current_view._main_view = main_view_reference  # noqa: SLF001 (set as the main view is built)
+        current_view._keep_model(model)  # noqa: SLF001 (set as the main view is built)
         # its children, not only its view fields: e.g. a language menu's actions
         views.extend(current_view.children_views)
         # the signals made so far: the others get them as they're made (see `_LazySignal`)
@@ -182,7 +182,7 @@ def _retranslate(view: View, translate: Translate) -> None:
     """
     for child in view.children_views:
         _retranslate(child, translate)
-    view._tr = translate  # noqa: SLF001
+    view._tr = translate  # noqa: SLF001 (set as the views are translated)
     for f in view_fields(type(view)):
         value = getattr(view, f.name)
         translated = translate_again(value, translate)
@@ -196,7 +196,7 @@ def _retranslate(view: View, translate: Translate) -> None:
         else:
             setattr(view, f.name, translated)
     view.retranslate()
-    view._check_again()  # noqa: SLF001
+    view._check_again()  # noqa: SLF001 (View's hook for this)
 
 
 _ListItemT = TypeVar("_ListItemT")
@@ -365,14 +365,14 @@ class _LazySignal:
         signal.set_view(view)
         # interned: each instance of the view, e.g. each session's, shares the name
         signal.set_name(sys.intern(f"{type(view).__name__}.{self._name}"))
-        main_view = None if view._main_view is None else view._main_view()  # noqa: SLF001
+        main_view = None if view._main_view is None else view._main_view()  # noqa: SLF001 (set as the main view is built)
         if main_view is not None:
             signal.set_main_view(main_view)
-            reference = main_view._model_reference  # noqa: SLF001
+            reference = main_view._model_reference  # noqa: SLF001 (set as the main view is built)
             model = None if reference is None else reference()
             if model is not None:
                 signal.set_model(model)
-        signals = view._signals  # noqa: SLF001
+        signals = view._signals  # noqa: SLF001 (the signals that this module makes)
         if signals is None:
             object.__setattr__(view, "_signals", [self._name, signal])
             return
@@ -385,7 +385,7 @@ class _LazySignal:
 
 def made_signal(view: View, name: str) -> Optional[Signal[Any]]:
     """Get the signal of `view`'s field `name` if it's made, without making it."""
-    signals = view._signals  # noqa: SLF001
+    signals = view._signals  # noqa: SLF001 (the signals that this module makes)
     if signals is not None:
         for index in range(0, len(signals), 2):
             if signals[index] == name:
@@ -402,7 +402,7 @@ def emit_if_made(view: View, name: str, *args: object) -> None:
 
 def made_signals(view: View) -> list[tuple[str, Signal[Any]]]:
     """Get the signals of `view` made so far, with their field names, without making others."""
-    signals = view._signals or []  # noqa: SLF001
+    signals = view._signals or []  # noqa: SLF001 (the signals that this module makes)
     return list(zip(signals[::2], signals[1::2]))
 
 
@@ -447,7 +447,7 @@ def _fix_lists_on_set(_cls: type, fields: list[Any]) -> list[Any]:
             and hooks is not attrs.setters.NO_OP
             and hooks is not attrs.setters.frozen
         ):
-            field = field.evolve(on_setattr=attrs.setters.pipe(_fix_lists, hooks))  # noqa: PLW2901
+            field = field.evolve(on_setattr=attrs.setters.pipe(_fix_lists, hooks))  # noqa: PLW2901 (the field, replaced by its changed copy)
         fixed.append(field)
     return fixed
 

@@ -12,18 +12,21 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from typing import TYPE_CHECKING
+
+import pytest
 
 from composeui.core.registry import RendererType, create_renderer
 from composeui.core.view import LabelRowInputView, StatusBar
+
+# the tests compare every backend's mapping
+pytest.importorskip("composeui.qtcore.renderers")
+pytest.importorskip("composeui.textualcore.renderers")
+pytest.importorskip("composeui.webcore.renderers")
 from composeui.qtcore._renderers.content import QtStatusBarRenderer
 from composeui.qtcore.renderers import RENDERERS as QT_RENDERERS
 from composeui.textualcore._renderers.content import TextualStatusBarRenderer
 from composeui.textualcore.renderers import RENDERERS as TEXTUAL_RENDERERS
 from composeui.webcore.renderers import RENDERERS as WEB_RENDERERS
-
-if TYPE_CHECKING:
-    import pytest
 
 
 def test_importing_the_core_does_not_import_any_backend_toolkit() -> None:
@@ -35,7 +38,7 @@ def test_importing_the_core_does_not_import_any_backend_toolkit() -> None:
         " if m in sys.modules]\n"
         "assert not leaked, f'importing composeui.core.view imported {leaked}'\n"
     )
-    subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603
+    subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603 (a command the code builds, no user input)
 
 
 def test_every_backend_registers_the_same_renderer_keys_except_graphical_maps() -> None:
@@ -50,7 +53,7 @@ def test_loading_the_qt_backend_without_maps_does_not_load_qt_quick() -> None:
         "import composeui.qtcore.renderers\n"
         "assert 'qtpy.QtQuickWidgets' not in sys.modules\n"
     )
-    subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603
+    subprocess.run([sys.executable, "-c", code], check=True)  # noqa: S603 (a command the code builds, no user input)
 
 
 def test_create_renderer_resolves_a_key_to_the_backend_renderer() -> None:

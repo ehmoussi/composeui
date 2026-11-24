@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import gc
+import importlib.util
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NoReturn
 
 import pytest
 from hypothesis import settings
@@ -18,6 +19,21 @@ settings.register_profile("composeui", settings.get_profile("default"), deadline
 # on CI, Hypothesis's own profile: the same examples each run (`derandomize`), without a
 # time limit, so that a pull request fails for its change, not for a new random draw
 settings.load_profile("ci" if os.environ.get("CI") else "composeui")
+
+#: whether the pyside6 extra is installed: else pytest-qt can't start (run pytest with
+#: `-p no:pytest-qt`), and no Qt test can run
+HAS_QT = importlib.util.find_spec("PySide6") is not None
+#: the folders whose every test needs an extra that isn't installed
+collect_ignore_glob = [] if HAS_QT else ["qtcore/*"]
+
+if not HAS_QT:
+
+    @pytest.fixture
+    def qtbot() -> NoReturn:
+        """Skip a Qt test, as pytest-qt's own fixture would need Qt."""
+        # ty misbinds pytest's decorated helpers; the public exception keeps the outcome
+        reason = "Qt isn't installed: the pyside6 extra"
+        raise pytest.skip.Exception(reason)
 
 
 @pytest.fixture(autouse=True)

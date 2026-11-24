@@ -164,6 +164,8 @@ the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the overview.
   header).
 - A new kind of response goes in `test_every_response_carries_the_security_headers`
   (`test_security.py`).
+- `test_the_session_cookie_stays_off_cross_site_posts_and_away_from_scripts`
+  (`test_security.py`) checks the cookie's `SameSite`, `HttpOnly` and `Domain` (rule 7).
 - `test_every_view_text_is_escaped` (`test_renderer.py`) puts hostile text in every text
   field of each main view in `_MAIN_VIEW_TYPES`, then parses the page in each state of
   `_states` (dialogs open, a cell edited, a table searched and filtered). The text must

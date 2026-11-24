@@ -253,7 +253,7 @@ def test_a_process_still_running_when_python_exits_is_stopped() -> None:
         "assert started.wait(20)\n"
     )
     command = [sys.executable, "-c", app]
-    done = subprocess.run(command, capture_output=True, text=True, timeout=60, check=False)  # noqa: S603
+    done = subprocess.run(command, capture_output=True, text=True, timeout=60, check=False)  # noqa: S603 (a command the code builds, no user input)
     pid = _pid(done.stdout)
     try:
         assert done.returncode == 0, done.stderr

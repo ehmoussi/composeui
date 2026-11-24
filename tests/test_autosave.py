@@ -134,7 +134,7 @@ def autosaves(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]
 
     def start_and_ask(app: Application[MainView]) -> None:
         start_app(app)
-        autosave = app.main_view._autosave  # noqa: SLF001
+        autosave = app.main_view._autosave  # noqa: SLF001 (the app's autosave, which apps don't reach)
         if autosave is not None:
             autosave.ask_restore()  # as a backend does, once it shows the main view
             if _ANSWERS_RESTORE:  # ignored unless it asked
@@ -184,7 +184,7 @@ def _crash(app: Application[NotesMainView]) -> None:
 
 def _folder_of(main_view: MainView) -> Path:
     """Get the folder of the app's own instance."""
-    return _autosave_of(main_view)._folder.path  # noqa: SLF001
+    return _autosave_of(main_view)._folder.path  # noqa: SLF001 (the app's autosave, which apps don't reach)
 
 
 def _instances(folder: Path) -> list[Path]:
@@ -196,7 +196,7 @@ def _instances(folder: Path) -> list[Path]:
 def held_copy(monkeypatch: pytest.MonkeyPatch) -> Iterator[tuple[threading.Event, threading.Event]]:
     """Hold the autosave's thread as it starts writing: (it started, let it go on)."""
     started, go_on = threading.Event(), threading.Event()
-    write = autosave._write_synced  # noqa: SLF001
+    write = autosave._write_synced  # noqa: SLF001 (the write that the test holds)
 
     def held_write(path: Path, content: bytes) -> None:
         if path.name.startswith("views-"):
@@ -462,7 +462,7 @@ def test_a_failed_snapshot_keeps_the_previous_one_says_so_and_the_next_tick_trie
     first = apps()
     first.main_view.note.text = "kept"
     _tick(first.main_view)
-    write = autosave._write_synced  # noqa: SLF001
+    write = autosave._write_synced  # noqa: SLF001 (the write that the test holds)
 
     def full_disk(*_written: object) -> None:
         raise OSError(28, "No space left on device")
@@ -490,7 +490,7 @@ def test_a_failed_snapshot_keeps_the_previous_one_also_when_it_never_reaches_the
     first = apps()
     first.main_view.note.text = "kept"
     _tick(first.main_view)
-    write = autosave._write_synced  # noqa: SLF001
+    write = autosave._write_synced  # noqa: SLF001 (the write that the test holds)
 
     def crash_before_the_record(path: Path, content: bytes) -> None:
         if path.name.endswith(".partial"):
@@ -663,7 +663,7 @@ def test_an_app_under_reload_doesn_t_autosave_nor_touch_the_work_left(
 
     app.run()
 
-    assert app.main_view._autosave is None  # noqa: SLF001
+    assert app.main_view._autosave is None  # noqa: SLF001 (the app's autosave, which apps don't reach)
     assert not app.main_view.restore_work.is_visible
     assert _instances(autosaves) == [left]
     assert sorted(left.iterdir()) == files
@@ -795,7 +795,7 @@ def test_an_app_that_can_t_take_its_folder_runs_without_autosave(
         if starting is not None:
             starting.close()
 
-    assert app.main_view._autosave is None  # noqa: SLF001
+    assert app.main_view._autosave is None  # noqa: SLF001 (the app's autosave, which apps don't reach)
     assert "The app doesn't autosave: " in caplog.text
 
 
@@ -917,7 +917,7 @@ def test_a_script_without_a_file_runs_without_autosave(
     app = _AutosavingViewsApplication(build_main_view=_UnnamedNotesMainView)
     app.run()
 
-    assert app.main_view._autosave is None  # noqa: SLF001
+    assert app.main_view._autosave is None  # noqa: SLF001 (the app's autosave, which apps don't reach)
     assert "set its main view's app_id" in caplog.text
 
 
@@ -974,6 +974,7 @@ def test_the_folder_of_the_autosaves_is_the_user_s_data_directory(
 @pytest.mark.asyncio
 async def test_textual_doesn_t_tick_while_a_file_action_may_be_replacing_the_study() -> None:
     pytest.importorskip("textual_fspicker")
+    # imported after the skip: the Textual backend is an optional dependency
     from composeui.core.registry import RendererType  # noqa: PLC0415
     from composeui.textualcore._renderers.navigation import TextualMainRenderer  # noqa: PLC0415
 
@@ -1124,7 +1125,7 @@ def test_a_desktop_app_ended_by_a_crash_opens_its_unsaved_work_at_the_next_start
     }
 
     def run() -> int:
-        return subprocess.run(  # noqa: S603
+        return subprocess.run(  # noqa: S603 (a command the code builds, no user input)
             [sys.executable, str(script)],
             cwd=tmp_path,
             env=env,

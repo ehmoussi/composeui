@@ -1,0 +1,31 @@
+name: Pull request
+
+# what AGENTS.md asks of a pull request's branch and commits, apart from its code
+on:
+  pull_request:
+
+jobs:
+  commits:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      # the hooks that `make hooks` installs: a fix-up must be folded before a review
+      - name: Check the branch name and each commit's message
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          status=0
+          .githooks/pre-commit "$BRANCH" || status=1
+          for commit in $(git rev-list --no-merges "$BASE..$HEAD"); do
+            git log -1 --format=%B "$commit" > "$RUNNER_TEMP/message"
+            if ! .githooks/commit-msg "$RUNNER_TEMP/message" --no-fixup; then
+              echo "::error::$(git log -1 --format='%h %s' "$commit")"
+              status=1
+            fi
+          done
+          exit $status

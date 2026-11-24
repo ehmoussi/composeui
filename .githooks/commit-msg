@@ -1,0 +1,41 @@
+#!/bin/sh
+# Check a commit's message against AGENTS.md ("Commits"): one line, the subject, capitalized,
+# without a trailing period or an AI attribution. Git runs it on each commit once
+# `make hooks` set core.hooksPath; CI runs it on each commit of a pull request, with
+# --no-fixup, as a fixup! commit is folded before a review.
+# Usage: commit-msg <file> [--no-fixup]
+file=$1
+fixups=yes
+[ "$2" = "--no-fixup" ] && fixups=no
+
+# the message as git keeps it: nothing from `git commit -v`'s scissors line on, no comment
+# lines, no blank lines at its start
+message=$(sed -e '/^# -* >8 -*$/,$d' "$file" | grep -v '^#' | sed -e 's/[[:space:]]*$//' \
+    -e '/./,$!d')
+lines=$(printf '%s\n' "$message" | sed -e '/^$/d' | wc -l | tr -d ' ')
+subject=$(printf '%s\n' "$message" | head -n 1)
+status=0
+
+fail() {
+    echo "commit-msg: $1" >&2
+    status=1
+}
+
+if printf '%s\n' "$message" | grep -qiE '^co-authored-by:|generated with .*claude'; then
+    fail "no AI attribution: no Co-Authored-By or \"Generated with\" line"
+fi
+if [ "$lines" -gt 1 ]; then
+    fail "the subject line is the whole message: no body, no trailers"
+fi
+case $subject in
+    fixup!* | squash!* | amend!*)
+        [ $fixups = no ] && fail "fold the fix-up into its commit: $subject"
+        subject=${subject#*! }
+        ;;
+esac
+case $subject in
+    "") fail "the message has no subject" ;;
+    *.) fail "no trailing period: $subject" ;;
+    [!A-Z]*) fail "a capitalized subject: $subject" ;;
+esac
+exit $status

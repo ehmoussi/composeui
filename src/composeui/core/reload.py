@@ -216,7 +216,7 @@ def _run_as_main(previous_main: types.ModuleType) -> None:
     program.__loader__ = spec.loader
     program.__package__ = spec.parent
     sys.modules["__main__"] = program
-    exec(code, program.__dict__)  # noqa: S102
+    exec(code, program.__dict__)  # noqa: S102 (runs the app's file, as python does)
 
 
 def save_reloaded_state(
@@ -235,7 +235,7 @@ def save_reloaded_state(
     directory = _state_directory() if directory is None else directory
     state_filepath = main_view.state_filepath
     saved_study = main_view._saved_study  # noqa: SLF001 (kept across the scratch save)
-    study_file = main_view._study_file  # noqa: SLF001
+    study_file = main_view._study_file  # noqa: SLF001 (the main view's study, which only the core and backends keep)
     unsaved = main_view.has_unsaved_changes()
     session: dict[str, Any] = {
         "state_filepath": None if state_filepath is None else str(state_filepath),
@@ -255,8 +255,8 @@ def save_reloaded_state(
     # the user's study is still the file they opened, not this scratch one, and its
     # changes are still unsaved
     main_view.state_filepath = state_filepath
-    main_view._saved_study = saved_study  # noqa: SLF001
-    main_view._study_file = study_file  # noqa: SLF001
+    main_view._saved_study = saved_study  # noqa: SLF001 (the main view's study, which only the core and backends keep)
+    main_view._study_file = study_file  # noqa: SLF001 (the main view's study, which only the core and backends keep)
     (directory / _SESSION_NAME).write_text(session_text)
 
 
@@ -444,7 +444,10 @@ def watch_changes(directory: Path) -> Generator[set[Path], None, None]:
     # the paths reported are the real ones, e.g. under a symbolic link's target
     directory = directory.resolve()
     try:
-        from watchfiles import PythonFilter, watch  # noqa: PLC0415
+        from watchfiles import (  # noqa: PLC0415 (an optional dependency, loaded when used)
+            PythonFilter,
+            watch,
+        )
     except ImportError:
         return _poll_changes(directory, _modification_times(directory))
     if not has_change_events(directory):
@@ -483,7 +486,7 @@ def run_reloading(
             prefix="composeui-reload-", dir=scratch_directory()
         ) as state_directory:
             env = {**os.environ, RELOADED_VARIABLE: state_directory}
-            child = subprocess.Popen(command, env=env)  # noqa: S603
+            child = subprocess.Popen(command, env=env)  # noqa: S603 (a command the code builds, no user input)
             for changed in changes:
                 if len(changed) > 0:
                     in_place = _reload_in_place(child, changed, Path(state_directory))
@@ -493,7 +496,7 @@ def run_reloading(
                     names = ", ".join(sorted(os.path.relpath(p, directory) for p in changed))
                     LOGGER.info("Reloading: %s changed", names)
                     if not in_place:
-                        child = subprocess.Popen(command, env=env)  # noqa: S603
+                        child = subprocess.Popen(command, env=env)  # noqa: S603 (a command the code builds, no user input)
                 else:
                     code = None if child is None else child.poll()
                     if code == 0:

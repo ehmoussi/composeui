@@ -654,7 +654,8 @@ The results come from `4bbf7d7`, with each server on Python 3.12, Chromium 148, 
 machine as above, in [`results/frameworks-4bbf7d7.json`](results/frameworks-4bbf7d7.json). The
 times are medians of 3 runs, whose memory per session differs by 1% at most for ComposeUI and
 Panel. The bytes are the same in the 3 runs, except for a page switch: what ComposeUI receives
-differs by 2% at most, and what Panel sends by 16%. The `399c2d5` column comes from an earlier run, on `b5a68c9`.
+differs by 2% at most, and what Panel sends by 16%. The `399c2d5` column comes from an earlier run,
+on `b5a68c9`.
 
 | Measure | ComposeUI `4bbf7d7` | ComposeUI `399c2d5` | Streamlit 1.67.0 | Panel 1.10.0 | Dash 4.5.0 |
 | --- | ---: | ---: | ---: | ---: | ---: |

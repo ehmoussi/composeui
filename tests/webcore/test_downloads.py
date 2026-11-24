@@ -653,7 +653,7 @@ def test_a_server_that_stops_ends_the_downloads_being_written(tmp_path: Path) ->
     with socket.socket() as sock:
         sock.bind(("127.0.0.1", 0))
         port = sock.getsockname()[1]
-    program = subprocess.Popen(  # noqa: S603
+    program = subprocess.Popen(  # noqa: S603 (a command the code builds, no user input)
         [sys.executable, str(script), "--port", str(port)],
         cwd=tmp_path,
         env={**os.environ, "STOPPED": str(stopped)},

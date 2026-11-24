@@ -573,7 +573,7 @@ def _run_logging_textual_app(
     cwd: Path, *options: str, check: bool = True, script: str | None = None
 ) -> subprocess.CompletedProcess[str]:
     program = ["-c", _LOGGING_TEXTUAL_APP] if script is None else [script]
-    return subprocess.run(  # noqa: S603
+    return subprocess.run(  # noqa: S603 (a command the code builds, no user input)
         [sys.executable, *program, *options],
         cwd=cwd,
         env={
@@ -648,7 +648,7 @@ def test_each_composeui_log_goes_to_the_file_until_the_code_raises(
     def log_and_stop() -> None:
         with logs_in_file(path):
             logger.warning("inside the block")
-            raise ValueError("stop")  # noqa: EM101
+            raise ValueError("stop")  # noqa: EM101 (the test's own error)
 
     with pytest.raises(ValueError, match="stop"):
         log_and_stop()
