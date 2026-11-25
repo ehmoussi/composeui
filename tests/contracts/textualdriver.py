@@ -5,6 +5,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
+from rich.text import Text
 from textual.widgets import Checkbox
 
 from composeui.core.registry import RendererType
@@ -38,6 +39,12 @@ class TextualDriver:
             self._pilot = pilot
             yield
 
+    @asynccontextmanager
+    async def by_code(self) -> AsyncGenerator[None, None]:
+        assert self._pilot is not None
+        yield
+        await self._pilot.pause()
+
     async def type(self, view: View, text: str) -> None:
         await self._focus(_input(view))
         await self._press("ctrl+shift+a", *text)  # select all, then type over it
@@ -48,6 +55,9 @@ class TextualDriver:
 
     def shown_text(self, view: View) -> str:
         return _input(view).value
+
+    def edits(self, text: str) -> list[str]:
+        return [text[:end] for end in range(1, len(text) + 1)]  # a report per key
 
     async def toggle(self, view: View) -> None:
         await self._focus(_checkbox(view))
@@ -61,7 +71,10 @@ class TextualDriver:
         await self._press("home" if end == "start" else "end")
 
     def slider_text(self, view: View) -> str:
-        return _slider(view).shown_text()
+        # as drawn, not `shown_text()`, which can follow the value while the label stays behind
+        drawn = _slider(view).render()
+        assert isinstance(drawn, Text)
+        return drawn.plain.lstrip("\u2500\u2501\u25cf").strip()  # the track's ─━●, then the value
 
     async def _focus(self, widget: Widget) -> None:
         assert self._pilot is not None
