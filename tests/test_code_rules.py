@@ -344,3 +344,47 @@ def test_a_view_is_defined_in_a_function_only_for_a_value_of_the_function() -> N
                 for name in sorted(typed & local)
             )
     assert wrong == []
+
+
+def _is_driver_block(node: ast.AST, method: str) -> bool:
+    """Tell whether `node` is an `async with driver.<method>(...)`."""
+    return isinstance(node, ast.AsyncWith) and any(
+        isinstance(item.context_expr, ast.Call)
+        and ast.unparse(item.context_expr.func) == f"driver.{method}"
+        for item in node.items
+    )
+
+
+def _changes_by_code(body: list[ast.stmt]) -> Iterator[ast.stmt]:
+    """Give each statement of `body` that changes a view as code, outside `by_code()`.
+
+    What else a contract test does in an open view: wait on the driver (`await`), check
+    (`assert`), or keep a value in a local name.
+    """
+    for node in body:
+        if _is_driver_block(node, "by_code"):
+            continue
+        if isinstance(node, (ast.AsyncWith, ast.With, ast.If, ast.For, ast.AsyncFor)):
+            yield from _changes_by_code([*node.body, *getattr(node, "orelse", [])])
+        elif not (
+            isinstance(node, ast.Assert)
+            or (isinstance(node, ast.Expr) and isinstance(node.value, ast.Await))
+            or (
+                isinstance(node, ast.Assign)
+                and all(isinstance(target, ast.Name) for target in node.targets)
+            )
+        ):
+            yield node
+
+
+def test_a_contract_test_changes_a_view_by_code_in_by_code_only() -> None:
+    # a widget can report a change by code late, in a message: `by_code()` handles it
+    # before the test reads the reports, so a wrongly reported change can't come after them
+    wrong = [
+        f"{_where(path, change)} {ast.unparse(change)}"
+        for path in sorted((ROOT / "tests" / "contracts").glob("test_*.py"))
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8")))
+        if isinstance(node, ast.AsyncWith) and _is_driver_block(node, "open")
+        for change in _changes_by_code(node.body)
+    ]
+    assert wrong == []

@@ -85,16 +85,15 @@ async def test_a_field_reports_the_user_s_text_not_the_code_s_and_finishes_editi
     field.editing_finished.connect(lambda: seen.append(("finished", "")))
 
     async with driver.open(view):
-        case.set_by_code(view)
+        async with driver.by_code():
+            case.set_by_code(view)
         await driver.type(field, case.typed)
 
-        edits = [text for kind, text in seen if kind == "edited"]
-        # each key's text, or the page's one post: never the text code set
-        assert edits[-1:] == [case.typed]
-        assert all(case.typed.startswith(text) for text in edits)
+        edits = driver.edits(case.typed)  # never the text code set, nor one twice
         # each also as a change, in either order: Qt's line edit reports the edit first
-        assert [text for kind, text in seen if kind == "changed"] == edits
-        assert len(seen) == 2 * len(edits)
+        assert sorted(seen) == sorted(
+            [*(("edited", text) for text in edits), *(("changed", text) for text in edits)]
+        )
         assert (driver.shown_text(field), case.read(view)) == (case.typed, case.expected)
 
         await driver.leave(field)

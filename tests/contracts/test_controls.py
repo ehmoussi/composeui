@@ -42,7 +42,8 @@ async def test_a_check_box_reports_the_user_s_toggles_not_the_code_s(driver: Dri
     insulated.toggled.connect(toggled.append)
 
     async with driver.open(view):
-        insulated.is_checked = True
+        async with driver.by_code():
+            insulated.is_checked = True
         assert (driver.is_checked(insulated), toggled) == (True, [])
 
         await driver.toggle(insulated)
@@ -51,6 +52,11 @@ async def test_a_check_box_reports_the_user_s_toggles_not_the_code_s(driver: Dri
             False,
             [False],
         )
+
+        await driver.toggle(insulated)
+        async with driver.by_code():
+            insulated.is_checked = False  # once the user checked it
+        assert (driver.is_checked(insulated), toggled) == (False, [False, True])
 
 
 def _set_workers(view: _ControlsMainView) -> None:
@@ -63,6 +69,10 @@ def _set_opacity(view: _ControlsMainView) -> None:
 
 def _set_hours(view: _ControlsMainView) -> None:
     view.hours.value = (2, 20)
+
+
+def _set_hours_together(view: _ControlsMainView) -> None:
+    view.hours.value = (20, 20)  # the handles on each other
 
 
 def _set_distance(view: _ControlsMainView) -> None:
@@ -82,6 +92,7 @@ _CASES = [
     _Case("workers", _set_workers, "8", "end", 14, "14"),  # the last step, short of 16
     _Case("opacity", _set_opacity, "0.1", "start", 0.0, "0.0"),
     _Case("hours", _set_hours, "2 \u2013 20", "end", (2, 23), "2 \u2013 23"),
+    _Case("hours", _set_hours_together, "20 \u2013 20", "start", (0, 20), "0 \u2013 20"),
     _Case("distance", _set_distance, "1.0 \u2013 2.5", "start", (0.0, 2.5), "0.0 \u2013 2.5"),
 ]
 
@@ -97,7 +108,8 @@ async def test_a_slider_reports_the_user_s_moves_not_the_code_s(
     slider.value_changed.connect(moves.append)
 
     async with driver.open(view):
-        case.set_by_code(view)
+        async with driver.by_code():
+            case.set_by_code(view)
         assert (driver.slider_text(slider), moves) == (case.shown, [])
 
         await driver.slide(slider, case.end)
@@ -106,3 +118,7 @@ async def test_a_slider_reports_the_user_s_moves_not_the_code_s(
             case.moved_shown,
             [case.moved],
         )
+
+        async with driver.by_code():
+            case.set_by_code(view)  # again, once the user moved it
+        assert (driver.slider_text(slider), moves) == (case.shown, [case.moved])

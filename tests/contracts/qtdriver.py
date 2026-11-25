@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Literal
 
-from qtpy.QtCore import Qt
+from qtpy.QtCore import QCoreApplication, QLocale, Qt
 from qtpy.QtWidgets import QAbstractButton, QLineEdit
 
 from composeui.core.registry import RendererType
@@ -27,14 +27,26 @@ class QtDriver:
 
     @asynccontextmanager
     async def open(self, main_view: MainView) -> AsyncGenerator[None, None]:
-        main_view.render(RendererType.QT)
-        window = _widget(main_view)
-        self._qtbot.addWidget(window)
-        window.show()
-        # active, for a field to take the focus and lose it
-        with self._qtbot.waitActive(window):
-            window.activateWindow()
+        # the same keys on every machine: a decimal field's validator follows the default
+        # locale, and rejects the `.` typed in `7.5` under `fr_FR`
+        machine = QLocale()
+        QLocale.setDefault(QLocale.c())
+        try:
+            main_view.render(RendererType.QT)
+            window = _widget(main_view)
+            self._qtbot.addWidget(window)
+            window.show()
+            # active, for a field to take the focus and lose it
+            with self._qtbot.waitActive(window):
+                window.activateWindow()
+            yield
+        finally:
+            QLocale.setDefault(machine)
+
+    @asynccontextmanager
+    async def by_code(self) -> AsyncGenerator[None, None]:
         yield
+        QCoreApplication.processEvents()
 
     async def type(self, view: View, text: str) -> None:
         line_edit = _line_edit(view)
@@ -50,6 +62,9 @@ class QtDriver:
 
     def shown_text(self, view: View) -> str:
         return _line_edit(view).text()
+
+    def edits(self, text: str) -> list[str]:
+        return [text[:end] for end in range(1, len(text) + 1)]  # a report per key
 
     async def toggle(self, view: View) -> None:
         button = _button(view)

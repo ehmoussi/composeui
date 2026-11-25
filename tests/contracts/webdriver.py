@@ -34,6 +34,10 @@ class WebDriver:
             self._client = client
             yield
 
+    @asynccontextmanager
+    async def by_code(self) -> AsyncGenerator[None, None]:
+        yield  # a post is handled before its response: nothing waits
+
     async def type(self, view: View, text: str) -> None:
         self._post(view, "input", text)
 
@@ -43,6 +47,9 @@ class WebDriver:
     def shown_text(self, view: View) -> str:
         assert self._client is not None
         return _shown_value(self._client.get("/").text, _widget_id(view.renderer))
+
+    def edits(self, text: str) -> list[str]:
+        return [text]  # the page posts the field's text once
 
     async def toggle(self, view: View) -> None:
         # an unchecked box posts no value
