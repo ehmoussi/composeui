@@ -102,9 +102,10 @@ _PARQUET_MARK = b"PAR1"
 _PARQUET_FOOTER = 8
 
 _P = ParamSpec("_P")
-_ViewT = TypeVar("_ViewT", bound=View)
 #: a view that `fill_filters` fills and `filtered` reads
 _Filter = Union[MultiValuesMixin[Any], RangeSliderMixin, FloatRangeSliderMixin, DateRangeInputMixin]
+#: a view that `column_filter` builds: one of `_Filter`, as `_filters_of` checks
+_FilterT = TypeVar("_FilterT", bound=_Filter)
 _FILTER_TYPES = (MultiValuesMixin, RangeSliderMixin, FloatRangeSliderMixin, DateRangeInputMixin)
 
 
@@ -142,8 +143,8 @@ def bar_chart(
 
 
 def column_filter(
-    cls: Callable[_P, _ViewT], column: str, /, *args: _P.args, **kwargs: _P.kwargs
-) -> _ViewT:
+    cls: Callable[_P, _FilterT], column: str, /, *args: _P.args, **kwargs: _P.kwargs
+) -> _FilterT:
     """Get a view field's default: a `cls` view that filters the rows by a frame's `column`.
 
     E.g. ``bases: MultiComboBoxView[str] = column_filter(MultiComboBoxView[str], "Base")``,
@@ -154,7 +155,7 @@ def column_filter(
     rows, such as `LabelRowMultiComboBoxView`.
     """
 
-    def build() -> _ViewT:
+    def build() -> _FilterT:
         # copied for each view built, as `child` does: a list among them is never shared
         return cls(*copy.deepcopy(args), **copy.deepcopy(kwargs))
 
