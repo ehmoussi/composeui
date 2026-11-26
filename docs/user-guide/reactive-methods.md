@@ -92,8 +92,10 @@ what ComposeUI tracks and what causes a run.
   have different types, so setting one in place of the other is a change.
 - **Other values.** For a list, a dict, a dataframe, or any other object, setting a different
   object is a change, even if it is equal to the old one. Setting the same object is not a change.
-- **Lists.** Set a new list to change a view's list. A change in place raises `TypeError`
-  (see [Views are reactive](core-concepts.md#views-are-reactive)).
+- **Lists and dicts.** Set a new list or dict to change a view's list or dict. A change in
+  place raises `TypeError` (see [Views are reactive](core-concepts.md#views-are-reactive)).
+  The view keeps its own copy of the list or dict that you set. So setting the same list or
+  dict object again is a change.
 - **A child view replaced.** Setting a new view into a field, such as `view.panel = Panel()`,
   is a change for the methods that read through it, such as `self.panel.title.text`. They run
   again, and read the fields of the new view.

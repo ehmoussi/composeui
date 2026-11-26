@@ -160,7 +160,8 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   see the toolkit.
 - **Set a new list to change a view's list:** `view.points = [*view.points, point]`, or
   `view.points += [point]`. `append`, `pop`, `x[i] = ...`, and the like raise `TypeError` on
-  a view's list, its inner lists too.
+  a view's list, its inner lists too. A view's dict is the same: `view.filters |= {0: "Ada"}`
+  sets a new one, and `update`, `x[k] = ...`, `del x[k]` and the like raise `TypeError`.
 - **Derive a field from other fields with `@reactive`** (`composeui.core.reactivity`), not
   with a callback on each of their signals. The method takes only `self`. The app runs it at
   start-up, then again once per event (a signal's callbacks, a user's edit, a web request,

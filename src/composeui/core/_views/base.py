@@ -49,7 +49,7 @@ from composeui.core.translation import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Iterable, Iterator, Mapping
     from contextlib import AbstractContextManager
     from typing import SupportsIndex
 
@@ -190,7 +190,7 @@ def _retranslate(view: View, translate: Translate) -> None:
             continue
         if f.on_setattr is attrs.setters.frozen:
             # set once by the app, e.g. the main view's title: only a language changes it
-            translated = _fix_lists(view, f, translated)
+            translated = _fix_collections(view, f, translated)
             notify_renderer(view, f, translated)
             set_value(view, f.name, translated)
         else:
@@ -280,6 +280,74 @@ class FixedList(list[_ListItemT]):
         return (list, (list(self),))  # a copy, or a pickle, is a plain list
 
 
+_KeyT = TypeVar("_KeyT")
+_ValueT = TypeVar("_ValueT")
+
+
+class FixedDict(dict[_KeyT, _ValueT]):
+    """A view field's dict: read it as any dict, and set a new one to change it.
+
+    A change in place would reach neither the renderer nor the field's checks, so it raises
+    `TypeError`. ``view.filters |= {0: "a"}`` sets a new dict, and so works.
+    """
+
+    __slots__ = ("_field",)
+
+    def __init__(self, items: Mapping[_KeyT, _ValueT], field: str) -> None:
+        super().__init__(items)
+        self._field = field
+
+    @property
+    def field(self) -> str:
+        """Get the view field holding it, e.g. ``TableView.filters``, for the error."""
+        return self._field
+
+    def _refuse(self) -> NoReturn:
+        msg = (
+            f"{self._field} can't change in place, which nothing would see: set a new dict,"
+            " e.g. with |= or {**items, key: value}"
+        )
+        raise TypeError(msg)
+
+    @override
+    def __setitem__(self, _key: _KeyT, _value: _ValueT, /) -> NoReturn:
+        self._refuse()
+
+    @override
+    def __delitem__(self, _key: _KeyT, /) -> NoReturn:
+        self._refuse()
+
+    @override
+    def update(self, *_args: Any, **_kwargs: Any) -> NoReturn:
+        self._refuse()
+
+    @override
+    def pop(self, *_args: Any) -> NoReturn:
+        self._refuse()
+
+    @override
+    def popitem(self) -> NoReturn:
+        self._refuse()
+
+    @override
+    def setdefault(self, *_args: Any) -> NoReturn:
+        self._refuse()
+
+    @override
+    def clear(self) -> NoReturn:
+        self._refuse()
+
+    @override
+    def __ior__(self, items: Any, /) -> dict[_KeyT, _ValueT]:  # type: ignore[override]
+        changed = dict(self)
+        changed.update(items)
+        return changed  # a new dict, which `|=` then sets on the view
+
+    @override
+    def __reduce__(self) -> tuple[type[dict[_KeyT, _ValueT]], tuple[dict[_KeyT, _ValueT]]]:
+        return (dict, (dict(self),))  # a copy, or a pickle, is a plain dict
+
+
 def _unstructure_fixed_list(value: FixedList[Any]) -> list[Any]:
     """Unstructure a view's list as any list: cattrs takes its subclass for another type."""
     return [CONVERTER.unstructure(item) for item in value]
@@ -289,16 +357,22 @@ CONVERTER.register_unstructure_hook(FixedList, _unstructure_fixed_list)
 
 
 def _fixed(value: Any, field: str) -> Any:
-    """Get `value` with its lists, and theirs, as `FixedList`; anything else as it is."""
-    if not isinstance(value, list):
-        return value
-    if type(value) is FixedList and value.field == field:
-        return value  # its own lists are fixed already
-    return FixedList((_fixed(item, field) for item in value), field)
+    """Get `value` as `FixedList` or `FixedDict`, the lists and dicts it holds too.
+
+    Anything else stays as it is, a subclass of `dict` such as a `defaultdict` too: as a
+    `FixedDict`, it would lose what it does.
+    """
+    if type(value) in (FixedList, FixedDict) and value.field == field:
+        return value  # what it holds is fixed already
+    if type(value) is dict or isinstance(value, FixedDict):
+        return FixedDict({key: _fixed(item, field) for key, item in value.items()}, field)
+    if isinstance(value, list):
+        return FixedList((_fixed(item, field) for item in value), field)
+    return value
 
 
-def _fix_lists(instance: View, attribute: Any, value: Any) -> Any:
-    """Set a list as a `FixedList` (an ``on_setattr`` hook of every view field).
+def _fix_collections(instance: View, attribute: Any, value: Any) -> Any:
+    """Set a list or a dict as a `FixedList` or `FixedDict` (a hook of every view field).
 
     Not in a private field: the view's own code may change it in place.
     """
@@ -436,8 +510,8 @@ def view_fields(cls: type) -> tuple[attrs.Attribute[Any], ...]:
     return fields
 
 
-def _fix_lists_on_set(_cls: type, fields: list[Any]) -> list[Any]:
-    """Run `_fix_lists` first among the hooks of each field that has hooks of its own."""
+def _fix_collections_on_set(_cls: type, fields: list[Any]) -> list[Any]:
+    """Run `_fix_collections` first among the hooks of each field that has hooks of its own."""
     fields = _lazy_signals_on_set(_cls, fields)
     fixed = []
     for field in fields:
@@ -447,7 +521,7 @@ def _fix_lists_on_set(_cls: type, fields: list[Any]) -> list[Any]:
             and hooks is not attrs.setters.NO_OP
             and hooks is not attrs.setters.frozen
         ):
-            field = field.evolve(on_setattr=attrs.setters.pipe(_fix_lists, hooks))  # noqa: PLW2901 (the field, replaced by its changed copy)
+            field = field.evolve(on_setattr=attrs.setters.pipe(_fix_collections, hooks))  # noqa: PLW2901 (the field, replaced by its changed copy)
         fixed.append(field)
     return fixed
 
@@ -477,8 +551,8 @@ def define_view(
         hooks = list(own) if isinstance(own, Sequence) else [own]
         defined = attrs.define(
             cls,
-            on_setattr=[_fix_lists, attrs.setters.validate, *hooks, notify_renderer],
-            field_transformer=_fix_lists_on_set,
+            on_setattr=[_fix_collections, attrs.setters.validate, *hooks, notify_renderer],
+            field_transformer=_fix_collections_on_set,
             **options,
         )
         for f in attrs.fields(defined):
@@ -570,8 +644,8 @@ class View:
     def __attrs_post_init__(self) -> None:
         for f in view_fields(type(self)):
             value = getattr(self, f.name, None)
-            if isinstance(value, list) and not f.name.startswith("_"):
-                # as `_fix_lists` sets it: the hooks don't run in `__init__`
+            if isinstance(value, (list, dict)) and not f.name.startswith("_"):
+                # as `_fix_collections` sets it: the hooks don't run in `__init__`
                 object.__setattr__(self, f.name, _fixed(value, f"{type(self).__name__}.{f.name}"))
         self.retranslate()
 
