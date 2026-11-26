@@ -212,9 +212,13 @@ rows only.
 - **The text fields** emit `text_edited` on each change that the user types, and
   `editing_finished` when the user is done with the field, for example on Enter, or as a
   text area loses the focus. `text_changed` also reports a path or a date that the user
-  picks. Text or a value that code sets emits neither signal. On the web, `text_edited`
-  waits until the user stops typing for 300 ms, or leaves the field. A callback can then get
-  `"abc"` only, not `"a"` and `"ab"` before it.
+  picks. Text or a value that code sets emits neither signal. A typed change also emits
+  `text_changed`, and each callback gets the text typed. On Qt, an `IntInputView` emits
+  `text_changed` only for text that it takes: a lone `-` emits `text_edited` only. A date
+  field's `value` can still hold the last valid date, as the text typed may not be a date
+  yet. The order of the two signals differs between the backends: do not rely on it. On the
+  web, `text_edited` waits until the user stops typing for 300 ms, or leaves the field. A
+  callback can then get `"abc"` only, not `"a"` and `"ab"` before it.
 - **A date range** has no text signals. `value_changed` gives the pair of dates, the start
   and the end, either one `None`.
 - **A file upload** gives each file as an `UploadedFile`: its `name`, its `size`, and the
