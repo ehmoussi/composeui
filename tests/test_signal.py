@@ -26,6 +26,7 @@ from composeui.core.view import (
     child,
     define_view,
 )
+from tests.typechecking import REJECTED, check_rejected_lines
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -299,6 +300,46 @@ def test_now_calls_the_callback_right_away_then_on_each_emit() -> None:
     assert calls == [(app.main_view,)]
     signal.emit(3)
     assert calls == [(app.main_view,), (3, app.main_view)]
+
+
+_NOW_CALLS = f"""\
+from __future__ import annotations
+
+from typing import Any
+
+from composeui.core.signal import Signal, SignalNoArgs
+from composeui.core.view import ButtonView, MainView
+
+numbers: Signal[int] = Signal()
+clicked = SignalNoArgs()
+
+
+def show(value: int) -> None: ...
+def show_or_zero(value: int = 0) -> None: ...
+def show_all(*values: Any) -> None: ...
+def refresh() -> None: ...
+def refresh_main(main_view: MainView) -> None: ...
+def show_on(value: int, *, view: ButtonView) -> None: ...
+
+
+def wire(now: bool) -> None:
+    numbers.connect(show)
+    numbers.connect(show_or_zero, now=True)
+    numbers.connect(show_all, now=True)
+    numbers.connect(refresh, now=True)
+    numbers.connect(refresh_main, now=True)
+    numbers.connect(show_or_zero, now=now)
+    clicked.connect(refresh, now=now)
+    numbers.connect(show, now=True)  {REJECTED}
+    numbers.connect(show, now=now)  {REJECTED}
+    numbers.connect(show_on, now=True)  {REJECTED}
+"""
+
+
+def test_a_type_check_refuses_now_for_a_callback_that_needs_the_signal_s_value(
+    tmp_path: Path,
+) -> None:
+    check_rejected_lines(tmp_path, _NOW_CALLS)
 
 
 @define_view

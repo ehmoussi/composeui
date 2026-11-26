@@ -149,6 +149,9 @@ backends' modules included, can change in any release without an entry here.
 - A type check refuses `column_filter(cls, ...)` with a view that can't filter a column, such
   as a `ComboBoxView`, which fails when the app filters. The filter views keep their own type.
 
+- A type check refuses `signal.connect(callback, now=True)` with a callback that needs the
+  signal's arguments: `now` calls it without them. A callback with defaults for them passes.
+
 - A dict that a view holds, such as a table's `filters` or a choice's `values`, can't change
   in place: `x[k] = ...`, `update`, `pop` and the like raise a `TypeError` that names the
   attribute. Such a change reached no renderer and skipped the attribute's checks, so a table
