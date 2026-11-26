@@ -94,6 +94,22 @@ The order of the work for **Now**:
 
 The SQLite model is complete otherwise: do not rebuild it.
 
+## Long computations
+
+What an app needs to follow work that runs outside it, such as a solver or a cluster's job.
+
+- **Repeating jobs** (Next). A job that runs every N seconds, with a backoff after an error. New,
+  Open and closing the app stop it, as they stop the other jobs. A `loaded` callback starts it
+  again for the study opened. For polling a server, a folder or a cluster.
+- **Services of the app** (Next). Work for the whole process, started with the app and stopped
+  at its shutdown, shared by every web session, such as one poller or one connection. Today
+  `shared_data` loads once, but has no end.
+- **Following a log file** (Next). A file that another program writes, read as it grows into a
+  `ConsoleView`, with bounded memory. For a solver that writes its own log, not its output.
+- **Programs that outlive the app** (To research). A `Job.run_process` variant whose program
+  keeps running after the app closes, found again by its stored identity when the study opens.
+  Only if a local-solver app, such as Code_Aster Studio, needs it.
+
 ## Widgets
 
 - **Interactive drawings** (When needed). Picking, dragging and editing the shapes of a
@@ -129,6 +145,8 @@ The SQLite model is complete otherwise: do not rebuild it.
   on Qt and Textual only, never on the web.
 - **An app's own renderers** (Next). A public way to register a renderer, and a placeholder when
   a backend cannot show a view.
+- **A folder browser** (Next). The files of a folder, with their size and date, that the user
+  opens or downloads. For a run's results.
 - **A workflow diagram** (When needed). Steps joined by arrows, a click starting a step.
 - **A renderer extension contract** (When needed). When a package outside ComposeUI wants to add
   a widget.
@@ -172,6 +190,8 @@ The SQLite model is complete otherwise: do not rebuild it.
 - **Linked charts and a scatter plot matrix** (Next). Charts that zoom together, and a helper
   that builds a matrix of them.
 - **Timelines** (Next). Intervals on a time axis, one row per category.
+- **Points added to a series** (Next). New points sent alone to the backend, not the whole
+  series again, for live data such as a solver's residual.
 - **Full resolution on zoom** (Next). The web fetches the points of the range shown, for long
   series.
 
