@@ -122,4 +122,4 @@ A callback can take fewer of the signal's arguments than the signal emits. It th
 first ones, or none. `connect(callback, now=True)` also calls the callback once, right away,
 without the signal's arguments. Use it for a callback that reads the current state, such as
 one that shows a model's rows. A callback that takes the signal's arguments needs defaults
-for them.
+for them, and a type check such as mypy refuses one without them.

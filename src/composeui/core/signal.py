@@ -9,7 +9,7 @@ import sys
 import threading
 import weakref
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, Union, cast, overload
+from typing import TYPE_CHECKING, Any, Generic, Literal, TypeVar, Union, cast, overload
 
 from typing_extensions import Protocol, TypeAliasType, TypeVarTuple, Unpack
 
@@ -186,36 +186,44 @@ class Signal(Generic[Unpack[Ts]]):
             if isinstance(callback, InjectedCallback):
                 callback.set_model(self._model)
 
-    @overload
-    def connect(self, callback: Callable[[Unpack[Ts]], None], *, now: bool = False) -> None: ...
-    @overload
-    def connect(
-        self, callback: _MainViewCallback[_MainViewT, Unpack[Ts]], *, now: bool = False
-    ) -> None: ...
-    @overload
-    def connect(self, callback: _ModelCallback[Any, Unpack[Ts]], *, now: bool = False) -> None: ...
+    # `now` calls a callback without the signal's arguments: one that needs them can't be
     @overload
     def connect(
-        self, callback: _BoundCallback[_MainViewT, Any, Unpack[Ts]], *, now: bool = False
+        self, callback: Callable[[Unpack[Ts]], None], *, now: Literal[False] = False
     ) -> None: ...
     @overload
     def connect(
-        self, callback: _ViewOnlyCallback[Any, Unpack[Ts]], *, now: bool = False
+        self, callback: _MainViewCallback[_MainViewT, Unpack[Ts]], *, now: Literal[False] = False
     ) -> None: ...
     @overload
     def connect(
-        self, callback: _ViewMainCallback[Any, _MainViewT, Unpack[Ts]], *, now: bool = False
+        self, callback: _ModelCallback[Any, Unpack[Ts]], *, now: Literal[False] = False
     ) -> None: ...
     @overload
     def connect(
-        self, callback: _ViewModelCallback[Any, Any, Unpack[Ts]], *, now: bool = False
+        self, callback: _BoundCallback[_MainViewT, Any, Unpack[Ts]], *, now: Literal[False] = False
+    ) -> None: ...
+    @overload
+    def connect(
+        self, callback: _ViewOnlyCallback[Any, Unpack[Ts]], *, now: Literal[False] = False
+    ) -> None: ...
+    @overload
+    def connect(
+        self,
+        callback: _ViewMainCallback[Any, _MainViewT, Unpack[Ts]],
+        *,
+        now: Literal[False] = False,
+    ) -> None: ...
+    @overload
+    def connect(
+        self, callback: _ViewModelCallback[Any, Any, Unpack[Ts]], *, now: Literal[False] = False
     ) -> None: ...
     @overload
     def connect(
         self,
         callback: _ViewMainModelCallback[Any, _MainViewT, Any, Unpack[Ts]],
         *,
-        now: bool = False,
+        now: Literal[False] = False,
     ) -> None: ...
     # a callback taking none of the arguments
     @overload
@@ -245,63 +253,63 @@ class Signal(Generic[Unpack[Ts]]):
         self: Signal[_FirstT, Unpack[_Rest]],
         callback: Callable[[_FirstT], None],
         *,
-        now: bool = False,
+        now: Literal[False] = False,
     ) -> None: ...
     @overload
     def connect(
         self: Signal[_FirstT, Unpack[_Rest]],
         callback: _ViewOnlyCallback[Any, _FirstT],
         *,
-        now: bool = False,
+        now: Literal[False] = False,
     ) -> None: ...
     @overload
     def connect(
         self: Signal[_FirstT, Unpack[_Rest]],
         callback: _ViewMainCallback[Any, _MainViewT, _FirstT],
         *,
-        now: bool = False,
+        now: Literal[False] = False,
     ) -> None: ...
     @overload
     def connect(
         self: Signal[_FirstT, Unpack[_Rest]],
         callback: _ViewModelCallback[Any, Any, _FirstT],
         *,
-        now: bool = False,
+        now: Literal[False] = False,
     ) -> None: ...
     @overload
     def connect(
         self: Signal[_FirstT, Unpack[_Rest]],
         callback: _ViewMainModelCallback[Any, _MainViewT, Any, _FirstT],
         *,
-        now: bool = False,
+        now: Literal[False] = False,
     ) -> None: ...
     @overload
     def connect(
         self: Signal[_FirstT, _SecondT, Unpack[_Rest]],
         callback: _ViewOnlyCallback[Any, _FirstT, _SecondT],
         *,
-        now: bool = False,
+        now: Literal[False] = False,
     ) -> None: ...
     @overload
     def connect(
         self: Signal[_FirstT, _SecondT, Unpack[_Rest]],
         callback: _ViewMainCallback[Any, _MainViewT, _FirstT, _SecondT],
         *,
-        now: bool = False,
+        now: Literal[False] = False,
     ) -> None: ...
     @overload
     def connect(
         self: Signal[_FirstT, _SecondT, Unpack[_Rest]],
         callback: _ViewModelCallback[Any, Any, _FirstT, _SecondT],
         *,
-        now: bool = False,
+        now: Literal[False] = False,
     ) -> None: ...
     @overload
     def connect(
         self: Signal[_FirstT, _SecondT, Unpack[_Rest]],
         callback: _ViewMainModelCallback[Any, _MainViewT, Any, _FirstT, _SecondT],
         *,
-        now: bool = False,
+        now: Literal[False] = False,
     ) -> None: ...
     def connect(
         self,
