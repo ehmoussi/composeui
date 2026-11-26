@@ -576,6 +576,26 @@ class WebSettings:
     client: ClientCapabilities = attrs.field(factory=ClientCapabilities.served)
 
 
+@overload
+def run(
+    build_main_view: Callable[[], MainViewT],
+    *,
+    build_model: Callable[[], Model] | None = None,
+    setup_model: None = None,
+    default_backend: RendererType = RendererType.WEB,
+    web_settings: WebSettings | None = None,
+    web_style: WebStyle | None = None,
+) -> None: ...
+@overload
+def run(
+    build_main_view: Callable[[], MainViewT],
+    *,
+    build_model: Callable[[], ModelT],
+    setup_model: Callable[[MainViewT, ModelT], None],
+    default_backend: RendererType = RendererType.WEB,
+    web_settings: WebSettings | None = None,
+    web_style: WebStyle | None = None,
+) -> None: ...
 def run(  # noqa: PLR0913 (each is an option of the app)
     build_main_view: Callable[[], MainViewT],
     *,
