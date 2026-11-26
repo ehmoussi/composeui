@@ -55,6 +55,7 @@ from composeui.core.view import (
     child,
     define_view,
 )
+from tests.typechecking import REJECTED, check_rejected_lines
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -346,12 +347,54 @@ def test_a_filter_refuses_a_column_of_another_kind(view_type: type[View]) -> Non
 
 @define_view
 class OneChoice(View):
-    choice: ComboBoxView[str] = column_filter(ComboBoxView[str], "base")
+    # as an app whose code isn't type-checked declares it: a type check refuses it
+    choice: ComboBoxView[str] = column_filter(ComboBoxView[str], "base")  # type: ignore[type-var]  # ty: ignore[invalid-argument-type]
 
 
 def test_a_view_that_can_t_filter_is_refused_as_a_filter() -> None:
     with pytest.raises(TypeError, match=r"OneChoice.choice can't filter a column"):
         filtered(_polars([]), OneChoice())
+
+
+_FILTER_DECLARATIONS = f"""\
+from __future__ import annotations
+
+from typing_extensions import assert_type
+
+from composeui.core.dashboard import column_filter
+from composeui.core.view import (
+    CheckListView,
+    ComboBoxView,
+    DateRangeInputView,
+    FloatRangeSliderView,
+    LabelRowRangeSliderView,
+    LabelView,
+    MultiComboBoxView,
+    View,
+    define_view,
+)
+
+
+@define_view
+class Filters(View):
+    bases: MultiComboBoxView[str] = column_filter(MultiComboBoxView[str], "Base")
+    checked: CheckListView[str] = column_filter(CheckListView[str], "Base")
+    hours: LabelRowRangeSliderView = column_filter(LabelRowRangeSliderView, "Hour", label="Hours")
+    loads: FloatRangeSliderView = column_filter(FloatRangeSliderView, "Load")
+    days: DateRangeInputView = column_filter(DateRangeInputView, "Day")
+    base: ComboBoxView[str] = column_filter(ComboBoxView[str], "Base")  {REJECTED}
+    title: LabelView = column_filter(LabelView, "Base")  {REJECTED}
+    hour: LabelRowRangeSliderView = column_filter(LabelRowRangeSliderView, "H", label=3)  {REJECTED}
+
+
+assert_type(column_filter(MultiComboBoxView[str], "Base"), MultiComboBoxView[str])
+"""
+
+
+def test_a_type_check_refuses_a_column_filter_of_a_view_that_can_t_filter(
+    tmp_path: Path,
+) -> None:
+    check_rejected_lines(tmp_path, _FILTER_DECLARATIONS)
 
 
 @define_view
