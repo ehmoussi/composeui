@@ -7,7 +7,8 @@ This guide explains how ComposeUI works and how to contribute to it. To build an
 
 - [Set up the repository](technical-guide/development.md#setup) for your first contribution.
 - [Read the architecture](technical-guide/architecture.md) to see how the code fits together.
-- [Add a widget or a backend](technical-guide/extending.md) to extend ComposeUI.
+- [Extend ComposeUI](technical-guide/extending.md) with a widget or a backend, or with a widget
+  from another package.
 
 ## Contents
 
@@ -56,6 +57,8 @@ This guide explains how ComposeUI works and how to contribute to it. To build an
 - [Extend ComposeUI](technical-guide/extending.md)
   - <a id="add-a-widget" name="add-a-widget"></a>
     [Add a widget](technical-guide/extending.md#add-a-widget)
+  - <a id="add-a-widget-from-another-package" name="add-a-widget-from-another-package"></a>
+    [Add a widget from another package](technical-guide/extending.md#add-a-widget-from-another-package)
   - <a id="add-a-backend" name="add-a-backend"></a>
     [Add a backend](technical-guide/extending.md#add-a-backend)
 - <a id="development" name="development"></a>

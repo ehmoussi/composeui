@@ -46,10 +46,13 @@ When a view needs a renderer, the registry imports the renderers module for that
     dependencies, and their top-level modules. When the backend's import fails and one of
     these modules is missing, `run` stops and names the extra.
 - A view names its renderer with its `_renderer_key` class variable, for example
-  `"label"`.
+  `"label"`. A view of another package sets it with `define_view(renderer_key=...)`.
 - `create_renderer(renderer_type, key, view)` imports the renderers module of the backend
-  and looks up the key. When the backend does not register the key, it returns `None`, and
-  the view is not rendered. So a partial backend works.
+  and looks up the key. When the backend does not register the key, it looks for it in the
+  package that the key's first part names, through the `composeui.renderers` entry points (see
+  [Add a widget from another package](extending.md#add-a-widget-from-another-package)). When no
+  package registers the key either, it returns `None`, and the view is not rendered. So a
+  partial backend works.
 - A renderer for the `"router"` or `"tabs"` key can set `renders_on_demand = True`.
   `Router` and `TabView` read this flag with `renders_on_demand(renderer_type, key)`.
   With this flag, the backend waits until a page or tab is first shown to render its content.
