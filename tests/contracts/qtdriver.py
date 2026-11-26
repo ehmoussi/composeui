@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, TypeVar
 
 from qtpy.QtCore import QCoreApplication, QLocale, Qt
-from qtpy.QtWidgets import QAbstractButton, QLineEdit
+from qtpy.QtWidgets import QAbstractButton, QLineEdit, QPlainTextEdit, QWidget
 
 from composeui.core.registry import RendererType
 from composeui.qtcore.widgets.qrangeslider import QRangeSlider
@@ -19,6 +19,8 @@ if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
 
     from composeui.core.view import MainView, View
+
+TWidget = TypeVar("TWidget", bound=QWidget)
 
 
 class QtDriver:
@@ -48,20 +50,22 @@ class QtDriver:
         yield
         QCoreApplication.processEvents()
 
-    async def type(self, view: View, text: str) -> None:
-        line_edit = _line_edit(view)
-        line_edit.setFocus()
-        self._qtbot.waitUntil(line_edit.hasFocus)
-        line_edit.selectAll()
-        self._qtbot.keyClicks(line_edit, text)
+    async def type(self, view: View, text: str, *, part: int = 0) -> None:
+        box = self._focus(_text_boxes(view)[part])
+        box.selectAll()
+        for index, line in enumerate(text.split("\n")):
+            if index > 0:
+                self._qtbot.keyClick(box, Qt.Key.Key_Return)
+            self._qtbot.keyClicks(box, line)
 
     async def leave(self, view: View) -> None:
-        line_edit = _line_edit(view)
-        self._qtbot.keyClick(line_edit, Qt.Key.Key_Tab)
-        assert not line_edit.hasFocus()
+        box = next(box for box in _text_boxes(view) if box.hasFocus())
+        self._qtbot.keyClick(box, Qt.Key.Key_Tab)  # a text area's too: it goes to the next field
+        assert not box.hasFocus()
 
-    def shown_text(self, view: View) -> str:
-        return _line_edit(view).text()
+    def shown_text(self, view: View, *, part: int = 0) -> str:
+        box = _text_boxes(view)[part]
+        return box.toPlainText() if isinstance(box, QPlainTextEdit) else box.text()
 
     def edits(self, text: str) -> list[str]:
         return [text[:end] for end in range(1, len(text) + 1)]  # a report per key
@@ -84,16 +88,28 @@ class QtDriver:
     def slider_text(self, view: View) -> str:
         return _slider(view).shown_text()
 
+    def _focus(self, widget: TWidget) -> TWidget:
+        widget.setFocus()
+        self._qtbot.waitUntil(widget.hasFocus)
+        return widget
 
-def _line_edit(view: View) -> QLineEdit:
-    """Find the line edit that the user types in: the field, or its own (a spin box's, a date's)."""
-    field = _widget(view)
-    if isinstance(field, QLineEdit):
-        return field
-    # its own, not one of a popup's, such as a calendar's year
-    line_edit = field.findChild(QLineEdit, options=Qt.FindChildOption.FindDirectChildrenOnly)
-    assert isinstance(line_edit, QLineEdit)
-    return line_edit
+
+def _text_boxes(view: View) -> list[QLineEdit | QPlainTextEdit]:
+    """Find the boxes that the user types in, in order.
+
+    The field, or its own: a spin box's, a date's, a date range's two.
+    """
+    boxes = _boxes_in(_widget(view))
+    assert boxes
+    return boxes
+
+
+def _boxes_in(widget: QWidget) -> list[QLineEdit | QPlainTextEdit]:
+    if isinstance(widget, (QLineEdit, QPlainTextEdit)):
+        return [widget]
+    children = widget.findChildren(QWidget, options=Qt.FindChildOption.FindDirectChildrenOnly)
+    # not a popup's, such as a calendar's year
+    return [box for child in children if not child.isWindow() for box in _boxes_in(child)]
 
 
 def _button(view: View) -> QAbstractButton:
