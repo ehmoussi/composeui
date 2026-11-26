@@ -19,6 +19,9 @@ runs: RecordTableView[Run] = child(
 ```
 
 - **Update.** Set `records` to update the table (`table.records = model.study.runs.above(0.1)`).
+  A record changed in place, such as `table.records[0].name = "B"`, does not reach the table:
+  the records are your own classes, which ComposeUI can't watch. Set new `records`, with a new
+  record made by `attrs.evolve`.
 - **Selection.** Read `selected_record`, or `selected_records`.
 - **Activation.** Connect to `row_activated` to open a row: a double click, or Enter, emits the
   row's index in `rows`. A double click on a cell that edits, or on a button or a link, does not. On

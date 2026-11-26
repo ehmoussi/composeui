@@ -348,6 +348,54 @@ class FixedDict(dict[_KeyT, _ValueT]):
         return (dict, (dict(self),))  # a copy, or a pickle, is a plain dict
 
 
+def _refuse_in_item(field: str) -> NoReturn:
+    owner = field.partition(".")[0]
+    msg = (
+        f"{field} can't change in place, which nothing would see: make a new {owner}, e.g."
+        " with attrs.evolve"
+    )
+    raise TypeError(msg)
+
+
+class ItemList(FixedList[_ListItemT]):
+    """A list of a frozen item, such as `Series.x`: make a new item to change it.
+
+    A copy of it, as a copy of its item makes, stays so: ``list(series.x)`` is a plain list.
+    """
+
+    __slots__ = ()
+
+    @override
+    def _refuse(self) -> NoReturn:
+        _refuse_in_item(self.field)
+
+    @override
+    def __reduce__(self) -> tuple[type[ItemList[_ListItemT]], tuple[list[_ListItemT], str]]:  # type: ignore[override]
+        # kept in a copy: a copy of its item, such as `child`'s, holds it as it is
+        return (ItemList, (list(self), self.field))
+
+
+class ItemDict(FixedDict[_KeyT, _ValueT]):
+    """A dict of a frozen item, such as `CellWidget.editors`: make a new item to change it.
+
+    A copy of it, as a copy of its item makes, stays so: ``dict(widget.editors)`` is a plain
+    dict.
+    """
+
+    __slots__ = ()
+
+    @override
+    def _refuse(self) -> NoReturn:
+        _refuse_in_item(self.field)
+
+    @override
+    def __reduce__(  # type: ignore[override]
+        self,
+    ) -> tuple[type[ItemDict[_KeyT, _ValueT]], tuple[dict[_KeyT, _ValueT], str]]:
+        # kept in a copy: a copy of its item, such as `child`'s, holds it as it is
+        return (ItemDict, (dict(self), self.field))
+
+
 def _unstructure_fixed_list(value: FixedList[Any]) -> list[Any]:
     """Unstructure a view's list as any list: cattrs takes its subclass for another type."""
     return [CONVERTER.unstructure(item) for item in value]

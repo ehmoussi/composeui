@@ -57,8 +57,9 @@ orders: ChartView = child(
   With categories, the x is the index of a category: a category without an x has no bar.
   Without categories, the x is a value of the x axis. The bars then share the smallest step
   between two x.
-- **Another kind for a series.** A `Series` does not change. To draw a series as another
-  kind, make a new one: `attrs.evolve(series, kind=ChartKind.SCATTER)`.
+- **Another kind for a series.** A `Series` does not change. Its `x` and `y` raise a
+  `TypeError` on `append` and the like. To draw a series as another kind, or with other
+  points, make a new one: `attrs.evolve(series, kind=ChartKind.SCATTER)`.
 - **Older studies.** Before, the chart held the kind. A study saved then opens with each
   series as the chart drew it.
 

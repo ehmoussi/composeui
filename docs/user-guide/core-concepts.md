@@ -73,6 +73,11 @@ This applies to any field of a view, also one that no renderer shows, such as
 `ActionView.data`. To change data in place, keep it out of the view's fields, for example in
 the model.
 
+A list can hold items that do not change, such as a chart's `Series` or a drawing's shapes.
+Their own lists and dicts, such as a series' `x`, raise a `TypeError` on a change in place too.
+Make a new item instead, for example with `attrs.evolve(series, x=..., y=...)`. A copy of
+the item, or of its list, keeps that rule. `list(series.x)` is a plain list that you can change.
+
 ## Signals inject arguments
 
 `Signal.connect` and `Application.connect` read the callback's parameter names. When a

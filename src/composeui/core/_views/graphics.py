@@ -18,6 +18,7 @@ from composeui.core._views.base import (
     _COLOR_PATTERN,
     OMIT,
     UI_TEXT,
+    ItemList,
     View,
     _check_height,
     define_view,
@@ -157,8 +158,12 @@ def _to_point(value: Iterable[float]) -> tuple[float, float]:
     return float(x), float(y)
 
 
-def _to_points(values: Iterable[Iterable[float]]) -> list[tuple[float, float]]:
-    return [_to_point(value) for value in values]
+def _to_polyline_points(values: Iterable[Iterable[float]]) -> list[tuple[float, float]]:
+    return ItemList((_to_point(value) for value in values), "PolylineShape.points")
+
+
+def _to_polygon_points(values: Iterable[Iterable[float]]) -> list[tuple[float, float]]:
+    return ItemList((_to_point(value) for value in values), "PolygonShape.points")
 
 
 def _check_point(shape: Any, attribute: attrs.Attribute[Any], point: tuple[float, float]) -> None:
@@ -223,7 +228,7 @@ class PolylineShape:
     """Lines of a `DrawingView` joining its points in order, at least 2."""
 
     points: list[tuple[float, float]] = attrs.field(
-        converter=_to_points, validator=[attrs.validators.min_len(2), _check_points]
+        converter=_to_polyline_points, validator=[attrs.validators.min_len(2), _check_points]
     )
     #: as #rrggbb, the same in every theme; None: the theme's text color
     color: Optional[str] = attrs.field(default=None, validator=[_check_shape_color])
@@ -238,7 +243,7 @@ class PolygonShape:
     """A closed shape of a `DrawingView` through its points, at least 3."""
 
     points: list[tuple[float, float]] = attrs.field(
-        converter=_to_points, validator=[attrs.validators.min_len(3), _check_points]
+        converter=_to_polygon_points, validator=[attrs.validators.min_len(3), _check_points]
     )
     #: as #rrggbb, the same in every theme; None: the theme's text color
     color: Optional[str] = attrs.field(default=None, validator=[_check_shape_color])

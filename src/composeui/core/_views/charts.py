@@ -18,6 +18,7 @@ from composeui.core._views.base import (
     _COLOR_PATTERN,
     OMIT,
     UI_TEXT,
+    ItemList,
     View,
     _check_height,
     define_view,
@@ -35,7 +36,7 @@ if TYPE_CHECKING:
 
 def _to_floats(values: Iterable[float]) -> list[float]:
     """Get `values` as a new list of floats, e.g. from a tuple or a numpy array."""
-    return [float(value) for value in values]
+    return ItemList((float(value) for value in values), "Series.y")
 
 
 #: a value of a chart's axis: a number, or on a time axis (`Scale.TIME`) a date or a time too
@@ -61,7 +62,7 @@ def _chart_value(value: ChartValue) -> float:
 
 
 def _to_chart_values(values: Iterable[ChartValue]) -> list[float]:
-    return [_chart_value(value) for value in values]
+    return ItemList((_chart_value(value) for value in values), "Series.x")
 
 
 class ChartKind(enum.Enum):
