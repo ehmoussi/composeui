@@ -56,6 +56,23 @@ raises a `TypeError` that names the attribute. The lists inside the list, such a
 of `rows`, are the same. A copy, such as `list(view.points)`, is a plain list that you can
 change.
 
+A dict that a view holds, such as a table's `filters`, is the same. Set a new dict:
+
+```python
+view.filters = {**view.filters, 0: "Ada"}
+view.filters |= {0: "Ada"}  # the same: it sets a new dict
+```
+
+A change in place, such as `view.filters[0] = "Ada"`, would also skip the checks of the
+attribute, so it raises a `TypeError` too. The lists and dicts inside a dict or a list are the
+same. A copy, such as `dict(view.filters)`, is a plain dict that you can change. A subclass of
+`dict`, such as a `defaultdict`, keeps its own behavior, so the view does not watch it: set a
+new one to change it.
+
+This applies to any field of a view, also one that no renderer shows, such as
+`ActionView.data`. To change data in place, keep it out of the view's fields, for example in
+the model.
+
 ## Signals inject arguments
 
 `Signal.connect` and `Application.connect` read the callback's parameter names. When a

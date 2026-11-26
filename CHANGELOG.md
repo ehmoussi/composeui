@@ -142,6 +142,15 @@ backends' modules included, can change in any release without an entry here.
 
 ### Changed
 
+- A dict that a view holds, such as a table's `filters` or a choice's `values`, can't change
+  in place: `x[k] = ...`, `update`, `pop` and the like raise a `TypeError` that names the
+  attribute. Such a change reached no renderer and skipped the attribute's checks, so a table
+  kept its rows after a filter changed in place. Set a new dict instead:
+  `view.filters = {**view.filters, 0: "Ada"}`, or `view.filters |= {0: "Ada"}`. This applies
+  to every field, also one that no renderer shows, such as `ActionView.data`, and to the lists
+  and dicts inside a view's list or dict. A subclass of `dict`, such as a `defaultdict`, stays
+  as it is.
+
 - `Jobs.wait` also emits the tables' `changed` after another session writes to a `shared`
   database, with or without a job running. It waits for each write committed before the call.
   So a test can check that a page shows another session's write.

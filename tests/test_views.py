@@ -7,6 +7,7 @@ import datetime
 import io
 import pickle
 import threading
+from collections import defaultdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -50,6 +51,7 @@ from composeui.core.view import (
     TreeView,
     TypedFormDialogView,
     UploadedFile,
+    View,
     define_view,
     find_in_lines,
     parse_date,
@@ -585,6 +587,91 @@ def test_a_copy_of_a_view_s_list_is_a_plain_list_to_change() -> None:
         copied.append(["Eve"])
         assert type(copied) is list
     assert table.rows == [["Bob"]]
+
+
+# a view's dicts: set anew, never changed in place
+
+_DICT_CHANGES_IN_PLACE: list[Callable[[dict[int, str]], object]] = [
+    lambda filters: filters.__setitem__(0, "Ada"),
+    lambda filters: filters.__delitem__(0),
+    lambda filters: filters.update({0: "Ada"}),
+    lambda filters: filters.pop(0),
+    lambda filters: filters.popitem(),
+    lambda filters: filters.setdefault(1, "Ada"),
+    lambda filters: filters.clear(),
+]
+
+
+@pytest.mark.parametrize("change", _DICT_CHANGES_IN_PLACE)
+def test_a_view_s_dict_refuses_a_change_in_place(
+    change: Callable[[dict[int, str]], object],
+) -> None:
+    # in place, a filter skipped the check of its column and the table kept its rows
+    table = TableView(headers=["Name"], rows=[["Bob"], ["Eve"]], filterable_columns=[0])
+    table.filters = {0: "Bob"}
+
+    with pytest.raises(TypeError, match=r"^TableView\.filters can't change in place"):
+        change(table.filters)
+
+    assert table.filters == {0: "Bob"}
+    assert table.shown_rows == [0]
+
+
+def test_a_view_s_dict_set_with_or_equals_is_checked_and_shown() -> None:
+    table = TableView(headers=["Name"], rows=[["Bob"], ["Eve"]], filterable_columns=[0])
+    shown = table.filters
+
+    table.filters |= {0: "Eve"}
+    assert table.shown_rows == [1]
+    assert shown == {}  # set anew: the dict read before is as it was
+    with pytest.raises(ValueError, match="isn't one of its filterable columns"):
+        table.filters |= {1: "Eve"}
+    with pytest.raises(TypeError, match=r"^TableView\.filters can't change in place"):
+        table.filters[0] = "Bob"
+
+
+def test_a_copy_of_a_view_s_dict_is_a_plain_dict_to_change() -> None:
+    table = TableView(headers=["Name"], rows=[["Bob"]], filterable_columns=[0])
+    table.filters = {0: "Bob"}
+
+    for copied in (
+        dict(table.filters),
+        table.filters.copy(),
+        copy.copy(table.filters),
+        copy.deepcopy(table.filters),
+        pickle.loads(pickle.dumps(table.filters)),  # noqa: S301 (our own data)
+        table.filters | {},
+    ):
+        copied[0] = "Eve"
+        assert type(copied) is dict
+    assert table.filters == {0: "Bob"}
+
+
+@define_view
+class _TagsView(View):
+    tags: dict[str, list[str]] = Factory(dict[str, list[str]])
+    counts: defaultdict[str, int] = Factory(lambda: defaultdict(int))
+
+
+def test_a_view_s_dict_refuses_a_change_in_place_of_its_lists_too() -> None:
+    view = _TagsView(tags={"Bob": ["admin"]})
+
+    with pytest.raises(TypeError, match=r"^_TagsView\.tags can't change in place"):
+        view.tags["Bob"].append("guest")
+
+    view.tags = {"Eve": ["guest"]}
+    with pytest.raises(TypeError, match=r"^_TagsView\.tags can't change in place"):
+        view.tags["Eve"].clear()
+    assert view.tags == {"Eve": ["guest"]}
+
+
+def test_a_view_s_dict_of_another_kind_keeps_what_its_kind_does() -> None:
+    # a `FixedDict` in its place raised KeyError where a defaultdict gives its default
+    view = _TagsView()
+    assert view.counts["Bob"] == 0
+
+    view.counts = defaultdict(lambda: 1)
+    assert view.counts["Eve"] == 1
 
 
 def test_an_uploaded_file_of_a_path_names_the_user_s_file_without_a_copy(tmp_path: Path) -> None:
