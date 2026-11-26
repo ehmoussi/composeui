@@ -14,9 +14,11 @@ pytest.importorskip("httpx2" if sys.version_info >= (3, 11) else "httpx")
 from typing import TYPE_CHECKING
 
 from composeui.core.registry import RendererType
+from composeui.core.view import ButtonView, DateRangeInputView, MainView, child, define_view
 from composeui.webcore._renderers.forms import WebFormLabelRenderer
 from composeui.webcore._renderers.inputs import WebFloatInputRenderer
 from composeui.webcore.changes import collect_dirty
+from composeui.webcore.session import WebSession
 from composeui.webcore.webrenderer import (
     UnsupportedEventError,
     handle_event,
@@ -25,7 +27,7 @@ from composeui.webcore.webrenderer import (
 from tests.bookings import BookingMainView
 from tests.hours import HoursMainView
 from tests.memory import MemoryMainView
-from tests.ranges import FIRST_DAY, RangesMainView
+from tests.ranges import FIRST_DAY, LAST_DAY, RangesMainView
 from tests.webcore.support import (
     _count,
     _element,
@@ -300,10 +302,45 @@ def test_a_date_range_swaps_the_end_that_followed_never_the_one_typed_in() -> No
     handle_event(field, "input", {"end": "0", "value": ""})  # emptied: open on that side
     handle_event(field, "change", {"end": "0", "value": ""})  # the same text: no change
     assert (days.value, len(changes)) == ((None, datetime.date(2014, 9, 9)), 3)
-    days.value = (None, FIRST_DAY)  # set in code: the whole swapped, not reported
-    assert len(changes) == 3
     with pytest.raises(UnsupportedEventError):
         handle_event(field, "input", {"end": "2", "value": "09/01/2014"})
+
+
+@define_view
+class _TripMainView(MainView):
+    days: DateRangeInputView = child(DateRangeInputView, value=(FIRST_DAY, LAST_DAY))
+    open_start: ButtonView = child(ButtonView, text="Any day until the first")
+    move_end: ButtonView = child(ButtonView, text="Any day until the fifteenth")
+
+
+def test_a_date_range_set_by_a_callback_comes_swapped_with_the_response() -> None:
+    main_view = _TripMainView()
+    session = WebSession(main_view)
+    days = main_view.days
+    changes: list[tuple[datetime.date | None, datetime.date | None]] = []
+    days.value_changed.connect(changes.append)
+    main_view.open_start.clicked.connect(lambda: setattr(days, "value", (None, FIRST_DAY)))
+    fifteenth = datetime.date(2014, 9, 15)
+    main_view.move_end.clicked.connect(lambda: setattr(days, "value", (None, fifteenth)))
+    field_id = _widget_id(days.renderer)
+
+    def click_and_read(button: ButtonView) -> list[str | None]:
+        response = session.handle_event(_widget_id(button.renderer), "click", {})
+        assert response is not None
+        field = _swapped(response[0], field_id)  # an open page gets the dates without a reload
+        return [
+            attributes["value"]
+            for tag, attributes in field.descendants
+            if tag == "input" and attributes.get("name") == "value"
+        ]
+
+    # typed first: the page holds the user's text, which the app's dates replace
+    session.handle_event(field_id, "input", {"end": "1", "value": "09/20/2014"})
+    typed = [(FIRST_DAY, datetime.date(2014, 9, 20))]
+
+    assert (click_and_read(main_view.open_start), changes) == (["", "09/01/2014"], typed)
+    # the end alone of a range already open
+    assert (click_and_read(main_view.move_end), changes) == (["", "09/15/2014"], typed)
 
 
 def test_a_text_area_takes_the_lines_posted_and_finishes_editing_once(

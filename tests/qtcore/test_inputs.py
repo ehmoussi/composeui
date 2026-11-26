@@ -144,7 +144,7 @@ def test_a_text_area_takes_several_lines_and_finishes_editing_when_left_after_a_
     area.setFocus()
     qtbot.keyClick(area, Qt.Key.Key_Tab)
 
-    assert area.toPlainText() == "Set by the app"
+    assert area.toPlainText() == "Set by the app"  # kept through the focus and its loss
     assert finished == [None]  # left without a change
 
 
@@ -328,12 +328,12 @@ def test_a_date_input_is_typed_or_picked_in_the_language_s_format(qtbot: QtBot) 
     qtbot.mouseClick(field.button, Qt.MouseButton.LeftButton)
     assert (calendar.yearShown(), calendar.monthShown()) == (2014, 9)
     calendar.close()
-    arrival.minimum, arrival.maximum = datetime.date(2026, 10, 1), datetime.date(2026, 12, 31)
-    arrival.value = datetime.date(2026, 11, 3)
-    arrival.value = None  # set in code: shown empty, the format as its hint, not reported
-    assert field.line_edit.text() == ""
-    assert field.line_edit.placeholderText() == "dd/mm/yyyy"
-    assert len(changes) == 3
+    assert field.line_edit.placeholderText() == "dd/mm/yyyy"  # empty: the format as its hint
+    arrival.value = datetime.date(2014, 9, 3)
+    arrival.value = None  # cleared by the app: the hint kept too
+    assert (field.line_edit.text(), field.line_edit.placeholderText()) == ("", "dd/mm/yyyy")
+    # each date once: the clear's too, and nothing for the bounds set on the empty field
+    assert changes == [datetime.date(2026, 10, 25), datetime.date(2026, 11, 3), None]
 
 
 def test_a_date_picked_in_qt_s_calendar_shows_before_the_app_hears_of_it(qtbot: QtBot) -> None:
@@ -402,11 +402,9 @@ def test_a_date_range_s_end_typed_before_its_start_moves_the_start_to_it(qtbot: 
     august = datetime.date(2014, 8, 31)
     assert (days.value, changes) == ((august, august), [(august, august)])
     assert field.start.line_edit.text() == "08/31/2014"  # the start followed
-    days.value = (None, FIRST_DAY)  # set in code: shown, and not reported
-    assert [part.line_edit.text() for part in field.fields] == ["", "09/01/2014"]
+    days.value = (None, FIRST_DAY)
     days.maximum = datetime.date(2014, 9, 15)
     assert field.end.calendar.maximumDate() == QDate(2014, 9, 15)
-    assert len(changes) == 1
     qtbot.keyClicks(field.start.line_edit, "09/05/2014")  # after the end: the end follows
     fifth = datetime.date(2014, 9, 5)
     assert (days.value, field.end.line_edit.text()) == ((fifth, fifth), "09/05/2014")

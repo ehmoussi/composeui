@@ -25,16 +25,20 @@ class Driver(Protocol):
         """
         ...
 
-    async def type(self, view: View, text: str) -> None:
-        """Put the focus in `view`'s field and replace its text with `text`."""
+    async def type(self, view: View, text: str, *, part: int = 0) -> None:
+        """Put the focus in `view`'s field and replace its text with `text`.
+
+        A line break of `text` is a key, as Enter. `part` is the field's text box: of a
+        date range, 0 the start and 1 the end.
+        """
         ...
 
     async def leave(self, view: View) -> None:
         """Move the focus out of `view`'s field."""
         ...
 
-    def shown_text(self, view: View) -> str:
-        """Read the text that `view`'s field shows."""
+    def shown_text(self, view: View, *, part: int = 0) -> str:
+        """Read the text that `view`'s field shows, in its text box `part`."""
         ...
 
     def edits(self, text: str) -> list[str]:

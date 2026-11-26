@@ -82,7 +82,7 @@ async def test_a_text_area_takes_several_lines_and_finishes_editing_when_left_af
         await pilot.press("tab")
         await pilot.pause()
 
-        assert area.text == "Set by the app"
+        assert area.text == "Set by the app"  # kept through the focus and its loss
         assert edited[-1] == "North\nside"  # the app's text is no edit
         assert finished == [None]  # left without a change
 
@@ -294,10 +294,8 @@ async def test_a_date_range_s_end_typed_before_its_start_moves_the_start_to_it()
         august = datetime.date(2014, 8, 31)
         assert (days.value, changes) == ((august, august), [(august, august)])
         assert field.start.input.value == "08/31/2014"  # the start followed
-        days.value = (None, FIRST_DAY)  # set in code: shown, and not reported
+        days.value = (None, FIRST_DAY)
         await pilot.pause()
-        assert [part.input.value for part in field.fields] == ["", "09/01/2014"]
-        assert len(changes) == 1
         field.start.input.focus()
         await pilot.press(*"09/05/2014")  # after the end: the end follows
         await pilot.pause()
