@@ -1,6 +1,7 @@
 # Extend ComposeUI
 
-This page explains how to add a widget or a backend to ComposeUI.
+This page explains how to add a widget or a backend to ComposeUI, and how a package outside
+ComposeUI adds a widget.
 
 ## Add a widget
 
@@ -71,6 +72,62 @@ This page explains how to add a widget or a backend to ComposeUI.
 4. Document the widget in the [user guide](../user-guide.md), and delete its item in
    [`ROADMAP.md`](../../ROADMAP.md). When an example app uses the widget, update the
    [examples guide](../examples-guide.md) too.
+
+## Add a widget from another package
+
+A package outside ComposeUI can add a view and its renderers without a change to ComposeUI. For
+example, a view of CAD files needs a large native library that ComposeUI doesn't install.
+
+1. Define the view with `define_view(renderer_key=...)`. The key starts with the name of the
+   package's top-level module and a dot.
+
+   ```python
+   @define_view(renderer_key="composeui_cad.geometry")
+   class GeometryView(View):
+       """A CAD model read from a STEP file."""
+
+       path: Optional[Path] = None
+   ```
+
+2. For each backend that shows the view, write a renderer as in [Add a widget](#add-a-widget).
+   Put it in a module that only that backend imports, with a mapping like `RENDERERS`:
+
+   ```python
+   RENDERERS = {"composeui_cad.geometry": QtGeometryRenderer}
+   ```
+
+3. Declare each mapping with an entry point of the `composeui.renderers` group in the package's
+   `pyproject.toml`. The name of the entry point is the backend: `qt`, `textual` or `web`.
+
+   ```toml
+   [project.entry-points."composeui.renderers"]
+   qt = "composeui_cad.composeui.qt:RENDERERS"
+   web = "composeui_cad.composeui.web:RENDERERS"
+   ```
+
+The backends then find the view's renderer:
+
+- **ComposeUI's keys first.** A backend looks for a key in its own renderers first. Else it
+  loads the renderers of the package that the key's first part names, such as `composeui_cad`.
+  A view of ComposeUI never loads a package's renderers.
+- **Only the package of the view.** When a package's renderers fail to import, the error stops
+  the rendering of its own views and their check by `renders`, not of other views. To make a
+  native library optional, the package leaves the key out of its mapping when the library is
+  missing: the backend then doesn't show the view, and `renders` returns `False`.
+- **Loaded again for each lookup.** The backend finds the entry points once, but it loads the
+  package's renderers again for each lookup. So a reload shows a package installed from the
+  program's folder as changed.
+- **A partial package.** A backend that no package gives the key to doesn't show the view, as
+  Textual doesn't show a `MapView`. `renders` tells the app.
+- **Refused keys.** When the backend loads a package's renderers, it raises `ValueError` for a
+  key that ComposeUI has, for a key that doesn't start with the name of the entry point's
+  top-level module, and for a key that two distributions add. Only the first copy of a
+  distribution on the path counts, as for an import.
+- **No scripts of its own on the web.** The page serves only ComposeUI's scripts and
+  stylesheets, so a web renderer of a package writes HTML that these scripts already handle.
+- **One minor version.** The renderers' base classes, such as `QtWidgetRenderer` and
+  `WebRenderer`, are not in the API and can change in any release. Pin ComposeUI to one minor
+  version, such as `composeui>=0.5,<0.6`.
 
 ## Add a backend
 

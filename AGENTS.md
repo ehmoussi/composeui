@@ -101,7 +101,9 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   plus the extra that installs its dependencies and their top-level modules (`run` names
   the extra when one is missing). A view picks its renderer by its `_renderer_key` class variable. A
   backend that doesn't register a key simply doesn't render that view (returns `None`), so partial
-  backends are fine.
+  backends are fine. A package outside ComposeUI adds renderers with an entry point of the
+  `composeui.renderers` group per backend (`core/registry.py`); a backend loads a package's
+  renderers only for a key it lacks whose first part names that package.
 - **Adding a widget:** define the view in the `core/_views/` module of its family (set
   `_renderer_key`) and export it in the `__all__` of `core/view.py`, then add a
   renderer + `RENDERERS` entry in each backend that should support it, plus tests per backend.

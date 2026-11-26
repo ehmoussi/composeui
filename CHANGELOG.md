@@ -11,6 +11,11 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- A package outside ComposeUI can add a view and its renderers. It defines the view with
+  `define_view(renderer_key=...)`, a key that starts with its own name, and declares the
+  renderers of each backend with an entry point of the `composeui.renderers` group. See
+  [Add a widget from another package](https://ehmoussi.github.io/composeui/technical-guide/extending.html#add-a-widget-from-another-package).
+
 - `MenuButtonView` is a button of a page that opens a list of actions, such as a More button.
   Its `ActionView` and `SeparatorAction` fields are its entries, as in a `Menu`. Qt shows a
   button with a menu, the web a drop-down list, and Textual a list under the button.

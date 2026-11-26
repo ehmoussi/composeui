@@ -580,10 +580,12 @@ _ClassT = TypeVar("_ClassT", bound=type)
 @overload
 def define_view(cls: _ClassT) -> _ClassT: ...
 @overload
-def define_view(cls: None = None, **kwargs: Any) -> Callable[[_ClassT], _ClassT]: ...
+def define_view(
+    cls: None = None, *, renderer_key: Optional[str] = None, **kwargs: Any
+) -> Callable[[_ClassT], _ClassT]: ...
 @dataclass_transform(kw_only_default=True, field_specifiers=(attrs.field,))
 def define_view(
-    cls: Union[_ClassT, None] = None, **kwargs: Any
+    cls: Union[_ClassT, None] = None, *, renderer_key: Optional[str] = None, **kwargs: Any
 ) -> Union[_ClassT, Callable[[_ClassT], _ClassT]]:
     """Define a view class: an `attrs` class whose field changes reach its renderer.
 
@@ -591,9 +593,14 @@ def define_view(
     `attrs.define`. The fields are keyword-only. Hooks of its own (``on_setattr``) run
     after the validators, before the renderer hears the change. A field whose default makes
     a `Signal` makes it on its first read, and its `repr` leaves it out.
+
+    `renderer_key` names the renderer that shows the view, for a view that a package outside
+    ComposeUI adds with its renderers (see `composeui.core.registry`).
     """
 
     def wrap(cls: _ClassT) -> _ClassT:
+        if renderer_key is not None:
+            type.__setattr__(cls, "_renderer_key", renderer_key)
         options = {"kw_only": True, "slots": False, **kwargs}
         own = options.pop("on_setattr", [])
         hooks = list(own) if isinstance(own, Sequence) else [own]

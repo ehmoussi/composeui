@@ -151,8 +151,8 @@ What an app needs to follow work that runs outside it, such as a solver or a clu
 - **A folder browser** (Next). The files of a folder, with their size and date, that the user
   opens or downloads. For a run's results.
 - **A workflow diagram** (When needed). Steps joined by arrows, a click starting a step.
-- **A renderer extension contract** (When needed). When a package outside ComposeUI wants to add
-  a widget.
+- **Scripts and tests of a package's widget** (When needed). A package's web renderer adds its
+  own scripts and stylesheets to the page, and its tests use the drivers of `tests/contracts/`.
 - **Help pages in Markdown** (To research). Folding sections, notes and keys that work on the
   three backends.
 
