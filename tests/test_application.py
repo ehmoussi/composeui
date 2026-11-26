@@ -49,6 +49,7 @@ from composeui.core.view import (
     define_view,
 )
 from composeui.core.webstyle import Theme, WebStyle
+from tests.typechecking import REJECTED, check_rejected_lines
 
 if TYPE_CHECKING:
     import argparse
@@ -485,7 +486,41 @@ def test_an_app_s_own_options_are_in_its_help(
 
 def test_run_refuses_to_set_up_a_model_it_isn_t_given() -> None:
     with pytest.raises(ValueError, match="build_model"):
-        run(_CountMainView, setup_model=lambda _main_view, _model: None)
+        # as an app whose code isn't type-checked calls it: a type check refuses the call
+        run(_CountMainView, setup_model=lambda _main_view, _model: None)  # type: ignore[call-overload]  # ty: ignore[invalid-argument-type]
+
+
+_RUN_CALLS = f"""\
+from __future__ import annotations
+
+from composeui.core.application import run
+from composeui.core.model import Model
+from composeui.core.view import MainView
+
+
+class Study(Model):
+    pass
+
+
+def set_up(main_view: MainView, model: Study) -> None: ...
+
+
+def set_up_numbers(main_view: MainView, model: int) -> None: ...
+
+
+def start() -> None:
+    run(MainView)
+    run(MainView, build_model=Study)
+    run(MainView, build_model=None, setup_model=None)
+    run(MainView, build_model=Study, setup_model=set_up)
+    run(MainView, setup_model=set_up)  {REJECTED}
+    run(MainView, build_model=None, setup_model=set_up)  {REJECTED}
+    run(MainView, build_model=Study, setup_model=set_up_numbers)  {REJECTED}
+"""
+
+
+def test_a_type_check_refuses_run_s_model_setup_without_its_model(tmp_path: Path) -> None:
+    check_rejected_lines(tmp_path, _RUN_CALLS)
 
 
 @pytest.mark.parametrize(
