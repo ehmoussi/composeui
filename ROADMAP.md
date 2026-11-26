@@ -145,6 +145,9 @@ What an app needs to follow work that runs outside it, such as a solver or a clu
   on Qt and Textual only, never on the web.
 - **An app's own renderers** (Next). A public way to register a renderer, and a placeholder when
   a backend cannot show a view.
+- **Catalogs of a library** (Next). A package of views adds its translation catalogs, after the
+  app's and before ComposeUI's, so that the app's own translation wins. `composeui translations`
+  checks the library's text too.
 - **A folder browser** (Next). The files of a folder, with their size and date, that the user
   opens or downloads. For a run's results.
 - **A workflow diagram** (When needed). Steps joined by arrows, a click starting a step.
