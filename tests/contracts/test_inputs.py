@@ -220,7 +220,7 @@ async def test_a_field_reports_the_user_s_text_not_the_code_s_and_finishes_editi
 
         edits = driver.edits(case.typed)  # never the text code set, nor one twice
         values = [("value", case.expected)] if case.reports_value else []  # once a date
-        # each also as a change, in either order: Qt's line edit reports the edit first
+        # each also as a change, in any order: the docs promise none (Qt reports the edit first)
         assert sorted(seen, key=repr) == sorted(
             [
                 *(("edited", text) for text in edits),
