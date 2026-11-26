@@ -151,6 +151,11 @@ backends' modules included, can change in any release without an entry here.
   and dicts inside a view's list or dict. A subclass of `dict`, such as a `defaultdict`, stays
   as it is.
 
+- The lists and dicts of the items that don't change can't change in place either: the `x`
+  and `y` of a `Series`, the `points` of a `PolylineShape` or a `PolygonShape`, and the
+  `extensions` and `editors` of a `CellWidget`. Such a change reached no renderer, and a
+  series' `x` could outgrow its `y`. Make a new item instead, with `attrs.evolve`.
+
 - `Jobs.wait` also emits the tables' `changed` after another session writes to a `shared`
   database, with or without a job running. It waits for each write committed before the call.
   So a test can check that a page shows another session's write.

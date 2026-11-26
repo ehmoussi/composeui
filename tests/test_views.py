@@ -24,6 +24,7 @@ from composeui.core.model import RefusedError
 from composeui.core.view import (
     CellKind,
     CellWidget,
+    ChartView,
     ConsoleView,
     DownloadedFile,
     DownloadView,
@@ -43,8 +44,11 @@ from composeui.core.view import (
     NodeMark,
     ParsedInputMixin,
     ParsedInputView,
+    PolygonShape,
+    PolylineShape,
     RowInputView,
     RowParsedInputView,
+    Series,
     StreamContent,
     TableView,
     TextStyle,
@@ -52,6 +56,7 @@ from composeui.core.view import (
     TypedFormDialogView,
     UploadedFile,
     View,
+    child,
     define_view,
     find_in_lines,
     parse_date,
@@ -665,6 +670,18 @@ def test_a_view_s_dict_refuses_a_change_in_place_of_its_lists_too() -> None:
     assert view.tags == {"Eve": ["guest"]}
 
 
+def test_a_view_s_dict_taken_from_a_frozen_item_names_the_view_s_field() -> None:
+    cell = CellWidget.file_path(extensions={"CSV": (".csv",)})
+    path = FilePathInputView()
+
+    path.extensions = cell.extensions
+
+    with pytest.raises(
+        TypeError, match=r"^FilePathInputView\.extensions can't change in place.*set a new dict"
+    ):
+        path.extensions["Text"] = (".txt",)
+
+
 def test_a_view_s_dict_of_another_kind_keeps_what_its_kind_does() -> None:
     # a `FixedDict` in its place raised KeyError where a defaultdict gives its default
     view = _TagsView()
@@ -672,6 +689,70 @@ def test_a_view_s_dict_of_another_kind_keeps_what_its_kind_does() -> None:
 
     view.counts = defaultdict(lambda: 1)
     assert view.counts["Eve"] == 1
+
+
+# the lists and dicts of a frozen item that a view holds: in a new item, never changed in place
+
+
+@pytest.mark.parametrize(
+    ("item", "field", "change"),
+    [
+        (Series.line("Load", [1, 2], [3, 4]), "x", lambda x: x.append(5.0)),
+        (Series.line("Load", [1, 2], [3, 4]), "y", lambda y: y.pop()),
+        (PolylineShape(points=[(0, 0), (1, 1)]), "points", lambda points: points.clear()),
+        (
+            PolygonShape(points=[(0, 0), (1, 0), (0, 1)]),
+            "points",
+            lambda points: points.__setitem__(0, (5.0, 5.0)),
+        ),
+        (
+            CellWidget.file_path(extensions={"CSV": (".csv",)}),
+            "extensions",
+            lambda extensions: extensions.update({"Text": (".txt",)}),
+        ),
+        (
+            CellWidget.path_by(0, {"input": CellWidget.file_path()}),
+            "editors",
+            lambda editors: editors.pop("input"),
+        ),
+    ],
+)
+def test_a_frozen_item_s_list_or_dict_refuses_a_change_in_place(
+    item: object, field: str, change: Callable[[Any], object]
+) -> None:
+    # in place, a series' x outgrew its y, and the view holding it drew it as it was
+    held = getattr(item, field)
+    before = held.copy()
+    owner = type(item).__name__
+
+    with pytest.raises(
+        TypeError, match=rf"^{owner}\.{field} can't change in place.*make a new {owner}"
+    ):
+        change(held)
+
+    assert getattr(item, field) == before
+
+
+@define_view
+class _LoadPage(View):
+    chart: ChartView = child(ChartView, series=[Series.line("Load", [1, 2], [3, 4])])
+    inputs: TableView = child(
+        TableView,
+        headers=["Input"],
+        cell_widgets={0: CellWidget.file_path(extensions={"CSV": (".csv",)})},
+    )
+
+
+def test_a_frozen_item_copied_for_each_view_built_refuses_a_change_in_place_too() -> None:
+    page = _LoadPage()
+
+    with pytest.raises(TypeError, match=r"^Series\.x can't change in place"):
+        page.chart.series[0].x.append(5.0)
+    with pytest.raises(TypeError, match=r"^CellWidget\.extensions can't change in place"):
+        page.inputs.cell_widgets[0].extensions.clear()
+
+    assert page.chart.series[0].x == [1.0, 2.0]
+    assert page.inputs.cell_widgets[0].extensions == {"CSV": (".csv",)}
 
 
 def test_an_uploaded_file_of_a_path_names_the_user_s_file_without_a_copy(tmp_path: Path) -> None:

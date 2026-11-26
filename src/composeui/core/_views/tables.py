@@ -40,6 +40,7 @@ from composeui.core._views.base import (
     OMIT,
     UI_TEXT,
     EditRefusedError,
+    ItemDict,
     LogType,
     View,
     _editing_cell,
@@ -456,6 +457,14 @@ def _to_paths(paths: Iterable[Path]) -> tuple[Path, ...]:
     return tuple(paths)
 
 
+def _to_extensions(extensions: Mapping[str, tuple[str, ...]]) -> dict[str, tuple[str, ...]]:
+    return ItemDict(extensions, "CellWidget.extensions")
+
+
+def _to_editors(editors: Mapping[str, CellWidget]) -> dict[str, CellWidget]:
+    return ItemDict(editors, "CellWidget.editors")
+
+
 @attrs.frozen
 class CellWidget:
     """A widget in each cell of a table's column, by `TableMixin.cell_widgets`.
@@ -492,7 +501,7 @@ class CellWidget:
     #: the file types a file path's dialog offers, by name: ``{"CSV": (".csv",)}``; on the
     #: web, a file of another type is refused
     extensions: dict[str, tuple[str, ...]] = attrs.field(
-        factory=dict[str, tuple[str, ...]], hash=False
+        factory=dict[str, tuple[str, ...]], converter=_to_extensions, hash=False
     )
     #: the folders of the server whose files a file path's "…" lists on the web, rather
     #: than uploading a copy; on Qt and Textual, the dialog opens in the first one while
@@ -507,7 +516,9 @@ class CellWidget:
     confirms_overwrite: bool = True
     #: for `path_by`: the column of the row's kind, and the path widget of each kind
     kind_column: int = 0
-    editors: dict[str, CellWidget] = attrs.field(factory=dict[str, "CellWidget"], hash=False)
+    editors: dict[str, CellWidget] = attrs.field(
+        factory=dict[str, "CellWidget"], converter=_to_editors, hash=False
+    )
 
     def translated(self, translate: Translate) -> CellWidget:
         """Get it with a button's text translated again, if it's `TranslatedText`."""
