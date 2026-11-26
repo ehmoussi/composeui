@@ -7,7 +7,7 @@ import pytest
 pytest.importorskip("textual")
 pytest.importorskip("textual_fspicker")
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from attrs import Factory
 from textual.widgets import (
@@ -36,6 +36,9 @@ from tests.toolbar import ToolBarMainView
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from textual.pilot import Pilot
+    from textual.widget import Widget
 
 
 @pytest.mark.asyncio
@@ -311,6 +314,23 @@ async def test_a_toolbar_shows_its_actions_above_the_pages_toolbar() -> None:
         assert [type(s).__name__ for s in app.screen_stack] == ["Screen", "FileOpen"]
 
 
+async def _open_menu(pilot: Pilot[Any], button: Widget) -> ComposeMenuPopup:
+    """Click a menu button, and get its list once on screen and laid out.
+
+    The button opens the list from its own message, after the click: a slow machine takes more
+    than one pause.
+    """
+    app = button.app
+    await _click_laid_out(pilot, button)
+    for _ in range(100):
+        if isinstance(app.screen, ComposeMenuPopup) and app.screen.options.region.area > 0:
+            break
+        await pilot.pause()
+    popup = app.screen
+    assert isinstance(popup, ComposeMenuPopup)
+    return popup
+
+
 @pytest.mark.asyncio
 async def test_a_menu_button_lists_its_shown_actions_under_it_and_runs_the_one_picked() -> None:
     view = MenuButtonMainView()
@@ -322,10 +342,7 @@ async def test_a_menu_button_lists_its_shown_actions_under_it_and_runs_the_one_p
 
     async with app.run_test() as pilot:
         button = _widget(more)
-        await _click_laid_out(pilot, button)
-        await pilot.pause()
-        popup = app.screen
-        assert isinstance(popup, ComposeMenuPopup)
+        popup = await _open_menu(pilot, button)
         options = [popup.options.get_option_at_index(i) for i in range(2)]
         assert [(str(o.prompt), o.disabled) for o in options] == [
             ("Reload", True),
@@ -340,13 +357,11 @@ async def test_a_menu_button_lists_its_shown_actions_under_it_and_runs_the_one_p
         assert view.last.text == "Previewed"
 
         view.last.text = ""
-        await _click_laid_out(pilot, button)
-        await pilot.pause()
+        await _open_menu(pilot, button)
         await pilot.press("escape")
         await pilot.pause()
         assert not isinstance(app.screen, ComposeMenuPopup)
-        await _click_laid_out(pilot, button)
-        await pilot.pause()
+        await _open_menu(pilot, button)
         await pilot.click(offset=(app.size.width - 1, app.size.height - 1))  # outside the list
         await pilot.pause()
 
@@ -354,10 +369,7 @@ async def test_a_menu_button_lists_its_shown_actions_under_it_and_runs_the_one_p
         assert view.last.text == ""
 
         # an entry hidden while the list shows it no longer runs, as Qt and the web refuse it
-        await _click_laid_out(pilot, button)
-        await pilot.pause()
-        popup = app.screen
-        assert isinstance(popup, ComposeMenuPopup)
+        popup = await _open_menu(pilot, button)
         more.preview.is_visible = False
         await pilot.click(popup.options, offset=(2, 2))
         await pilot.pause()
