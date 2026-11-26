@@ -557,8 +557,10 @@ def test_a_qt_app_saves_its_state_and_exits_for_a_new_process_when_composeui_cha
 
 
 #: a Qt app logging each render and model's close, with its code's version, its process and
-#: whether a supervisor runs it. Version 1 opens a modal dialog for a while, version 2 fails
-#: to set up its model, and version 3 closes its window once shown
+#: whether a supervisor runs it. Version 1 opens a modal dialog, which stays open until the
+#: reload has taken a change (the supervisor's `taken` file exists): the change waits in the
+#: dialog's event loop. Version 2 fails to set up its model, and version 3 closes its window
+#: once shown
 _LIFECYCLE_APP = textwrap.dedent(
     """
     import os, pathlib
@@ -582,7 +584,18 @@ _LIFECYCLE_APP = textwrap.dedent(
     def ask():
         log("dialog")
         box = QMessageBox()
-        QTimer.singleShot(1500, box.accept)
+        taken = pathlib.Path(os.environ["COMPOSEUI_RELOADED"]) / "taken"
+        poll = QTimer(box)
+
+        def close_once_taken():
+            # the reload runs on this thread: taken and not yet run, the change waits
+            if taken.exists():
+                poll.stop()
+                log("change taken")
+                box.accept()
+
+        poll.timeout.connect(close_once_taken)
+        poll.start(20)
         box.exec()  # as a callback's file dialog: its own event loop
         log("dialog closed")
 
@@ -637,6 +650,7 @@ def test_a_qt_app_with_reload_closes_every_model_it_built(tmp_path: Path) -> Non
         ["close", "1", supervisor, "False"],  # the supervisor's, never shown
         ["render", "1", app, "True"],
         ["dialog", "1", app, "True"],
+        ["change taken", "1", app, "True"],  # in the dialog's event loop
         ["dialog closed", "1", app, "True"],  # the reload waited for it
         ["close", "2", app, "True"],  # its setup failed: the window keeps version 1
         ["render", "3", app, "True"],
