@@ -720,6 +720,11 @@ class WebFilePathInputRenderer(_WebPathInputRenderer[FilePathInputViewLike]):
         self._show_path(path)
 
     @property
+    def path(self) -> Path | None:
+        """Get the path the field shows, None for none."""
+        return self._view.path
+
+    @property
     def takes_upload(self) -> bool:
         """Tell whether the field takes an upload: enabled, and without `server_roots`.
 
@@ -883,6 +888,15 @@ class WebFileUploadRenderer(WebRenderer[FileUploadViewLike]):
             uploading=self._view.uploading_text,
             name=self._name_html(),
         )
+
+    @property
+    def files(self) -> tuple[UploadedFile, ...]:
+        """Get the files the view holds."""
+        return self._view.files
+
+    def drop_files(self) -> None:
+        """Hold no file, e.g. a restored session's that the session doesn't own."""
+        self._view.files = ()
 
     def holds_file_in(self, directory: Path) -> bool:
         """Tell whether the view's files are the upload in `directory`: one folder holds them."""

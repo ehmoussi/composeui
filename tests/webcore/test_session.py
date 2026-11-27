@@ -45,6 +45,7 @@ from composeui.core.view import (
     FileUploadView,
     LabelRowIntInputView,
     ListSource,
+    ListView,
     MainView,
     SourceTableView,
     UploadedFile,
@@ -652,6 +653,15 @@ def test_a_store_saves_its_idle_sessions_while_it_has_room_and_wakes_them_as_the
 
 
 @define_view
+class _Runs(ListView[str]):
+    """A console per run: in a list, the views that a session doesn't keep."""
+
+    @override
+    def build_item(self, item: str) -> View:
+        return ConsoleView()
+
+
+@define_view
 class _HoldingMainView(MainView):
     """A session holding, on demand, each thing that a study doesn't save."""
 
@@ -659,6 +669,7 @@ class _HoldingMainView(MainView):
     upload: FileUploadView = Factory(FileUploadView)
     notes: SourceTableView = Factory(SourceTableView)
     question: DialogView = Factory(DialogView)
+    runs: _Runs = Factory(_Runs)
 
 
 @define_view
@@ -715,6 +726,17 @@ def _hold_output(session: WebSession, _stack: contextlib.ExitStack, _tmp_path: P
     session.main_view.console.append("solver started\n")
 
 
+def _hold_output_in_a_list(
+    session: WebSession, _stack: contextlib.ExitStack, _tmp_path: Path
+) -> None:
+    assert isinstance(session.main_view, _HoldingMainView)
+    runs = session.main_view.runs
+    runs.items = ["first run"]
+    run = runs.item_views[0]
+    assert isinstance(run, ConsoleView)
+    run.append("solver started\n")
+
+
 def _hold_a_request(session: WebSession, stack: contextlib.ExitStack, _tmp_path: Path) -> None:
     stack.enter_context(session.held())  # e.g. an upload still arriving
 
@@ -726,9 +748,10 @@ def _hold_a_request(session: WebSession, stack: contextlib.ExitStack, _tmp_path:
         (_HoldingMainView, _hold_a_job, True),
         (_HoldingMainView, _hold_a_download, True),
         (_HoldingMainView, _hold_a_question, True),
-        (_HoldingMainView, _hold_an_upload, True),
+        (_HoldingMainView, _hold_an_upload, False),
         (_HoldingMainView, _hold_a_new_source, True),
-        (_HoldingMainView, _hold_output, True),
+        (_HoldingMainView, _hold_output, False),
+        (_HoldingMainView, _hold_output_in_a_list, True),
         (_HoldingMainView, _hold_a_request, True),
         (_KeptByTheAppMainView, _hold_nothing, True),
     ],

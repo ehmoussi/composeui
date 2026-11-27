@@ -243,7 +243,11 @@ be excluded:
   metadata key.
 - A field that a study leaves out but a session keeps, such as the tab shown, takes `SESSION`
   with `OMIT`. `save_reloaded_state` saves these fields apart from the study (`session_data`),
-  for a reload and for an idle web session.
+  for a reload and for an idle web session. A view whose content no field holds, such as a
+  console's lines and their styles, gives it in `View._session_content`, and shows it again in
+  `View._load_session_content`. `session_data` walks the views of fields only, not those of a
+  list such as a `ListView`'s: the web keeps a session in memory while those show what it
+  would lose.
 - Text that the app's code sets, not the user, takes the `UI_TEXT` metadata key. See
   [Saving and loading state](../user-guide/building-views.md#saving-and-loading-state).
 

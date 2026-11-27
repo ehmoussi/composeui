@@ -243,8 +243,9 @@ assert filters.hours.selected == [9, 12, 19]
   while only some of them are checked, and a click then checks them all. Set `has_check_all` to
   `False` to hide it. `check_all(is_checked=...)` does the same from code.
 - **The search.** With `has_search`, a search field shows only the choices whose label holds its
-  text, in any case. The check-all box then acts on the choices shown only. The search is not
-  saved.
+  text, in any case. The check-all box then acts on the choices shown only. A study doesn't
+  save the search, but a session keeps it (see
+  [Saving and loading state](building-views.md#saving-and-loading-state)).
 - **What the closed list shows.** A multi-combobox shows its `summary`: the label of the choice,
   `check_all_text` ("All") while all are chosen, `count_text` ("{count} selected") for several,
   and `empty_text` ("None") for none.
@@ -454,8 +455,10 @@ class ExplorerView(MainView):
 - **`is_temporary`** tells whether `path` is a copy that the session owns.
 
 `clear()` empties the view. The file is not part of a study, so New and Open keep it, and a
-saved study holds no path to it. `extensions`, `browse_text`, `empty_text`, and `uploading_text` set
-the file types and the texts. To take several files at once, see
+saved study holds no path to it. A session keeps it when it's saved and opened again (see
+[Saving and loading state](building-views.md#saving-and-loading-state)). `extensions`,
+`browse_text`, `empty_text`, and `uploading_text` set the file types and the texts. To take
+several files at once, see
 [Several files at once](#several-files-at-once).
 
 What each backend does:
@@ -1319,6 +1322,8 @@ assert main_view.output.text == "Step 1\nDone\n"
 - **Scrolling.** The view scrolls to its end as text comes. When the user scrolls up to read,
   it stays there, until the user scrolls back to the end.
 - **Not study data.** The text is the app's output: a study never saves, loads, or resets it.
+  A session keeps it, with its colors, when it's saved and opened again (see
+  [Saving and loading state](building-views.md#saving-and-loading-state)).
 - **Save or copy the output.** The user saves the text to a file, named `export_filename`
   (`output.txt` by default) at first, or copies the whole text to the clipboard. In code,
   `export_text(path)` writes it in UTF-8. The status bar says when it's saved, and a notification

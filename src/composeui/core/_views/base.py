@@ -773,6 +773,21 @@ class View:
     def _keep_model(self, model: Optional[Model]) -> None:
         """Keep `model` for the views that the view builds later (see `set_references`)."""
 
+    def _session_content(self) -> object:
+        """Get what the view shows that a session keeps beside its `SESSION` fields, as JSON.
+
+        None for nothing. A view whose content no field holds, such as a console's text,
+        gives it, and `_load_session_content` shows it again.
+        """
+        return None
+
+    def _load_session_content(self, content: object) -> None:
+        """Show again what `_session_content` gave; raise if it doesn't fit, e.g. ValueError.
+
+        `load_session_data` leaves the view as it is then, as for a field's value that doesn't
+        fit.
+        """
+
     @property
     def children_views(self) -> list[View]:
         """Get the views in the fields of this view, in order."""

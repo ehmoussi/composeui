@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import itertools
+import json
 import logging
 import os
 import shutil
@@ -30,9 +31,14 @@ from composeui.core.application import WebSettings
 from composeui.core.model import Model
 from composeui.core.view import (
     OMIT,
+    CheckListView,
     ConsoleView,
+    DialogView,
+    LabelRowFilePathInputView,
+    LabelRowFileUploadView,
     LabelRowIntInputView,
     MainView,
+    UploadedFile,
     define_view,
 )
 from composeui.core.webstyle import WebStyle
@@ -40,6 +46,7 @@ from composeui.webcore import session as session_module
 from composeui.webcore import webapplication as webapplication_module
 from composeui.webcore.session import Hibernation, SessionFolder, SessionStore, WebSession
 from composeui.webcore.sessionfolder import FolderInUseError
+from composeui.webcore.uploads import ReceivedFile
 from examples.webhello import HelloMainView
 from tests.datafiles import DataFileMainView
 from tests.tables import DataFilesTableMainView
@@ -172,22 +179,22 @@ def test_an_idle_session_on_disk_outlives_a_crash_of_its_server(tmp_path: Path) 
 
 
 @define_view
-class _SolverMainView(MainView):
-    console: ConsoleView = Factory(ConsoleView)
+class _AskingMainView(MainView):
+    question: DialogView = Factory(DialogView)
 
 
-def _hold_output(session: WebSession) -> None:
+def _hold_a_question(session: WebSession) -> None:
     """Show what a study doesn't keep: the session can't be saved."""
-    assert isinstance(session.main_view, _SolverMainView)
-    session.main_view.console.append("solver started\n")
+    assert isinstance(session.main_view, _AskingMainView)
+    session.main_view.question.open()
 
 
 def test_a_session_that_can_t_be_saved_as_its_server_stops_is_lost(tmp_path: Path) -> None:
-    """A study doesn't keep a console's text: at a restart, the session would come back without."""
+    """A study doesn't keep a dialog's question: at a restart, the session would lose it."""
     folder = tmp_path / "sessions"
-    store = _store(folder, lambda: (_SolverMainView(), None))
+    store = _store(folder, lambda: (_AskingMainView(), None))
     session_id, session = _created(store)
-    _hold_output(session)
+    _hold_a_question(session)
     store.keep_all()
 
     assert _saved_ids(folder) == []
@@ -374,13 +381,13 @@ def test_a_session_that_can_t_be_saved_leaves_the_last_place_on_disk_to_the_next
     with mock.patch.object(session_module, "time", clock):
         store = _store(
             folder,
-            lambda: (_SolverMainView(), None),
+            lambda: (_AskingMainView(), None),
             max_saved=1,
             hibernation=Hibernation(5.0, 1),
         )
         _busy_id, busy = _created(store)
         saveable_id, _saveable = _created(store)
-        _hold_output(busy)
+        _hold_a_question(busy)
         clock.now = 6.0
         with caplog.at_level(logging.WARNING, logger="COMPOSEUI"):
             if saves_by == "hibernation":
@@ -531,10 +538,10 @@ def test_a_model_that_fails_to_close_at_the_stop_leaves_the_other_sessions_kept(
     caplog: pytest.LogCaptureFixture, tmp_path: Path
 ) -> None:
     folder = tmp_path / "sessions"
-    views = iter([_SolverMainView(), HelloMainView(), HelloMainView()])
+    views = iter([_AskingMainView(), HelloMainView(), HelloMainView()])
     store = _store(folder, lambda: (next(views), _UnclosableModel()))
     lost_id, lost = _created(store)
-    _hold_output(lost)  # it ends, its model failing to close
+    _hold_a_question(lost)  # it ends, its model failing to close
     _created(store)
     _created(store)
     with caplog.at_level(logging.ERROR, logger="COMPOSEUI"):
@@ -596,6 +603,237 @@ def test_an_upload_of_a_path_outlives_its_server_in_the_folder(
     assert path.is_relative_to(folder)
     assert restored_path == path
     assert not path.exists()
+
+
+@define_view
+class _RunMainView(DataFileMainView):
+    """A run's page: its output, the files a run takes, and a search among its cases."""
+
+    console: ConsoleView = Factory(lambda: ConsoleView(ansi_colors=True))
+    inputs: LabelRowFileUploadView = Factory(
+        lambda: LabelRowFileUploadView(label="Inputs", multiple=True)
+    )
+    cases: CheckListView[str] = Factory(
+        lambda: CheckListView[str](values={"Wall": "wall", "Beam": "beam"}, has_search=True)
+    )
+
+
+def _give_inputs(session: WebSession, *names: str) -> tuple[Path, ...]:
+    """Upload files to the run's inputs, as the route does; get where the session keeps them."""
+    assert isinstance(session.main_view, _RunMainView)
+    inputs = session.main_view.inputs
+    with tempfile.TemporaryDirectory() as directory:
+        received = []
+        for index, name in enumerate(names):
+            path = Path(directory, f"upload-{index}")
+            path.write_bytes(name.encode())
+            received.append(ReceivedFile(name, "", path))
+        session.pick_files(_part(inputs, "field").widget_id, received)
+    return tuple(file.path for file in inputs.files)
+
+
+def test_a_run_s_output_inputs_and_search_outlive_its_server_in_the_folder(
+    tmp_path: Path,
+) -> None:
+    """The session comes back as the user left it; the uploads it replaces next are removed."""
+    folder = tmp_path / "sessions"
+    store = _store(folder, lambda: (_RunMainView(), None))
+    session_id, session = _created(store)
+    assert isinstance(session.main_view, _RunMainView)
+    session.main_view.console.append("meshing\n\x1b[31mstep 2 failed\n")
+    inputs = _give_inputs(session, "mesh.med", "loads.csv")
+    measurements = session.main_view.form.measurements
+    _pick_file(session, _part(measurements, "field").widget_id, "first.csv", b"first")
+    measured = measurements.path
+    assert measured is not None
+    session.main_view.cases.search = "be"
+    store.keep_all()
+
+    next_server = _store(folder, lambda: (_RunMainView(), None))
+    restored = next_server.get(session_id)
+    assert restored is not None
+    main_view = restored.main_view
+    assert isinstance(main_view, _RunMainView)
+    shown = (
+        main_view.console.text,
+        main_view.console.line_styles,
+        [file.path for file in main_view.inputs.files],
+        main_view.form.measurements.path,
+        main_view.cases.search,
+    )
+    page = restored.page_html()
+    # the next ones replace them
+    _give_inputs(restored, "mesh2.med")
+    _pick_file(restored, _part(main_view.form.measurements, "field").widget_id, "b.csv", b"b")
+    replaced_left = [path for path in (*inputs, measured) if path.exists()]
+    next_server.drop(session_id)
+
+    assert shown == (
+        "meshing\nstep 2 failed\n",
+        session.main_view.console.line_styles,
+        list(inputs),
+        measured,
+        "be",
+    )
+    assert all(path.is_relative_to(folder) for path in inputs)
+    assert "step 2 failed" in page
+    assert 'value="be"' in page
+    assert replaced_left == []
+
+
+def _forge(saved: Path, *paths: Path) -> None:
+    """Make the saved session name `paths` as its upload view's files, as a forged save would."""
+    data = json.loads(saved.read_text())
+    file = data["views"]["inputs.files"][0]
+    data["views"]["inputs.files"] = [{**file, "path": str(path)} for path in paths]
+    saved.write_text(json.dumps(data))
+
+
+def _remove_upload(_saved: Path, inputs: tuple[Path, ...], _tmp_path: Path) -> None:
+    inputs[1].unlink()  # e.g. a cleanup of the disk
+
+
+def _point_elsewhere(saved: Path, _inputs: tuple[Path, ...], tmp_path: Path) -> None:
+    # named as an upload view's upload is, out of the session's folder
+    other = tmp_path / "cui-1-file_upload" / "kept" / "results.csv"
+    other.parent.mkdir(parents=True)
+    other.write_text("1,2")
+    _forge(saved, other)
+
+
+def _point_above(saved: Path, inputs: tuple[Path, ...], _tmp_path: Path) -> None:
+    # held, the folder of every upload of the session would go at the field's next upload
+    field = inputs[0].parent.parent
+    (field.parent / "mesh.med").write_text("mesh")
+    _forge(saved, field / ".." / "mesh.med")
+
+
+def _point_through_a_link(saved: Path, inputs: tuple[Path, ...], tmp_path: Path) -> None:
+    field = inputs[0].parent.parent
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / "kept").mkdir(parents=True)
+    (elsewhere / "kept" / "mesh.med").write_text("mesh")
+    link = field.with_name("cui-1-file_upload")
+    link.symlink_to(elsewhere, target_is_directory=True)
+    _forge(saved, link / "kept" / "mesh.med")
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        _remove_upload,
+        _point_elsewhere,
+        _point_above,
+        pytest.param(
+            _point_through_a_link,
+            marks=pytest.mark.skipif(
+                sys.platform == "win32", reason="a link needs a privilege on Windows"
+            ),
+        ),
+    ],
+)
+def test_a_restored_upload_view_holds_only_files_that_its_session_kept(
+    change: Callable[[Path, tuple[Path, ...], Path], None], tmp_path: Path
+) -> None:
+    """Never a file that the session doesn't own, which its next upload would remove."""
+    folder = tmp_path / "sessions"
+    store = _store(folder, lambda: (_RunMainView(), None))
+    session_id, session = _created(store)
+    inputs = _give_inputs(session, "mesh.med", "loads.csv")
+    store.keep_all()
+    change(folder / session_id / "session.json", inputs, tmp_path)
+
+    next_server = _store(folder, lambda: (_RunMainView(), None))
+    restored = next_server.get(session_id)
+    assert restored is not None
+    assert isinstance(restored.main_view, _RunMainView)
+    files = restored.main_view.inputs.files
+    next_server.drop(session_id)
+
+    assert files == ()
+
+
+def test_a_restored_upload_view_keeps_the_app_s_own_file(tmp_path: Path) -> None:
+    """The app gave it, not the user: the session neither owns it nor drops it."""
+    folder = tmp_path / "sessions"
+    results = tmp_path / "results.csv"
+    results.write_text("1,2")
+    store = _store(folder, lambda: (_RunMainView(), None))
+    session_id, session = _created(store)
+    assert isinstance(session.main_view, _RunMainView)
+    session.main_view.inputs.take_file(UploadedFile.of_path(results))
+    store.keep_all()
+
+    next_server = _store(folder, lambda: (_RunMainView(), None))
+    restored = next_server.get(session_id)
+    assert restored is not None
+    assert isinstance(restored.main_view, _RunMainView)
+    files = [file.path for file in restored.main_view.inputs.files]
+    next_server.drop(session_id)
+
+    assert files == [results]
+    assert results.exists()
+
+
+@define_view
+class _CopiedPathMainView(DataFilesTableMainView):
+    """Fields whose uploads a user can copy the path of, and a field to paste it in."""
+
+    measurements: LabelRowFilePathInputView = Factory(
+        lambda: LabelRowFilePathInputView(label="Measurements")
+    )
+    dataset: LabelRowFileUploadView = Factory(lambda: LabelRowFileUploadView(label="Dataset"))
+    results: LabelRowFilePathInputView = Factory(lambda: LabelRowFilePathInputView(label="Results"))
+
+
+def _upload_measurements(session: WebSession) -> Path:
+    assert isinstance(session.main_view, _CopiedPathMainView)
+    measurements = session.main_view.measurements
+    _pick_file(session, _part(measurements, "field").widget_id, "first.csv", b"first")
+    assert measurements.path is not None
+    return measurements.path
+
+
+def _upload_dataset(session: WebSession) -> Path:
+    assert isinstance(session.main_view, _CopiedPathMainView)
+    dataset = session.main_view.dataset
+    _pick_file(session, _part(dataset, "field").widget_id, "data.csv", b"1,2")
+    assert dataset.file is not None
+    return dataset.file.path
+
+
+def _upload_to_a_cell(session: WebSession) -> Path:
+    assert isinstance(session.main_view, _CopiedPathMainView)
+    table = session.main_view.inputs
+    _pick_cell_file(session, _widget_id(table.renderer), 0, "flows.csv", b"1,2")
+    return Path(table.rows[0][1])
+
+
+@pytest.mark.parametrize("upload", [_upload_measurements, _upload_dataset, _upload_to_a_cell])
+def test_a_path_copied_to_another_field_outlives_that_field_s_next_upload_after_a_restart(
+    upload: Callable[[WebSession], Path], tmp_path: Path
+) -> None:
+    """The restored session doesn't take the upload the path names for the field's own."""
+    folder = tmp_path / "sessions"
+    store = _store(folder, lambda: (_CopiedPathMainView(), None))
+    session_id, session = _created(store)
+    copied = upload(session)
+    assert isinstance(session.main_view, _CopiedPathMainView)
+    results_id = _part(session.main_view.results, "field").widget_id
+    session.handle_event(results_id, "input", {"value": str(copied)})
+    assert session.main_view.results.path == copied
+    store.keep_all()
+
+    next_server = _store(folder, lambda: (_CopiedPathMainView(), None))
+    restored = next_server.get(session_id)
+    assert restored is not None
+    assert isinstance(restored.main_view, _CopiedPathMainView)
+    results = _part(restored.main_view.results, "field").widget_id
+    _pick_file(restored, results, "results.csv", b"3,4")
+    is_left = copied.exists()
+    next_server.drop(session_id)
+
+    assert is_left
 
 
 def test_an_upload_in_a_relative_session_folder_has_an_absolute_path(

@@ -447,7 +447,8 @@ Read this section before other people use the app, on a network or behind a reve
   opens it again, and its page reloads on the same address: the action of that request is
   lost, and the user does it again. A link that downloads, such as a table's CSV or a chart's
   image, fails until the page reloads. The session keeps what a study keeps. It also keeps its
-  study file, its language, the uploads of its path fields, and the `SESSION` fields (see
+  study file, its language, the uploads of its path fields and upload views, the text of its
+  consoles, and the `SESSION` fields (see
   [Saving and loading state](building-views.md#saving-and-loading-state)). What a callback set
   and a study doesn't hold, such as a label's text, an image or a table's `cell_styles`, comes
   back only if the app gives it again on `loaded`. Sessions on disk don't count in
@@ -458,10 +459,10 @@ Read this section before other people use the app, on a network or behind a reve
   - a job runs, or a request is in progress;
   - the page has a file of `MainView.download` to fetch, or a page of `open_url` to open;
   - a dialog is open;
-  - an upload view holds a file;
   - a large table shows a source that the app gave other than on `loaded`, for example from a
     file that the user chose (a source given on `loaded` comes back as the session wakes);
-  - a console holds text;
+  - a console holds text, or an upload view holds a file, in a
+    [list of views](organizing-the-window.md#a-list-of-views);
   - `MainView.can_hibernate` returns False. Override it when a session holds something that its
     views' state and its model's data don't, for example an object that a callback built. A
     study saves neither the attributes of a view that are not fields nor the variables of a
@@ -480,8 +481,9 @@ Read this section before other people use the app, on a network or behind a reve
   - **With `session_idle`,** idle sessions wait in this folder instead of the temporary folder,
     so they also survive a crash. A crash loses the sessions in memory.
 
-  A session comes back with what a session on disk keeps. The files uploaded to its path fields
-  and table cells are kept in the folder too, so a new container or a reboot keeps them. A
+  A session comes back with what a session on disk keeps. The files uploaded to its path fields,
+  upload views and table cells are kept in the folder too, so a new container or a reboot keeps
+  them. A
   session that holds what it can't save (see the previous bullet) is lost at a restart: it
   would come back other than it was. So is a session that ended, for example with Exit. A
   session ends after `session_ttl` without a request, counted from its last request, also while

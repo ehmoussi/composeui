@@ -322,14 +322,20 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   - **A failed wake.** A session whose build fails, the app's code failing maybe for a while,
     goes back on disk for its next request. One whose save fails to open is dropped, there as
     without a folder: its next request starts anew, rather than fail again.
-  - **Uploads.** A path field's or a table cell's uploads go to `uploads/composeui-*` in the
-    folder, not to the system's temporary folder, which a new container or a reboot empties.
-    `_saved_uploads` owns only a directory there, so a save that names another one, such as
-    another server's in the temporary folder, never deletes it. At start, the store removes the
-    directories that no save names: those of the sessions in memory that a crash lost. A file
-    arrives in the temporary folder first, and is moved there once whole. The store makes the
-    folder's path absolute, so the uploads' paths are too: before Python 3.12, `mkdtemp` gives a
-    relative path in a relative folder.
+  - **Uploads.** A path field's, an upload view's or a table cell's uploads go to
+    `uploads/composeui-*` in the folder, not to the system's temporary folder, which a new
+    container or a reboot empties. `_saved_uploads` owns only a directory there, so a save that
+    names another one, such as another server's in the temporary folder, never deletes it. A
+    session that wakes holds again the upload of each field that its saved path or files name
+    in that directory (`_hold_saved_uploads`), under the field's new widget id, so the field's
+    next upload removes it. The upload's folder must be one made for that kind of field (its
+    widget id's last part), and no other field may name it: a path that the user copied from
+    another field, or from a table's cell, would else be removed with the field's next upload.
+    An upload view whose saved files are elsewhere, or gone, holds none. At start, the store
+    removes the directories that no save names: those of the sessions in memory that a crash
+    lost. A file arrives in the temporary folder first, and is moved there once whole. The store
+    makes the folder's path absolute, so the uploads' paths are too: before Python 3.12,
+    `mkdtemp` gives a relative path in a relative folder.
 
 ## Pages, tabs, and dialogs
 
