@@ -65,6 +65,7 @@ from tests.charts import ChartPagesMainView
 from tests.choices import ChoicesMainView
 from tests.console import RunMainView
 from tests.datafiles import DataFileMainView
+from tests.deck import DeckMainView
 from tests.dialogs import DialogsMainView
 from tests.downloading import ReportMainView
 from tests.drawings import DrawingMainView
@@ -321,6 +322,7 @@ class _PicturesMainView(MainView):
 #: main views showing every kind of view, between them
 _MAIN_VIEW_TYPES: list[type[MainView]] = [
     HelloMainView,
+    DeckMainView,
     ChoicesMainView,
     RangesMainView,
     ReportMainView,

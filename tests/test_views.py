@@ -64,6 +64,7 @@ from composeui.core.view import (
 from examples.studyinputs import INPUT_FILE, OUTPUT_FOLDER, PATH, StudyInputsMainView
 from tests.buildings import SITE
 from tests.console import RunMainView
+from tests.deck import EXPORT, DeckMainView
 from tests.downloading import ReportMainView
 from tests.memory import memory_mb, memory_text
 from tests.pages import InputsPage
@@ -411,6 +412,15 @@ def test_a_console_saves_its_text_and_says_how_it_went(tmp_path: Path) -> None:
 
     with pytest.raises(OSError):  # noqa: PT011 (whichever the system raises)
         ConsoleView().export_text(tmp_path)  # outside a main view
+
+
+def test_a_text_editor_saves_its_text_and_says_so(tmp_path: Path) -> None:
+    app = Application(build_main_view=DeckMainView)
+
+    app.main_view.deck.export_text(tmp_path / "run.export")
+
+    assert (tmp_path / "run.export").read_text(encoding="utf-8") == EXPORT
+    assert app.main_view.status_bar.message == "Saved run.export."
 
 
 def test_a_path_field_reads_a_relative_path_from_its_base_folder_and_shows_one_inside_it(

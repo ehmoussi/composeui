@@ -178,6 +178,19 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   read them as `Etc/UTC`. So a naive `datetime`, which the core takes as UTC, shows as the app
   wrote it, as Qt (`DateAxisItem(utcOffset=0)`), Textual and matplotlib show it. The server
   sends how precise the times are (`time`: `day`, `minute` or `second`), which the legend shows.
+- **A text editor's Copy all and Save.** `page.js` copies the `<textarea>`'s value, and saves
+  it as a file made in the page (a `Blob` URL with the `download` name of `export_filename`),
+  not by a route of the server. The field posts an edit after a pause, or as it loses the
+  focus: a click on Save fires that post, which a download from the server could overtake.
+  The `Blob` URL is a top-level download, not a fetch, so the page's policy allows it.
+- **A text editor's numbers.** The numbers of the lines are a `<pre>` beside the
+  `<textarea>`, with the same font and line height, not a part of the field. The text never
+  wraps, so a line of the text is a line of the numbers. The server writes them for the text it
+  sends; `page.js` writes them again when the count of lines changes, follows the field's
+  scrolling, and writes the caret's line and column in the bar.
+- **A text editor's Tab.** `page.js` inserts the spaces with `document.execCommand`, so that
+  the browser's undo takes them back and the field posts them as it posts typing. Escape, then
+  Tab, lets the browser move the focus, so that the keyboard can leave the field.
 - **The order of the listeners.** Listeners of one event and phase run in the order they were
   added, and `tables.js` adds its after all of `page.js`'s. `page.js`'s captured Enter
   dispatches `activate`, which selects a row, before `tables.js` activates it. A cell's Escape is

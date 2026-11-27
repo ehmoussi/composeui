@@ -21,6 +21,7 @@ from composeui.core.view import (
     ParsedInputView,
     SavePathInputView,
     TextAreaView,
+    TextEditorView,
     define_view,
 )
 from tests.memory import memory_mb, memory_text
@@ -50,6 +51,7 @@ class _FieldsMainView(MainView):
     )
     folder: FolderPathInputView = Factory(FolderPathInputView)
     report: SavePathInputView = Factory(lambda: SavePathInputView(extensions={"PDF": (".pdf",)}))
+    deck: TextEditorView = Factory(TextEditorView)
 
 
 def _set_name(view: _FieldsMainView) -> None:
@@ -75,6 +77,10 @@ def _set_path(view: _FieldsMainView) -> None:
 
 def _set_notes(view: _FieldsMainView) -> None:
     view.notes.text = "One\nline each"
+
+
+def _set_deck(view: _FieldsMainView) -> None:
+    view.deck.text = "P actions make_etude\nF comm study.comm D 1"
 
 
 def _set_memory(view: _FieldsMainView) -> None:
@@ -125,6 +131,10 @@ def _set_notes_again(view: _FieldsMainView) -> None:
     view.notes.text = "Set by the app"
 
 
+def _set_deck_again(view: _FieldsMainView) -> None:
+    view.deck.text = "P version stable"
+
+
 def _set_memory_again(view: _FieldsMainView) -> None:
     view.memory.value = 2000
 
@@ -168,6 +178,15 @@ _CASES = [
         "North\nside",
         _set_notes_again,
         "Set by the app",
+    ),
+    _Case(
+        "deck",
+        _set_deck,
+        "P ncpus 4\nP mpi_nbcpu 2",
+        lambda view: view.deck.text,
+        "P ncpus 4\nP mpi_nbcpu 2",
+        _set_deck_again,
+        "P version stable",
     ),
     _Case(
         "memory",

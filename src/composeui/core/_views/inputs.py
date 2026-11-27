@@ -19,14 +19,22 @@ from typing import (
 import attrs
 from typing_extensions import override
 
-from composeui.core._views.base import OMIT, UI_TEXT, View, define_view, notify_renderer
+from composeui.core._views.base import (
+    OMIT,
+    UI_TEXT,
+    View,
+    define_view,
+    notify_renderer,
+    write_view_text,
+)
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.translation import (
     T,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping
+    from pathlib import Path
 
 
 @define_view
@@ -74,6 +82,55 @@ class TextAreaView(TextAreaMixin, View):
     """
 
     _renderer_key = "text_area"
+
+
+#: a text editor's texts, by what they're for: its controls saving the text to a file,
+#: copying it to the clipboard, and searching it, with the count of the matches, then where
+#: the caret is
+EDITOR_TEXTS: Mapping[str, str] = {
+    "save": T("Save as"),
+    "copy": T("Copy all"),
+    "copied": T("Copied"),
+    "search": T("Search"),
+    "matches": T("{current} of {count}"),
+    "no_match": T("No match"),
+    "position": T("Line {line}, column {column}"),
+}
+
+
+@define_view
+class TextEditorView(TextAreaMixin, View):
+    """A box where the user edits a file's text, for example a solver's input file.
+
+    The text shows in a fixed-width font, its lines never wrapped and numbered down the
+    left, under a bar with `export_filename` and the caret's line and column. Tab indents
+    by four spaces. On Qt and Textual, Escape moves the focus out; on the web, Escape then
+    Tab does. The user saves the text to a file, named `export_filename` at first, or
+    copies it all. On Qt and Textual, "Save as" calls `export_text`. On the web, the browser
+    downloads the text that the field shows, and the app isn't told. On Qt and Textual, the
+    user searches the text too, as `find_in_lines` finds it. On the web, the browser's own
+    search finds it.
+
+    Its text is study data, as a `TextAreaView`'s: saved, loaded and reset with the study.
+    To edit a file that the user uploads, read it into `text`. To give the file to a
+    program, write `text` to it.
+    """
+
+    _renderer_key = "text_editor"
+
+    #: the texts of its controls, by what they're for (see `EDITOR_TEXTS`)
+    texts: dict[str, str] = attrs.field(
+        factory=lambda: dict(EDITOR_TEXTS), metadata={UI_TEXT: True}
+    )
+    #: the name offered for the file the text is saved to
+    export_filename: str = attrs.field(default="text.txt", metadata={OMIT: True})
+
+    def export_text(self, path: Path) -> None:
+        """Write the text to the file `path`, in UTF-8, and say how it went.
+
+        Outside a main view, a failure raises `OSError` instead.
+        """
+        write_view_text(self, path, self.text, self.tr("Saved {name}."))
 
 
 @define_view

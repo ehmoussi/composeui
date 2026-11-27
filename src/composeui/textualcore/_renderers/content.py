@@ -9,7 +9,12 @@ from textual.content import Content
 from textual.widgets import Label, Static
 from typing_extensions import Protocol, override
 
-from composeui.core._views.content import image_content, line_styles_after, lines_after
+from composeui.core._views.content import (
+    image_content,
+    line_styles_after,
+    lines_after,
+    matches_text,
+)
 from composeui.core.renderer import ViewLike
 from composeui.core.view import ConsoleView, LogType, MetricView, NotificationBar, StatusBar
 from composeui.textualcore.textualrenderer import TextualWidgetRenderer
@@ -205,14 +210,8 @@ class TextualConsoleRenderer(TextualWidgetRenderer[ConsoleViewLike, ComposeConso
     def _show_matches(self, current: int, count: int) -> None:
         """Show the search's count of matches: none without a search."""
         assert self._rendered_object is not None
-        texts = self._view.texts
-        if self._rendered_object.search.value == "":
-            text = ""
-        elif count == 0:
-            text = texts.get("no_match", "")
-        else:
-            text = texts.get("matches", "").format(current=current, count=count)
-        self._rendered_object.matches.update(text)
+        box = self._rendered_object
+        box.matches.update(matches_text(self._view.texts, box.search.value, current, count))
 
 
 class MetricViewLike(ViewLike, Protocol):

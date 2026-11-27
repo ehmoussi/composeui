@@ -163,6 +163,83 @@ class WebTextAreaRenderer(WebInputRenderer):
         super().dispatch(event, form)
 
 
+class TextEditorViewLike(InputViewLike, Protocol):
+    texts: dict[str, str]
+    export_filename: str
+
+    def tr(self, text: str) -> str: ...
+
+
+class WebTextEditorRenderer(WebTextAreaRenderer):
+    """A `<textarea>` in a frame: a bar above, and the numbers of its lines at its left.
+
+    The bar shows `export_filename`, the caret's line and column, and the Copy all and Save
+    buttons. The text posts its edits as `WebTextAreaRenderer` does. The page's script keeps
+    the numbers and the caret's place in step with the text, and copies or saves the text
+    that the field shows, not the server's: a click on Save follows an edit not posted yet.
+    In the field, Tab inserts four spaces, and Escape, then Tab, moves the focus out (see
+    `page.js`). The browser's own search finds in the text.
+    """
+
+    _role = "text_editor"
+
+    def __init__(self, view: TextEditorViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {"texts": self._mark_dirty, "export_filename": self._mark_dirty}
+        )
+
+    @override
+    def to_html(self, *, oob: bool = False) -> Markup:
+        view = cast("TextEditorViewLike", self._view)
+        disabled = "" if self.is_enabled else " disabled"
+        line_count = view.text.count("\n") + 1
+        return Markup(
+            '<div {root_attributes} class="cui-editor">'
+            '<div class="cui-editor-bar">{file_icon}'
+            '<span id="{widget_id}-name" class="cui-editor-name">{filename}</span>'
+            '<span class="cui-editor-position" data-editor-position="{position}">'
+            "{first_position}</span>"
+            '<button type="button" class="btn btn-ghost btn-xs" aria-label="{copy}"'
+            ' data-copy-console="{widget_id}-text">{copy_icon}'
+            '<span class="cui-console-copy cui-editor-label" aria-hidden="true">'
+            "<span>{copy}</span><span>{copied}</span></span></button>"
+            '<span class="sr-only" role="status" data-console-copy-status></span>'
+            '<button type="button" class="btn btn-ghost btn-xs" aria-label="{save}"'
+            ' data-save-text="{widget_id}-text" data-filename="{filename}">'
+            '{save_icon}<span class="cui-editor-label" aria-hidden="true">{save}</span>'
+            "</button></div>"
+            '<div class="cui-editor-body">'
+            '<pre class="cui-editor-lines" aria-hidden="true">{numbers}</pre>'
+            '<textarea id="{widget_id}-text" class="cui-editor-text" rows="18"'
+            ' wrap="off" spellcheck="false" data-text-editor'
+            ' aria-labelledby="{widget_id}-name" name="value" placeholder="{placeholder}"'
+            ' hx-post="/_composeui/widget/{widget_id}"'
+            ' hx-trigger="input changed delay:300ms, change"'
+            ' data-post-event hx-swap="none" hx-sync="this:queue all"'
+            ' autocomplete="off"'
+            # the parser drops a new line just after the tag: this one, not the text's
+            "{disabled}>\n{text}</textarea></div></div>"
+        ).format(
+            root_attributes=self._root_attributes(oob=oob),
+            widget_id=self.widget_id,
+            file_icon=_icon("file", "size-4 shrink-0 opacity-60"),
+            filename=view.export_filename,
+            position=view.texts.get("position", ""),
+            # a field swapped in has its caret at the start, until the page's script says
+            first_position=view.texts.get("position", "").format(line=1, column=1),
+            copy=view.texts.get("copy", ""),
+            copied=view.texts.get("copied") or view.tr("Copied"),
+            copy_icon=_icon("copy", "size-3.5"),
+            save=view.texts.get("save", ""),
+            save_icon=_icon("save", "size-3.5"),
+            numbers="\n".join(str(number) for number in range(1, line_count + 1)),
+            placeholder=view.placeholder,
+            disabled=disabled,
+            text=view.text,
+        )
+
+
 class _NumberFieldViewLike(TextFieldViewLike, Protocol):
     value: Any
 

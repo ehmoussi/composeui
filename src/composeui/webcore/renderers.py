@@ -71,6 +71,7 @@ from composeui.webcore._renderers.inputs import (
     WebInputRenderer,
     WebIntInputRenderer,
     WebTextAreaRenderer,
+    WebTextEditorRenderer,
 )
 from composeui.webcore._renderers.navigation import (
     WebMainRenderer,
@@ -139,6 +140,7 @@ RENDERERS: Final[dict[str, Callable[[Any], Renderer[Any, Any]]]] = {
     "status_bar": WebStatusBarRenderer,
     "table": WebTableRenderer,
     "text_area": WebTextAreaRenderer,
+    "text_editor": WebTextEditorRenderer,
     "tab_page": WebTabPageRenderer,
     "tabs": WebTabsRenderer,
     "toolbar": WebToolBarRenderer,

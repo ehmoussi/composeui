@@ -66,6 +66,7 @@ not in the package: run them from a clone of the repository (see
   - [Buttons](user-guide/widgets.md#buttons)
   - [Help on a form row](user-guide/widgets.md#help-on-a-form-row)
   - [Text area](user-guide/widgets.md#text-area)
+  - [Text editor](user-guide/widgets.md#text-editor)
   - [Integer input](user-guide/widgets.md#integer-input)
   - [Text read by the app](user-guide/widgets.md#text-read-by-the-app)
   - [Date input](user-guide/widgets.md#date-input)

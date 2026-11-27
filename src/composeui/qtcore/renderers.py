@@ -71,6 +71,7 @@ from composeui.qtcore._renderers.inputs import (
     QtInputRenderer,
     QtIntInputRenderer,
     QtTextAreaRenderer,
+    QtTextEditorRenderer,
 )
 from composeui.qtcore._renderers.navigation import (
     QtMainRenderer,
@@ -142,6 +143,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "status_bar": QtStatusBarRenderer,
     "table": QtTableRenderer,
     "text_area": QtTextAreaRenderer,
+    "text_editor": QtTextEditorRenderer,
     "tab_page": QtTabPageRenderer,
     "tabs": QtTabsRenderer,
     "toolbar": QtToolBarRenderer,

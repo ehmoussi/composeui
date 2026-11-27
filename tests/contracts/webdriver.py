@@ -87,10 +87,14 @@ class WebDriver:
     def _text_boxes(self, view: View) -> list[tuple[str, dict[str, Optional[str]], str]]:
         """Find the boxes that the user types in, in order: each one's tag, attributes, text.
 
-        The field, or its own: a date's, a file path's, a date range's two.
+        The field, or its own: a date's, a file path's, a date range's two, a text editor's
+        text area.
         """
         assert self._client is not None
-        field = _element(self._client.get("/").text, _widget_id(view.renderer))
+        page = self._client.get("/").text
+        field = _element(page, _widget_id(view.renderer))
+        if any(tag == "textarea" for tag, _ in field.descendants):
+            field = _element(page, f"{_widget_id(view.renderer)}-text")
         if field.tag == "textarea":  # the field itself, its text the area's
             return [(field.tag, field.attributes, field.text)]
         boxes = [

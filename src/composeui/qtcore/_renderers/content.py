@@ -222,21 +222,11 @@ class QtConsoleRenderer(QtWidgetRenderer[ConsoleViewLike, QConsoleBox]):
     def _refresh_texts(
         _view: ConsoleViewLike, rendered_object: QConsoleBox, value: dict[str, str]
     ) -> None:
-        rendered_object.save.setText(f"{value.get('save', '')}…")
-        rendered_object.copy.setText(value.get("copy", ""))
-        rendered_object.search.setPlaceholderText(value.get("search", ""))
+        rendered_object.set_texts(value)
 
     def _show_matches(self, current: int, count: int) -> None:
-        """Show the search's count of matches: none without a search."""
         assert self._rendered_object is not None
-        texts = self._view.texts
-        if self._rendered_object.search.text() == "":
-            text = ""
-        elif count == 0:
-            text = texts.get("no_match", "")
-        else:
-            text = texts.get("matches", "").format(current=current, count=count)
-        self._rendered_object.matches.setText(text)
+        self._rendered_object.show_matches(current, count, self._view.texts)
 
     def _copy(self) -> None:
         QApplication.clipboard().setText(self._view.text)

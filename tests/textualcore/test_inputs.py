@@ -16,6 +16,7 @@ from textual.widgets import (
     Input,
     TextArea,
 )
+from textual_fspicker import FileSave
 
 from composeui.core.registry import RendererType
 from composeui.core.view import (
@@ -32,18 +33,22 @@ from composeui.textualcore.widgets.composedateinput import (
 )
 from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composerange import ComposeDateRangeInput
+from composeui.textualcore.widgets.composetexteditor import ComposeTextEditorBox
 from examples.pipeform import PipeMainView
 from examples.textual_demo import TextualDemoMainView
 from tests.bookings import BookingMainView
+from tests.deck import EXPORT, DeckMainView
 from tests.hours import HoursMainView
 from tests.memory import MemoryMainView
 from tests.ranges import FIRST_DAY, RangesMainView
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from textual.app import App
 
 
-from tests.textualcore.support import _field_widget
+from tests.textualcore.support import _app_of, _field_widget, _names, _widget
 
 
 @pytest.mark.asyncio
@@ -85,6 +90,144 @@ async def test_a_text_area_takes_several_lines_and_finishes_editing_when_left_af
         assert area.text == "Set by the app"  # kept through the focus and its loss
         assert edited[-1] == "North\nside"  # the app's text is no edit
         assert finished == [None]  # left without a change
+
+
+def _editor_box(view: DeckMainView) -> ComposeTextEditorBox:
+    box = _widget(view.deck)
+    assert isinstance(box, ComposeTextEditorBox)
+    return box
+
+
+@pytest.mark.asyncio
+async def test_a_text_editor_numbers_its_lines_keeps_them_whole_and_indents_with_tab() -> None:
+    view = DeckMainView()
+    app = _app_of(view)
+    editor = _editor_box(view).editor
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        assert editor.render_line(1).text.lstrip().startswith("2 ")  # its line's number
+        view.deck.text = f"P line {'x' * 200}\nP ncpus 2"
+        await pilot.pause()
+        assert editor.max_scroll_x > 0  # the long line scrolls rather than wraps
+
+        app.screen.set_focus(editor)
+        await pilot.pause()
+        await pilot.press("tab")
+        await pilot.pause()
+        assert view.deck.text.startswith("    P line ")
+        assert app.focused is editor  # Tab types, it doesn't leave
+
+
+@pytest.mark.asyncio
+async def test_a_text_editor_s_search_follows_the_user_s_edits_and_the_app_s_text() -> None:
+    view = DeckMainView()
+    app = _app_of(view)
+    box = _editor_box(view)
+    editor = box.editor
+
+    def matches() -> str:
+        return str(box.matches.render())
+
+    def background(y: int, x: int) -> str | None:
+        """Get the background of a cell of the text, as drawn, its line's number left out."""
+        line = editor.render_line(y)
+        x += editor.gutter_width
+        for segment in line:
+            if x < len(segment.text):
+                style = segment.style
+                return None if style is None or style.bgcolor is None else style.bgcolor.name
+            x -= len(segment.text)
+        return None
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        app.screen.set_focus(editor)
+        await pilot.pause()
+        await pilot.press("ctrl+f")
+        await pilot.pause()
+        assert app.focused is box.search
+        await pilot.press(*"comm")
+        await pilot.pause()
+        # the current match, F comm, then the other one, study.comm
+        assert (matches(), background(1, 2), background(1, 13)) == ("1 of 2", "#f59e0b", "#fde68a")
+        await pilot.press("enter")
+        await pilot.pause()
+        assert (matches(), background(1, 13)) == ("2 of 2", "#f59e0b")
+
+        app.screen.set_focus(editor)
+        await pilot.pause()
+        keys = ["space" if key == " " else key for key in "F comm run.comm D 2"]
+        editor.move_cursor(editor.document.end)
+        await pilot.press("enter", *keys)
+        await pilot.pause()
+        assert view.deck.text.endswith("P ncpus 2\nF comm run.comm D 2")
+        await pilot.pause()
+        assert matches() == "2 of 4"
+
+        view.deck.text = "P version stable"
+        await pilot.pause()
+        assert matches() == "No match"
+        box.search.focus()
+        await pilot.pause()
+        await pilot.press("enter")  # no match to go to
+        await pilot.pause()
+        assert matches() == "No match"
+        await pilot.press("escape")
+        await pilot.pause()
+        assert (box.search.value, matches(), app.focused) == ("", "", editor)
+
+
+@pytest.mark.asyncio
+async def test_a_text_editor_s_bar_names_its_file_and_says_where_the_caret_is() -> None:
+    view = DeckMainView()
+    app = _app_of(view)
+    box = _editor_box(view)
+
+    def bar() -> tuple[str, str]:
+        return str(box.file_name.render()), str(box.position.render())
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        assert bar() == ("study.export", "Line 1, column 1")
+        app.screen.set_focus(box.editor)
+        await pilot.pause()
+        await pilot.press("down", "end")
+        await pilot.pause()
+        assert bar()[1] == f"Line 2, column {len('F comm study.comm D 1') + 1}"
+
+        view.deck.export_filename = "run.export"
+        view.deck.texts = {**view.deck.texts, "position": "Ligne {line}, colonne {column}"}
+        await pilot.pause()
+        assert bar() == ("run.export", "Ligne 2, colonne 22")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("is_cancelled", [False, True])
+async def test_a_text_editor_s_buttons_copy_its_text_and_save_it_where_the_user_picks(
+    tmp_path: Path, *, is_cancelled: bool
+) -> None:
+    view = DeckMainView()
+    app = _app_of(view)
+    box = _editor_box(view)
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        assert (str(box.copy.label), str(box.save.label)) == ("Copy all", "Save as…")
+        await pilot.click(box.copy)
+        await pilot.pause()
+        assert app.clipboard == EXPORT
+
+        await pilot.click(box.save)
+        await pilot.pause()
+        assert isinstance(app.screen, FileSave)
+        # as the dialog's Save button does, or Cancel
+        app.screen.dismiss(None if is_cancelled else tmp_path / "run.export")
+        await pilot.pause()
+
+    if is_cancelled:
+        assert _names(tmp_path) == []
+    else:
+        assert (tmp_path / "run.export").read_text(encoding="utf-8") == EXPORT
 
 
 @pytest.mark.asyncio

@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from qtpy.QtGui import QDoubleValidator
-from qtpy.QtWidgets import QAbstractSpinBox, QLineEdit, QSpinBox
+from qtpy.QtWidgets import QAbstractSpinBox, QApplication, QFileDialog, QLineEdit, QSpinBox
 from typing_extensions import Protocol, override
 
 from composeui.core._views.inputs import date_hint
@@ -15,6 +16,7 @@ from composeui.qtcore.qtrenderer import QtWidgetRenderer
 from composeui.qtcore.widgets.qdatefield import QDateField, QDateRangeField
 from composeui.qtcore.widgets.qplaintext import plain_tool_tip
 from composeui.qtcore.widgets.qtextarea import QTextArea
+from composeui.qtcore.widgets.qtexteditor import QTextEditorBox
 
 if TYPE_CHECKING:
     import datetime
@@ -114,6 +116,93 @@ class QtTextAreaRenderer(QtWidgetRenderer[InputViewLike, QTextArea]):
     def _update_text(self, text: str) -> None:
         with self.stop_refresh():
             self._view.text = text
+
+
+class TextEditorViewLike(InputViewLike, Protocol):
+    texts: dict[str, str]
+    export_filename: str
+
+    def export_text(self, path: Path) -> None: ...
+
+
+class QtTextEditorRenderer(QtWidgetRenderer[TextEditorViewLike, QTextEditorBox]):
+    """The text in a `QTextEditorBox`: a `QTextEditor` under a search, Copy and Save.
+
+    Its Save button asks where to save the text, in Qt's file dialog.
+    """
+
+    def __init__(self, view: TextEditorViewLike) -> None:
+        super().__init__(view)
+        self._refresh_dispatcher.update(
+            {
+                "text": self._refresh_text,
+                "placeholder": self._refresh_placeholder,
+                "texts": self._refresh_texts,
+                "export_filename": self._refresh_export_filename,
+            }
+        )
+
+    @override
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = QTextEditorBox()
+            editor = self._rendered_object.text
+            self._connect(
+                editor.text_changed,
+                self._update_text,
+                self._view.text_changed.call_callbacks,
+                self._view.text_edited.call_callbacks,
+            )
+            self._relay(self._view.editing_finished, editor.editing_finished)
+            self._connect(self._rendered_object.save.clicked, self._save)
+            self._connect(self._rendered_object.copy.clicked, self._copy)
+            self._connect(editor.matches_changed, self._show_matches)
+            self.refresh()
+
+    @staticmethod
+    def _refresh_text(
+        _view: TextEditorViewLike, rendered_object: QTextEditorBox, value: str
+    ) -> None:
+        rendered_object.text.set_text(value)
+
+    @staticmethod
+    def _refresh_placeholder(
+        _view: TextEditorViewLike, rendered_object: QTextEditorBox, value: str
+    ) -> None:
+        rendered_object.text.setPlaceholderText(value)
+
+    @staticmethod
+    def _refresh_texts(
+        _view: TextEditorViewLike, rendered_object: QTextEditorBox, value: dict[str, str]
+    ) -> None:
+        rendered_object.set_texts(value)
+        rendered_object.show_position(value.get("position", ""))
+
+    @staticmethod
+    def _refresh_export_filename(
+        _view: TextEditorViewLike, rendered_object: QTextEditorBox, value: str
+    ) -> None:
+        rendered_object.name.setText(value)  # the dialog reads it as it opens
+
+    def _update_text(self, text: str) -> None:
+        with self.stop_refresh():
+            self._view.text = text
+
+    def _show_matches(self, current: int, count: int) -> None:
+        assert self._rendered_object is not None
+        self._rendered_object.show_matches(current, count, self._view.texts)
+
+    def _copy(self) -> None:
+        QApplication.clipboard().setText(self._view.text)
+
+    def _save(self) -> None:
+        """Ask where to save the text, and save it there."""
+        assert self._rendered_object is not None
+        path, _chosen = QFileDialog.getSaveFileName(
+            self._rendered_object, self._view.texts.get("save", ""), self._view.export_filename
+        )
+        if path != "":
+            self._view.export_text(Path(path))
 
 
 class FloatInputViewLike(_InputViewLike, Protocol):

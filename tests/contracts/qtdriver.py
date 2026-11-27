@@ -9,7 +9,9 @@ from qtpy.QtCore import QCoreApplication, QLocale, Qt
 from qtpy.QtWidgets import QAbstractButton, QLineEdit, QPlainTextEdit, QWidget
 
 from composeui.core.registry import RendererType
+from composeui.qtcore.widgets.qconsole import QSearchField
 from composeui.qtcore.widgets.qrangeslider import QRangeSlider
+from composeui.qtcore.widgets.qtexteditor import QTextEditor
 from composeui.qtcore.widgets.qvalueslider import QValueSlider
 from tests.qtcore.support import _widget
 
@@ -60,7 +62,9 @@ class QtDriver:
 
     async def leave(self, view: View) -> None:
         box = next(box for box in _text_boxes(view) if box.hasFocus())
-        self._qtbot.keyClick(box, Qt.Key.Key_Tab)  # a text area's too: it goes to the next field
+        # a text area's Tab too goes to the next field; a text editor's indents, Escape leaves
+        key = Qt.Key.Key_Escape if isinstance(box, QTextEditor) else Qt.Key.Key_Tab
+        self._qtbot.keyClick(box, key)
         assert not box.hasFocus()
 
     def shown_text(self, view: View, *, part: int = 0) -> str:
@@ -97,7 +101,7 @@ class QtDriver:
 def _text_boxes(view: View) -> list[QLineEdit | QPlainTextEdit]:
     """Find the boxes that the user types in, in order.
 
-    The field, or its own: a spin box's, a date's, a date range's two.
+    The field, or its own: a spin box's, a date's, a date range's two; not a search's.
     """
     boxes = _boxes_in(_widget(view))
     assert boxes
@@ -105,6 +109,8 @@ def _text_boxes(view: View) -> list[QLineEdit | QPlainTextEdit]:
 
 
 def _boxes_in(widget: QWidget) -> list[QLineEdit | QPlainTextEdit]:
+    if isinstance(widget, QSearchField):
+        return []
     if isinstance(widget, (QLineEdit, QPlainTextEdit)):
         return [widget]
     children = widget.findChildren(QWidget, options=Qt.FindChildOption.FindDirectChildrenOnly)

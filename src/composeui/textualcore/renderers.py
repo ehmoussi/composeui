@@ -74,6 +74,7 @@ from composeui.textualcore._renderers.inputs import (
     TextualInputRenderer,
     TextualIntInputRenderer,
     TextualTextAreaRenderer,
+    TextualTextEditorRenderer,
 )
 from composeui.textualcore._renderers.navigation import (
     TextualMainRenderer,
@@ -144,6 +145,7 @@ RENDERERS: dict[str, Callable[[Any], Renderer[Any, Any]]] = {
     "status_bar": TextualStatusBarRenderer,
     "table": TextualTableRenderer,
     "text_area": TextualTextAreaRenderer,
+    "text_editor": TextualTextEditorRenderer,
     "tab_page": TextualTabPageRenderer,
     "tabs": TextualTabsRenderer,
     "toolbar": TextualToolBarRenderer,

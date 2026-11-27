@@ -7,7 +7,10 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 from qtpy.QtCore import QDate, Qt
+from qtpy.QtGui import QColor
 from qtpy.QtWidgets import (
+    QApplication,
+    QFileDialog,
     QLineEdit,
     QPlainTextEdit,
     QSpinBox,
@@ -22,16 +25,20 @@ from composeui.core.view import (
     TextAreaView,
 )
 from composeui.qtcore.widgets.qdatefield import QDateField, QDateRangeField
+from composeui.qtcore.widgets.qtexteditor import QTextEditorBox
 from examples.pipeform import PipeMainView
 from tests.bookings import BookingMainView
+from tests.deck import EXPORT, DeckMainView
 from tests.hours import HoursMainView
 from tests.memory import MemoryMainView
 from tests.ranges import FIRST_DAY, RangesMainView
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from pathlib import Path
 
     from pytestqt.qtbot import QtBot
+    from qtpy.QtWidgets import QWidget
 
 
 from tests.qtcore.support import _field_widget, _widget
@@ -146,6 +153,120 @@ def test_a_text_area_takes_several_lines_and_finishes_editing_when_left_after_a_
 
     assert area.toPlainText() == "Set by the app"  # kept through the focus and its loss
     assert finished == [None]  # left without a change
+
+
+def _shown_editor(qtbot: QtBot, view: DeckMainView) -> QTextEditorBox:
+    """Show the main view's window, active for the editor to take the focus."""
+    view.render(RendererType.QT)
+    window = _widget(view)
+    qtbot.addWidget(window)
+    window.show()
+    with qtbot.waitActive(window):
+        window.activateWindow()
+    box = _widget(view.deck)
+    assert isinstance(box, QTextEditorBox)
+    return box
+
+
+def test_a_text_editor_numbers_its_lines_keeps_them_whole_and_indents_with_tab(
+    qtbot: QtBot,
+) -> None:
+    view = DeckMainView()
+    box = _shown_editor(qtbot, view)
+    editor = box.text
+    area = editor.contentsRect()
+    numbers = editor.viewport().geometry().left() - area.left()
+    image = editor.grab().toImage()
+    first_line = range(area.top(), area.top() + editor.fontMetrics().height())
+    margin = range(area.left(), area.left() + numbers)
+    shades = {QColor(image.pixel(x, y)).lightness() for x in margin for y in first_line}
+    assert len(shades) > 1  # the first line's number is drawn on the margin
+
+    view.deck.text = "\n".join(f"P line{index} {'x' * 300}" for index in range(120))
+    # wider for three digits; the long lines scroll rather than wrap
+    assert editor.viewport().geometry().left() - editor.contentsRect().left() > numbers
+    assert editor.blockCount() == 120
+    qtbot.waitUntil(lambda: editor.horizontalScrollBar().maximum() > 0)
+
+    finished: list[None] = []
+    view.deck.editing_finished.connect(lambda: finished.append(None))
+    editor.setFocus()
+    qtbot.waitUntil(editor.hasFocus)
+    qtbot.keyClick(editor, Qt.Key.Key_Escape)
+    assert (editor.hasFocus(), finished) == (False, [])  # left without a change
+
+    editor.setFocus()
+    qtbot.waitUntil(editor.hasFocus)
+    editor.moveCursor(editor.textCursor().MoveOperation.Start)
+    qtbot.keyClick(editor, Qt.Key.Key_Tab)
+    assert view.deck.text.startswith("    P line0 ")
+    assert editor.hasFocus()  # Tab types, it doesn't leave
+
+
+def test_a_text_editor_s_search_follows_the_user_s_edits_and_the_app_s_text(
+    qtbot: QtBot,
+) -> None:
+    view = DeckMainView()
+    box = _shown_editor(qtbot, view)
+    editor = box.text
+    assert box.search.placeholderText() == "Search"
+
+    qtbot.keyClicks(box.search, "comm")
+    assert (box.matches.text(), len(editor.extraSelections())) == ("1 of 2", 2)
+
+    editor.setFocus()
+    qtbot.waitUntil(editor.hasFocus)
+    editor.moveCursor(editor.textCursor().MoveOperation.End)
+    qtbot.keyClick(editor, Qt.Key.Key_Return)
+    qtbot.keyClicks(editor, "F comm run.comm D 2")
+    assert (box.matches.text(), len(editor.extraSelections())) == ("1 of 4", 4)
+
+    view.deck.text = "P version stable"
+    assert (box.matches.text(), editor.extraSelections()) == ("No match", [])
+
+
+def test_a_text_editor_s_bar_names_its_file_and_says_where_the_caret_is(qtbot: QtBot) -> None:
+    view = DeckMainView()
+    box = _shown_editor(qtbot, view)
+    editor = box.text
+    qtbot.waitUntil(editor.hasFocus)  # the window opens with the focus in the text
+    assert (box.name.text(), box.position.text()) == ("study.export", "Line 1, column 1")
+
+    editor.setFocus()
+    qtbot.waitUntil(editor.hasFocus)
+    qtbot.keyClick(editor, Qt.Key.Key_Down)
+    qtbot.keyClick(editor, Qt.Key.Key_End)
+    assert box.position.text() == f"Line 2, column {len('F comm study.comm D 1') + 1}"
+
+    view.deck.export_filename = "run.export"
+    view.deck.texts = {**view.deck.texts, "position": "Ligne {line}, colonne {column}"}
+    assert (box.name.text(), box.position.text()) == ("run.export", "Ligne 2, colonne 22")
+
+
+@pytest.mark.parametrize("picked", ["run.export", ""])
+def test_a_text_editor_s_buttons_copy_its_text_and_save_it_where_the_user_picks(
+    qtbot: QtBot, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, picked: str
+) -> None:
+    view = DeckMainView()
+    box = _shown_editor(qtbot, view)
+    asked: list[tuple[str, str]] = []
+
+    def get_save_file_name(_parent: QWidget, caption: str, name: str) -> tuple[str, str]:
+        asked.append((caption, name))
+        return (str(tmp_path / picked) if picked else ""), ""
+
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", get_save_file_name)
+    assert (box.copy.text(), box.save.text()) == ("Copy all", "Save as…")
+
+    qtbot.mouseClick(box.copy, Qt.MouseButton.LeftButton)
+    assert QApplication.clipboard().text() == EXPORT
+    qtbot.mouseClick(box.save, Qt.MouseButton.LeftButton)
+
+    assert asked == [("Save as", "study.export")]
+    if picked:
+        assert (tmp_path / picked).read_text(encoding="utf-8") == EXPORT
+    else:  # cancelled
+        assert list(tmp_path.iterdir()) == []
 
 
 def test_float_input_renderer_round_trips_typed_value_and_rejects_bad_input(qtbot: QtBot) -> None:
