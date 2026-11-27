@@ -14,6 +14,7 @@ import types
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import attrs
 import pytest
 from typing_extensions import override
 
@@ -35,10 +36,14 @@ from composeui.core.reload import (
 )
 from composeui.core.study import open_study
 from composeui.core.view import (
+    CheckListView,
     CircleShape,
+    ConsoleView,
     DrawingView,
+    FileUploadView,
     MainView,
     TabView,
+    UploadedFile,
     child,
     define_view,
 )
@@ -1359,3 +1364,48 @@ def test_the_changes_end_with_the_watcher_s(
     monkeypatch.setattr("composeui.core.reload.has_change_events", lambda _directory: True)
 
     assert list(watch_changes(tmp_path)) == [{app.resolve()}]
+
+
+@define_view
+class _OutputMainView(MainView):
+    console: ConsoleView = attrs.field(factory=lambda: ConsoleView(ansi_colors=True))
+    upload: FileUploadView = attrs.field(factory=lambda: FileUploadView(multiple=True))
+    cases: CheckListView[str] = attrs.field(
+        factory=lambda: CheckListView[str](values={"Wall": "wall", "Beam": "beam"}, has_search=True)
+    )
+
+
+@define_view
+class _ShorterOutputMainView(_OutputMainView):
+    """`_OutputMainView` after the code made its console keep fewer lines."""
+
+    console: ConsoleView = attrs.field(factory=lambda: ConsoleView(ansi_colors=True, max_lines=1))
+
+
+def test_a_reload_shows_the_console_s_output_the_files_chosen_and_the_search_typed(
+    tmp_path: Path,
+) -> None:
+    """Where the user was, not study data: the output goes on in the style it was in."""
+    first, second = tmp_path / "mesh.med", tmp_path / "loads.csv"
+    first.write_text("mesh")
+    second.write_text("loads")
+    previous = _OutputMainView()
+    # the escape code cut at the end, as a process writes it
+    previous.console.append("step 1\n\x1b[31mstep 2 failed\nretrying\x1b[1")
+    previous.upload.take_files((UploadedFile.of_path(first), UploadedFile.of_path(second)))
+    previous.cases.search = "be"
+    save_reloaded_state(previous, None, tmp_path)
+    reloaded = _OutputMainView()
+    shorter = _ShorterOutputMainView()
+
+    load_reloaded_state(reloaded, None, tmp_path)
+    load_reloaded_state(shorter, None, tmp_path)
+    for console in (previous.console, reloaded.console):
+        console.append("mWAIT\n")
+
+    assert reloaded.console.lines == previous.console.lines
+    assert reloaded.console.line_styles == previous.console.line_styles
+    assert reloaded.console.line_count == previous.console.line_count == 3
+    assert reloaded.upload.files == previous.upload.files
+    assert reloaded.cases.search == "be"
+    assert shorter.console.text == "step 2 failed\nretrying"

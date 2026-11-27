@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, Callable, NamedTuple
 from composeui.core._files import partial_path, scratch_directory
 from composeui.core._views.dialogs import dialogs_in
 from composeui.core._views.files import _publish
+from composeui.core._views.main import session_views
 from composeui.core.model import InvalidStateError
 from composeui.core.reactivity import batch, stop_reactions
 from composeui.core.registry import RendererType
@@ -247,6 +248,31 @@ def _holds_upload(view: object) -> bool:
     return isinstance(view, FileUploadMixin) and view.file is not None
 
 
+def _upload_of(paths: Sequence[Path], uploads: Path | None, widget_id: str) -> Path | None:
+    """Get the directory of an upload's files at `paths`, only if it's one of `uploads`' own.
+
+    Ours: ``uploads / widget id / directory``, as `_upload_directory` makes it for a field
+    of `widget_id`'s kind (its id's last part), holding the files.
+    """
+    directory = paths[0].parent
+    field = directory.parent
+    is_ours = (
+        uploads is not None
+        and field.parent == uploads
+        and ".." not in directory.parts
+        and field.name.rsplit("-", 1)[-1] == widget_id.rsplit("-", 1)[-1]
+        and not field.is_symlink()
+        and not directory.is_symlink()
+        and directory.is_dir()
+    )
+    if not is_ours:
+        return None
+    for path in paths:
+        if path.parent != directory or path.is_symlink() or not path.is_file():
+            return None
+    return directory
+
+
 class WebSession(RenderTarget):
     """A session's view tree, rendered once and then driven by its browser's requests."""
 
@@ -343,14 +369,16 @@ class WebSession(RenderTarget):
 
         Not while it's at work: a job, a file the page hasn't fetched, a long request. Nor
         while it shows what its views' state and its model's data don't hold: a dialog's
-        question, an uploaded file, a large table's source given since `loaded`, a console's
-        text. Nor when the app says so (`MainView.can_hibernate`).
+        question, a large table's source given since `loaded`, a console's text or an
+        uploaded file in a view that the session doesn't keep (`session_views`), such as a
+        `ListView`'s. Nor when the app says so (`MainView.can_hibernate`).
         """
         with self.lock:
             main_view = self.main_view
             jobs = main_view.jobs
             with self._held_lock:
                 held = self._held > 0
+            kept = {id(view) for _prefix, view in session_views(main_view)}
             return not (
                 held
                 or self.has_ended
@@ -361,7 +389,8 @@ class WebSession(RenderTarget):
                 or any(dialog.is_visible for dialog in dialogs_in(main_view))
                 or any(view.source is not source for view, source in self._loaded_sources)
                 or any(
-                    _holds_upload(view) or (isinstance(view, ConsoleView) and view.text != "")
+                    id(view) not in kept
+                    and (_holds_upload(view) or (isinstance(view, ConsoleView) and view.text != ""))
                     for view in _views(main_view)
                 )
                 or not main_view.can_hibernate()
@@ -460,7 +489,36 @@ class WebSession(RenderTarget):
         with self.lock, collect_dirty():  # the whole page is sent next: drop the fragments
             load_reloaded_state(self.main_view, self.model, directory)
             self._uploads = _saved_uploads(directory / _UPLOADS_NAME, self._uploads_folder)
+            self._hold_saved_uploads()
             self._note_loaded_sources()
+
+    def _hold_saved_uploads(self) -> None:
+        """Make each field's saved upload its upload again, if it's ours; else it holds none.
+
+        Its folder is named after the widget's id of the previous session, which the views
+        built again don't have: the field's next upload still replaces it. A folder that two
+        fields name, such as a path the user copied from one to the other, is held by none:
+        the next upload of either would remove the other's file.
+        """
+        claims: dict[Path, list[str]] = {}
+        for widget_id, renderer in list(self.renderers.items()):
+            if isinstance(renderer, WebFilePathInputRenderer) and renderer.path is not None:
+                # None for a path the user typed, or picked on the server
+                directory = _upload_of((renderer.path,), self._uploads, widget_id)
+                if directory is not None:
+                    claims.setdefault(directory, []).append(widget_id)
+            elif isinstance(renderer, WebFileUploadRenderer) and any(
+                file.is_temporary for file in renderer.files
+            ):  # not the app's own files
+                paths = [file.path for file in renderer.files]
+                directory = _upload_of(paths, self._uploads, widget_id)
+                if directory is None:
+                    renderer.drop_files()
+                else:
+                    claims.setdefault(directory, []).append(widget_id)
+        for directory, widget_ids in claims.items():
+            if len(widget_ids) == 1:
+                self._held_uploads[widget_ids[0]] = directory
 
     def handle_event(
         self, widget_id: str, event: str, form: Mapping[str, str]

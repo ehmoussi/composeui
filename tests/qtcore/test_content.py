@@ -27,6 +27,7 @@ from qtpy.QtWidgets import (
 )
 
 from composeui.core.registry import RendererType
+from composeui.core.reload import load_reloaded_state, save_reloaded_state
 from composeui.core.view import (
     ImageView,
     LabelView,
@@ -171,6 +172,22 @@ def test_a_console_adds_its_lines_scrolled_to_its_end_unless_the_user_scrolled_u
 
     view.output.text = "New run"
     assert console.toPlainText() == "New run"
+
+
+def test_a_reloaded_window_shows_its_console_s_output_again(qtbot: QtBot, tmp_path: Path) -> None:
+    """The window is drawn before the session's output is loaded: the console draws it then."""
+    previous = RunMainView()
+    previous.run.clicked.emit()
+    save_reloaded_state(previous, None, tmp_path)
+    view = RunMainView()
+    view.render(RendererType.QT)
+    qtbot.addWidget(_widget(view))
+    box = _widget(view.output)
+    assert isinstance(box, QConsoleBox)
+
+    load_reloaded_state(view, None, tmp_path)
+
+    assert box.text.toPlainText() == previous.output.text != "Ready <ok>\n"
 
 
 def test_a_console_s_search_highlights_its_matches_and_keeps_the_current_one(

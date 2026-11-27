@@ -266,27 +266,49 @@ def _show_checked(view: View) -> None:
         views.extend(current.children_views)
 
 
-def _session_fields(view: View) -> Iterator[tuple[str, View, attrs.Attribute[Any]]]:
-    """Get the `SESSION` fields of `view` and of the views under it, each with its path."""
+#: the key of a view's `_session_content` after its path: no field has this name
+_CONTENT_KEY = "<content>"
+
+
+def session_views(view: View) -> Iterator[tuple[str, View]]:
+    """Get `view` and the views in its fields, below it too, each with its path as a prefix.
+
+    Not the views of a list, such as a `ListView`'s: a session doesn't keep them.
+    """
     views: deque[tuple[str, View]] = deque([("", view)])
     while len(views) > 0:
         prefix, current = views.popleft()
+        yield prefix, current
         attrs.resolve_types(cast("type[AttrsInstance]", type(current)))
         for f in view_fields(type(current)):
-            if f.metadata.get(SESSION, False):
-                yield f"{prefix}{f.name}", current, f
-            else:
+            if not f.metadata.get(SESSION, False):
                 value = getattr(current, f.name)
                 if isinstance(value, View):
                     views.append((f"{prefix}{f.name}.", value))
 
 
+def _session_fields(view: View) -> Iterator[tuple[str, View, attrs.Attribute[Any]]]:
+    """Get the `SESSION` fields of `view` and of the views under it, each with its path."""
+    for prefix, current in session_views(view):
+        for f in view_fields(type(current)):
+            if f.metadata.get(SESSION, False):
+                yield f"{prefix}{f.name}", current, f
+
+
 def session_data(view: View) -> dict[str, Any]:
-    """Get the `SESSION` fields of `view` and of the views under it, by their path."""
-    return {
+    """Get the `SESSION` fields of `view` and of the views under it, by their path.
+
+    And what each view shows that no field holds (`View._session_content`).
+    """
+    data = {
         path: CONVERTER.unstructure(getattr(current, f.name))
         for path, current, f in _session_fields(view)
     }
+    for prefix, current in session_views(view):
+        content = current._session_content()  # noqa: SLF001 (View's hook for this)
+        if content is not None:
+            data[f"{prefix}{_CONTENT_KEY}"] = content
+    return data
 
 
 @batch()
@@ -302,6 +324,11 @@ def load_session_data(view: View, data: Mapping[str, Any]) -> None:
             field_type = cast("type[Any]", f.type)
             with contextlib.suppress(*_BAD_STATE_ERRORS):
                 setattr(current, f.name, CONVERTER.structure(data[path], field_type))
+    for prefix, current in session_views(view):
+        key = f"{prefix}{_CONTENT_KEY}"
+        if key in data:
+            with contextlib.suppress(*_BAD_STATE_ERRORS):
+                current._load_session_content(data[key])  # noqa: SLF001 (View's hook for this)
 
 
 @batch()

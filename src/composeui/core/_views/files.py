@@ -20,7 +20,15 @@ import attrs
 from typing_extensions import override
 
 from composeui.core._files import partial_path as _partial_path
-from composeui.core._views.base import OMIT, UI_TEXT, LogType, View, define_view, emit_if_made
+from composeui.core._views.base import (
+    OMIT,
+    SESSION,
+    UI_TEXT,
+    LogType,
+    View,
+    define_view,
+    emit_if_made,
+)
 from composeui.core._views.inputs import InputMixin
 from composeui.core.signal import Signal, SignalNoArgs
 from composeui.core.translation import (
@@ -291,7 +299,8 @@ class FileUploadMixin:
     one beside it.
     The web's copy of the files stays until the view's next upload or `clear`, and then
     until the main view's jobs are over, so a job can still read them. The end of the
-    session removes them in any case. The files are not part of a study.
+    session removes them in any case. The files are not part of a study, but the session
+    keeps them (`SESSION`).
     """
 
     #: the file types the picker offers, by name: ``{"CSV": (".csv",)}``; on the web, a
@@ -312,7 +321,7 @@ class FileUploadMixin:
     #: the files the user gave last, in the order given; empty before the first, and after
     #: `clear`
     files: tuple[UploadedFile, ...] = attrs.field(
-        factory=tuple[UploadedFile, ...], init=False, metadata={OMIT: True}
+        factory=tuple[UploadedFile, ...], init=False, metadata={OMIT: True, SESSION: True}
     )
     #: the user gave a file, now in `file`; not emitted with `multiple`
     uploaded: Signal[UploadedFile] = attrs.Factory(Signal[UploadedFile])

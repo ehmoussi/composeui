@@ -147,6 +147,12 @@ backends' modules included, can change in any release without an entry here.
 
 ### Changed
 
+- A session keeps the text of a console, with its colors, and the files of an upload view. So
+  an idle web session that shows them now goes to disk (`session_idle`), and survives a restart
+  (`session_folder`). A `--reload` keeps them on every backend, and the search typed in a check
+  list or a multi-combobox too. A console or an upload view in a `ListView` still keeps its
+  session in memory.
+
 - A type check, such as mypy or Pyright, refuses `run(..., setup_model=...)` without
   `build_model`, which fails when the app runs, and a `setup_model` whose model is not the one
   that `build_model` builds.

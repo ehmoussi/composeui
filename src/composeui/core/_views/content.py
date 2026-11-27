@@ -19,8 +19,10 @@ from typing import (
 )
 
 import attrs
+from typing_extensions import override
 
 from composeui.core._views.base import (
+    CONVERTER,
     OMIT,
     UI_TEXT,
     LogType,
@@ -471,6 +473,20 @@ def follow_match(
     return len(matches) - 1
 
 
+@attrs.frozen
+class _ConsoleContent:
+    """What a `ConsoleView` shows, as a session keeps it (`View._session_content`)."""
+
+    lines: list[str]
+    line_styles: list[tuple[tuple[int, int, TextStyle], ...]]
+    last_line: str
+    last_line_styles: list[tuple[int, int, TextStyle]]
+    is_returned: bool
+    line_count: int
+    style: TextStyle
+    escape: str
+
+
 @define_view
 class ConsoleView(View):
     r"""Plain text that the app adds to as it comes, for example the output of a process.
@@ -480,7 +496,8 @@ class ConsoleView(View):
     Set `text` to replace the text, or call `clear`. The view shows the text as it is,
     never as markup, and scrolls to its end as text comes, unless the user scrolled up.
 
-    Its text is the app's output, not study data: never saved, loaded or reset. For a
+    Its text is the app's output, not study data: never saved, loaded or reset. A session
+    keeps it, with its colors, as it keeps the tab shown. For a
     single message to the user, such as an error, see `LogView`. The user saves the text
     to a file (`export_text`), named `export_filename` at first, or copies it all. The
     user searches the text too: plain text, any case, as `find_in_lines` finds it.
@@ -642,6 +659,38 @@ class ConsoleView(View):
         while len(self._lines) > max_lines:
             self._lines.popleft()
             self._line_styles.popleft()
+
+    @override
+    def _session_content(self) -> object:
+        if self.text == "" and self._style == PLAIN_TEXT and self._escape == "":
+            return None
+        return CONVERTER.unstructure(
+            _ConsoleContent(
+                list(self._lines),
+                list(self._line_styles),
+                self._last_line,
+                list(self._last_line_styles),
+                self._is_returned,
+                self._line_count,
+                self._style,
+                self._escape,
+            )
+        )
+
+    @override
+    def _load_session_content(self, content: object) -> None:
+        saved = CONVERTER.structure(content, _ConsoleContent)
+        self._lines = deque(saved.lines)
+        self._line_styles = deque(saved.line_styles)
+        self._last_line = saved.last_line
+        self._last_line_styles = list(saved.last_line_styles)
+        self._is_returned = saved.is_returned
+        self._line_count = saved.line_count
+        self._style = saved.style
+        self._escape = saved.escape
+        # the code may keep fewer lines now
+        self._drop_oldest(self.max_lines)
+        self._refresh("text")
 
     def _refresh(self, name: str) -> None:
         """Show the change: not a field's, which the renderer would hear by itself."""

@@ -149,7 +149,11 @@ the checklist; the [OWASP Top 10](https://owasp.org/Top10/) is the overview.
     folder only after `_saved_uploads` checks that it is ComposeUI's: in the session folder's
     `uploads/`, in a reload's saved sessions' `uploads/`, or else in the process's own folder
     (`scratch_directory`). Never delete a path that a
-    saved file gives without such a check.
+    saved file gives without such a check. Within that folder, a field takes back an upload
+    only after `_hold_saved_uploads` checks it too: a folder made for that kind of field (its
+    widget id's last part), named by no other field, with no `..` and no link on the way.
+    A path that the user copied from one field to another, or from a table's cell, is in
+    the folder, but is not the field's own: its next upload would remove the other's file.
 
 ## Testing
 

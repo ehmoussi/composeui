@@ -20,6 +20,7 @@ from composeui.core._views.base import (
     CONVERTER,
     LOGGER,
     OMIT,
+    SESSION,
     UI_TEXT,
     View,
     _fixed,
@@ -283,8 +284,8 @@ class MultiValuesMixin(ChoicesMixin[TValue]):
     )
     #: whether a search field filters the choices shown
     has_search: bool = attrs.field(default=False, metadata={OMIT: True})
-    #: the text of the search field; never saved
-    search: str = attrs.field(default="", metadata={OMIT: True})
+    #: the text of the search field; not study data, but kept with the session (`SESSION`)
+    search: str = attrs.field(default="", metadata={OMIT: True, SESSION: True})
     #: whether a box checks or unchecks all the choices shown at once
     has_check_all: bool = attrs.field(default=True, metadata={OMIT: True})
     #: the check-all box's text
