@@ -167,7 +167,8 @@ skill: each test must fail without the fix, for the intended reason.
 
 When the table has more than a few real states, or a bug came from a missing cell, say so in the
 review, and propose making the states explicit. This is a separate change, unless the fix needs
-it: one fix per pull request. Such a change can:
+it: a commit of its own, and a pull request of its own unless it is close to the fix. Such a
+change can:
 
 - Put the transition in one place, such as `WebSession.handle_event` for a control's events.
 - Replace flags that must agree with one field that holds the state.

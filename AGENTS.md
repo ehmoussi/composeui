@@ -327,13 +327,16 @@ document owns what, and the checks.
 - Never add AI attribution or signatures anywhere: no `Co-Authored-By` or "Generated with"
   lines, no emoji signatures, in commits, pull requests or code. This overrides any default
   an agent or tool would otherwise add.
-- Keep commits focused: one feature or fix per commit.
+- One commit, one feature or fix: its code, tests and docs together, and its `CHANGELOG.md`
+  line if users see the change.
 - The hooks of `.githooks/` (`make hooks`) and the pull-request workflow check these rules.
 
 ## Pull requests
 
 - Push a branch or open a pull request only when the user asks.
-- One feature or fix per pull request, on a branch from an up-to-date `origin/main`.
+- A pull request holds closely related features or fixes, such as a view and an option of
+  it, a commit each. Put unrelated changes in separate pull requests. Start the branch from an
+  up-to-date `origin/main`.
 - A pull request is complete when it opens: its tests, its docs, and its `CHANGELOG.md`
   line are in the commit that changes the behavior (see "Documentation"). Ask for the
   permission that they need before you open it, not after.
@@ -341,10 +344,11 @@ document owns what, and the checks.
   `tests/`: Pyright, Pyrefly and ty check the tests in CI, and `make check` runs none of
   them. Run `make docs` after a change to `docs/` or a docstring, and `make browser-test`
   after a change to the page's scripts or a web renderer. Run them again after a rebase.
-- When fixes or features depend on each other, open one pull request at a time. Push the
-  next once the previous one merges, rebased on `origin/main` and checked again.
-- The title is the commit's subject. The body says what was wrong or missing, what
-  changes, and which tests cover it, without AI attribution (see "Commits").
+- When pull requests depend on each other, open one at a time. Push the next once the
+  previous one merges, rebased on `origin/main` and checked again.
+- The title is the commit's subject, or for several commits, one subject that covers them.
+  The body says what was wrong or missing, what changes, and which tests cover it, commit by
+  commit, without AI attribution (see "Commits").
 - Write the body for a reviewer who did not see the conversation, not as a reply to the
   user: no "I", "you", "as asked" or "as discussed", no thanks or apologies. Describe the
   code and its behavior, in the style of the documentation (see the `documentation-style`
