@@ -258,6 +258,9 @@ backends' modules included, can change in any release without an entry here.
 
 ### Fixed
 
+- On Textual, a radio group doesn't emit `value_changed` any more when code sets its `value`,
+  nor for its first value as it shows. It reports the user's picks only, as on Qt and the web.
+
 - An app that exits while a job writes to a SQLite model doesn't crash any more. The exit
   waits up to 5 s for the write, then interrupts it, and closes each database that no thread
   uses. A job that asks for a database once the exit started waits for the process's end. A

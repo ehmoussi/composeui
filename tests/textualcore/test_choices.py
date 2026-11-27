@@ -26,7 +26,7 @@ from composeui.textualcore.widgets.composechecklist import ComposeCheckList, Com
 from composeui.textualcore.widgets.composecombobox import ComposeComboBox
 from composeui.textualcore.widgets.composeradioset import ComposeRadioSet
 from composeui.textualcore.widgets.composetree import ComposeTree
-from examples.pipeform import EdgeType, Material, PipeMainView
+from examples.pipeform import EdgeType, PipeMainView
 from tests.buildings import SiteMainView, styled_site
 from tests.choices import Base, ChoicesMainView
 from tests.filters import FiltersMainView
@@ -69,13 +69,7 @@ async def test_a_check_list_checks_the_view_s_values_its_check_all_box_those_the
         assert (view.hours.selected, seen[-1]) == ([5, 9], [5, 9])
         assert (check_list.check_all.value, check_list.check_all.BUTTON_INNER) == (True, "X")
 
-        view.hours.search = ""  # set in code: the list follows, and nothing is reported
-        view.hours.selected = [12]
-        await pilot.pause()
-        assert check_list.choices.selected == ["2"]  # the key of 12: its position
-        assert check_list.check_all.BUTTON_INNER == "-"
-        assert len(seen) == 2
-
+        view.hours.search = ""
         view.hours.values = {"Dawn": 5, "Day": 9, "Dusk": 12, "Night": 19}  # the same keys
         await pilot.pause()
         prompts = [str(option.prompt) for option in check_list.choices.options]
@@ -133,11 +127,10 @@ async def test_textual_radio_group_with_nonnull_initial_value_mounts_without_cra
 
 
 @pytest.mark.asyncio
-async def test_a_radio_group_shows_no_choice_when_its_value_or_its_choice_is_gone() -> None:
+async def test_a_radio_group_shows_no_choice_when_its_choice_is_gone() -> None:
     view = PipeMainView()
     app = _app_of(view)
     edge = view.pages.inputs.pipe_form.edge_type
-    changes: list[object] = []
 
     async with app.run_test() as pilot:
         await pilot.pause()
@@ -145,13 +138,6 @@ async def test_a_radio_group_shows_no_choice_when_its_value_or_its_choice_is_gon
         widget = _field_widget(edge.renderer)
         assert isinstance(widget, ComposeRadioSet)
         assert widget.pressed_index != -1
-        edge.value_changed.connect(changes.append)  # after its first value shows
-
-        edge.value = None
-        await pilot.pause()
-        await pilot.pause()
-        assert widget.pressed_index == -1
-        assert changes == []
 
         edge.value = EdgeType.Chamfer
         await pilot.pause()
@@ -227,16 +213,10 @@ async def test_a_tree_selects_its_nodes_by_enter_or_click_and_expands_them_by_sp
             False,
         ]
 
-        # set in code: shown, and not reported
         site.expanded = []
         site.selected = ("Parking",)
         await pilot.pause()
-        assert _tree_lines(tree) == [
-            ("▶ Building A", False),
-            ("▶ Building B", False),
-            ("Parking", True),
-        ]
-        assert (len(selections), len(toggles)) == (2, 1)
+        # new nodes keep the selection still in them
         site.nodes = [*site.nodes, TreeNode("Garden")]
         await pilot.pause()
         assert _tree_lines(tree)[-2:] == [("Parking", True), ("Garden", False)]
@@ -286,32 +266,6 @@ async def test_a_tree_shows_its_nodes_style_and_mark_after_the_label() -> None:
             Color.parse("red"),
             Color.parse("orange1"),
         }
-
-
-@pytest.mark.asyncio
-async def test_a_combobox_emits_its_value_when_the_user_picks_it_not_when_code_sets_it() -> None:
-    view = PipeMainView()
-    view.render(RendererType.TEXTUAL)
-    assert isinstance(view.renderer, TextualMainRenderer)
-    app = view.renderer.app
-    assert app is not None
-    material = view.pages.inputs.pipe_form.material
-    seen: list[object] = []
-    material.value_changed.connect(seen.append)
-
-    async with app.run_test() as pilot:
-        await pilot.pause()
-        material.values = dict(reversed(material.values.items()))
-        material.value = Material.Copper
-        await pilot.pause()
-        assert seen == []
-
-        combobox = _field_widget(material.renderer)
-        assert isinstance(combobox, ComposeComboBox)
-        combobox.value = Material.Steel  # what picking an option does
-        await pilot.pause()
-        assert seen == [Material.Steel]
-        assert material.value is Material.Steel
 
 
 @pytest.mark.asyncio

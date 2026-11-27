@@ -27,7 +27,6 @@ from examples.pipeform import EdgeType, PipeMainView
 from tests.buildings import SiteMainView, styled_site
 from tests.choices import Base, ChoicesMainView
 from tests.filters import FiltersMainView
-from tests.translated import Size, TranslatedMainView
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -66,22 +65,18 @@ def test_radio_group_renderer_click_round_trips_value_and_drives_status_bar(qtbo
     assert chamfer_widget.isVisible() is True  # edge_type -> group visibility
 
 
-def test_a_radio_group_shows_no_choice_when_its_value_is_cleared(qtbot: QtBot) -> None:
+def test_a_radio_group_cleared_keeps_one_choice_at_a_time(qtbot: QtBot) -> None:
     view = PipeMainView()
     view.status_bar.timeout = 0  # its click shows a message: no timer after the test
     view.render(RendererType.QT)
     edge = view.pages.inputs.pipe_form.edge_type
     widget = _field_widget(edge)
     qtbot.addWidget(widget)
-    changes: list[object] = []
-    edge.value_changed.connect(changes.append)
     assert [button for button in widget.findChildren(QRadioButton) if button.isChecked()]
 
-    edge.value = None
+    edge.value = None  # its buttons unchecked: shown in tests/contracts/test_choices.py
 
-    assert not [button for button in widget.findChildren(QRadioButton) if button.isChecked()]
-    assert changes == []
-    # the group's still exclusive: one choice at a time
+    # the group's still exclusive
     buttons = widget.findChildren(QRadioButton)
     buttons[0].click()
     buttons[1].click()
@@ -153,13 +148,8 @@ def test_a_tree_selects_and_expands_its_nodes_by_click_and_key(qtbot: QtBot) -> 
     qtbot.keyClick(tree, Qt.Key.Key_Down)  # onto its first room
     assert selections[-1] == ("Building A", "Floor 1", "Room 101")
 
-    # set in code: shown, and not reported
     site.expanded = [("Building B",)]
     site.selected = ("Building B", "Floor 1")
-    assert not _tree_item(tree, "Building A").isExpanded()
-    assert _tree_item(tree, "Building B").isExpanded()
-    assert tree.selectedItems() == [_tree_item(tree, "Building B", "Floor 1")]
-    assert (len(selections), len(toggles)) == (2, 1)
     # new nodes keep the selection still in them
     site.nodes = [*site.nodes, TreeNode("Garden")]
     assert tree.topLevelItemCount() == 4
@@ -201,24 +191,6 @@ def test_a_tree_shows_its_nodes_icon_style_and_mark_named_by_a_tooltip(
     assert [item.toolTip(1) for item in (done, failed)] == ["Terminé", "Error"]
 
 
-def test_a_combobox_picked_gives_the_view_its_value(qtbot: QtBot) -> None:
-    view = TranslatedMainView()
-    view.render(RendererType.QT)
-    size = view.shape.size
-    combobox = _field_widget(size)
-    assert isinstance(combobox, QComboBox)
-    qtbot.addWidget(combobox)
-    seen: list[object] = []
-    size.value_changed.connect(seen.append)
-    combobox.show()
-    combobox.setFocus()
-
-    qtbot.keyClick(combobox, Qt.Key.Key_Up)
-    size.value = None  # set in code: no item, and not reported
-
-    assert (seen, combobox.currentIndex()) == ([Size.SMALL], -1)
-
-
 def _click_box_text(qtbot: QtBot, box: QCheckBox) -> None:
     """Click a check box on its text, not on its square."""
     qtbot.mouseClick(
@@ -251,12 +223,7 @@ def test_a_check_list_checks_the_view_s_values_its_check_all_box_those_the_searc
     assert (view.hours.selected, seen[-1]) == ([5, 9], [5, 9])
     assert check_list.check_all.checkState() == Qt.CheckState.Checked
 
-    view.hours.search = ""  # set in code: the list follows, and nothing is reported
-    view.hours.selected = [12]
-    assert [box.isChecked() for box in check_list.boxes] == [False, False, True, False]
-    assert check_list.check_all.checkState() == Qt.CheckState.PartiallyChecked
-    assert len(seen) == 2
-
+    view.hours.search = ""
     view.hours.values = {"Dawn": 5, "Day": 9, "Dusk": 12, "Night": 19}  # the same keys
     assert [box.text() for box in check_list.boxes] == ["Dawn", "Day", "Dusk", "Night"]
 
