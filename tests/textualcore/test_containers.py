@@ -35,7 +35,7 @@ from composeui.textualcore.widgets.composecollapsible import ComposeCollapsible
 from composeui.textualcore.widgets.composesplitter import ComposeSplitter, SplitterHandle
 from composeui.textualcore.widgets.composetabbedcontent import ComposeTabbedContent
 from composeui.textualcore.widgets.composetoolbar import ComposeToolbarButton
-from examples.pipeform import EdgeType, PipeMainView
+from examples.pipeform import PipeMainView
 from tests.expander import RecordMainView
 from tests.frames import FramedMainView
 from tests.grid import GridMainView
@@ -91,7 +91,13 @@ async def test_content_taller_than_the_terminal_is_reachable_by_scrolling() -> N
 
     async with app.run_test(size=(100, 30)) as pilot:
         await pilot.pause()
-        view.pages.inputs.pipe_form.edge_type.value = EdgeType.Chamfer
+        radios = _field_widget(view.pages.inputs.pipe_form.edge_type.renderer)
+        app.screen.set_focus(radios)
+        await pilot.pause()
+        # the user's pick, the next one after Normal: a value set by code isn't reported
+        await pilot.press("down", "enter")
+        scroller = app.screen.query_one(VerticalScroll)
+        scroller.scroll_home(animate=False)  # where the focus left it
         await pilot.pause()
 
         chamfer_renderer = view.pages.inputs.pipe_form.chamfer.renderer
@@ -102,7 +108,6 @@ async def test_content_taller_than_the_terminal_is_reachable_by_scrolling() -> N
         # past the bottom of the terminal before scrolling
         assert chamfer_widget.region.y >= screen_height
 
-        scroller = app.screen.query_one(VerticalScroll)
         assert scroller.max_scroll_y > 0  # there's actually overflow to scroll through
         scroller.scroll_end(animate=False)
         await pilot.pause()

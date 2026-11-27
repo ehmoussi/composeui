@@ -47,7 +47,16 @@ class ComposeRadioSet(RadioSet, Generic[TValue]):
             # None presses its button only when it's one of the values
             if value == candidate:
                 if not button.value:
-                    button.value = True
+                    # not as the user's: a button's `Changed` would make the set post its
+                    # own, reported as a pick, so the set's bookkeeping is done here,
+                    # its cursor too, for the arrow keys to start from the button pressed
+                    with self.prevent(RadioButton.Changed):
+                        pressed = self.pressed_button
+                        if pressed is not None:
+                            pressed.value = False
+                        button.value = True
+                    self._pressed_button = button
+                    self._selected = self.pressed_index
                 return
         pressed = self.pressed_button
         if pressed is not None:  # not as the user's: a `RadioSet` presses a button back on

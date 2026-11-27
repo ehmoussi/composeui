@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Optional, Protocol
 
 if TYPE_CHECKING:
     from contextlib import AbstractAsyncContextManager
@@ -62,4 +62,50 @@ class Driver(Protocol):
 
     def slider_text(self, view: View) -> str:
         """Read the value that `view`'s slider shows beside its track."""
+        ...
+
+    async def pick(self, view: View, label: str) -> None:
+        """Pick the choice `label` of `view`'s radio buttons or drop-down list.
+
+        A driver that picks by keys moves from the choice that `view` shows.
+        """
+        ...
+
+    def chosen(self, view: View) -> Optional[str]:
+        """Read the label of the choice that `view` shows picked, None for none."""
+        ...
+
+    async def search(self, view: View, text: str) -> None:
+        """Replace the text of `view`'s search field with `text`."""
+        ...
+
+    async def check(self, view: View, label: str) -> None:
+        """Check the box of the choice `label` of `view`, or uncheck it.
+
+        Of a drop-down list, in its list, opened first.
+        """
+        ...
+
+    def checks(self, view: View) -> list[tuple[str, bool]]:
+        """Read the choices that `view`'s list shows: each one's label, and if it's checked."""
+        ...
+
+    def check_all_state(self, view: View) -> Optional[bool]:
+        """Read whether `view`'s check-all box shows checked, unchecked, or partly (None)."""
+        ...
+
+    async def select_node(self, view: View, labels: tuple[str, ...]) -> None:
+        """Select the node of `view`'s tree down `labels`, from a top-level node."""
+        ...
+
+    async def toggle_node(self, view: View, labels: tuple[str, ...]) -> None:
+        """Expand the node of `view`'s tree down `labels`, or collapse it, by its arrow."""
+        ...
+
+    def selected_node(self, view: View) -> Optional[tuple[str, ...]]:
+        """Read the labels down to the node that `view`'s tree shows selected, None for none."""
+        ...
+
+    def expanded_nodes(self, view: View) -> list[tuple[str, ...]]:
+        """Read the labels down to each node that `view`'s tree shows expanded, in order."""
         ...
