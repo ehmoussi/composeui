@@ -126,6 +126,7 @@ class TextEditorViewLike(InputViewLike, Protocol):
     texts: dict[str, str]
     export_filename: str
     language: str | Lexer | None
+    is_read_only: bool
 
     def export_text(self, path: Path) -> None: ...
 
@@ -143,6 +144,7 @@ class TextualTextEditorRenderer(TextualWidgetRenderer[TextEditorViewLike, Compos
                 "texts": self._refresh_texts,
                 "export_filename": self._refresh_export_filename,
                 "language": self._refresh_language,
+                "is_read_only": self._refresh_read_only,
             }
         )
 
@@ -190,6 +192,12 @@ class TextualTextEditorRenderer(TextualWidgetRenderer[TextEditorViewLike, Compos
         _view: TextEditorViewLike, rendered_object: ComposeTextEditorBox, value: str | Lexer | None
     ) -> None:
         rendered_object.editor.set_syntax(value)
+
+    @staticmethod
+    def _refresh_read_only(
+        _view: TextEditorViewLike, rendered_object: ComposeTextEditorBox, value: bool
+    ) -> None:
+        rendered_object.editor.set_read_only(is_read_only=value)
 
     def _update_text(self, text: str) -> None:
         if text == self._view.text:  # the text the view set, not an edit

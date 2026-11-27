@@ -118,6 +118,9 @@ class StudyView(MainView):
   "Line 4, column 12" (`texts["position"]`), to find the line that a solver's error names.
 - **Indents.** Tab inserts four spaces. On Qt and Textual, Escape moves the focus out of the
   editor. On the web, Escape, then Tab, moves it out.
+- **Read only.** Set `is_read_only` to show a file that the user reads but doesn't change,
+  such as a solver's output. The user still selects, copies, searches and saves the text, and
+  Tab moves the focus out. `is_read_only` isn't saved with the study.
 - **Study data.** `text` is saved, loaded, and reset with the study, as a text area's is. Its
   signals are a text area's: `text_changed`, `text_edited`, and `editing_finished`, which the
   editor emits when it loses the focus after a change.
@@ -135,7 +138,8 @@ class StudyView(MainView):
   file, or a lexer of the app's own. The `pyside6`, `tui` and `web` extras install Pygments. An
   unknown name raises `pygments.util.ClassNotFound` as soon as the app sets it. A text longer
   than 50 000 characters shows plain: the editor colors the whole text again after each edit,
-  which then takes too long. A lexer for a format that Pygments doesn't know is a few lines,
+  which then takes too long. A read-only text is colored once each time it is set, up to
+  1 000 000 characters. A lexer for a format that Pygments doesn't know is a few lines,
   such as one for a Code_Aster `.export` file:
 
   ```python

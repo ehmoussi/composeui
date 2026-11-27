@@ -12,7 +12,7 @@ pytest.importorskip("starlette")
 # Starlette's test client: httpx2, which needs Python 3.11, or httpx before it
 pytest.importorskip("httpx2" if sys.version_info >= (3, 11) else "httpx")
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from composeui.core._views.inputs import MAX_HIGHLIGHT_SIZE
 from composeui.core.registry import RendererType
@@ -28,7 +28,7 @@ from composeui.webcore.webrenderer import (
     render_dirty,
 )
 from tests.bookings import BookingMainView
-from tests.deck import DeckMainView
+from tests.deck import EXPORT, DeckMainView
 from tests.hours import HoursMainView
 from tests.memory import MemoryMainView
 from tests.ranges import FIRST_DAY, LAST_DAY, RangesMainView
@@ -45,6 +45,8 @@ from tests.webcore.support import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from starlette.testclient import TestClient
 
     from examples.pipeform import PipeMainView
@@ -456,6 +458,50 @@ def test_a_text_editor_s_edit_brings_back_only_its_text_colored_as_posted(
         ]
         kinds = {attributes.get("class") for _, attributes in colors.descendants} - {None}
         assert kinds == {"cui-hl-operator", "cui-hl-string"}
+
+
+def test_a_read_only_text_editor_refuses_an_edit_and_colors_a_longer_text() -> None:
+    view = DeckMainView()
+    longer = "1" * (MAX_HIGHLIGHT_SIZE + 1)  # too long to color after each edit
+    view.deck.text, view.deck.language, view.deck.is_read_only = longer, "python", True
+    app = WebApplication(build_main_view=lambda: view)
+    with _Browser(app.create_starlette_app()) as client:
+        page = client.get("/").text
+        deck_id = _widget_id(view.deck.renderer)
+        assert "readonly" in _element(page, f"{deck_id}-text").attributes
+        colors = _element(page, f"{deck_id}-colors").descendants
+        assert ("span", {"class": "cui-hl-number"}) in colors  # colored once, as it comes
+
+        # as a stale page's, or a crafted one: the server holds what the page shows
+        response = client.post(
+            f"/_composeui/widget/{deck_id}", data={"value": "P ncpus 8", "event": "input"}
+        )
+    assert (response.status_code, view.deck.text) == (400, longer)
+
+
+class _RecordingLexer:
+    """An app's own lexer that records each text it splits, and colors none."""
+
+    def __init__(self) -> None:
+        self.texts: list[str] = []
+
+    def get_tokens_unprocessed(self, text: str) -> Iterator[tuple[int, Any, str]]:
+        self.texts.append(text)
+        return iter(())
+
+
+def test_a_text_editor_colors_its_text_once_whatever_the_pages_that_show_it() -> None:
+    lexer = _RecordingLexer()
+    view = DeckMainView()
+    view.deck.language, view.deck.is_read_only = lexer, True
+    app = WebApplication(build_main_view=lambda: view)
+    with _Browser(app.create_starlette_app()) as client:
+        client.get("/")
+        client.get("/")  # loaded again, as in another tab: a large text would take seconds
+        assert lexer.texts == [EXPORT]
+        view.deck.text = "P ncpus 4"
+        client.get("/")
+    assert lexer.texts == [EXPORT, "P ncpus 4"]
 
 
 def test_number_and_date_fields_take_a_cleared_value_and_report_a_date_once() -> None:

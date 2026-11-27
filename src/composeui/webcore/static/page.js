@@ -1079,6 +1079,7 @@
   document.addEventListener("keydown", function (event) {
     var field = event.target;
     if (!(field instanceof HTMLTextAreaElement) || !("textEditor" in field.dataset)) return;
+    if (field.readOnly) return;  /* nothing to indent: Tab moves the focus, as elsewhere */
     var isLeaving = "leaving" in field.dataset;
     delete field.dataset.leaving;
     if (event.key === "Escape") {

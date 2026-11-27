@@ -73,7 +73,9 @@ class QtDriver:
     async def leave(self, view: View) -> None:
         box = next(box for box in _text_boxes(view) if box.hasFocus())
         # a text area's Tab too goes to the next field; a text editor's indents, Escape leaves
-        key = Qt.Key.Key_Escape if isinstance(box, QTextEditor) else Qt.Key.Key_Tab
+        # a read-only one's Tab leaves, as it types nothing
+        is_indenting = isinstance(box, QTextEditor) and not box.isReadOnly()
+        key = Qt.Key.Key_Escape if is_indenting else Qt.Key.Key_Tab
         self._qtbot.keyClick(box, key)
         assert not box.hasFocus()
 

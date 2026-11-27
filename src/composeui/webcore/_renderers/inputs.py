@@ -168,6 +168,7 @@ class TextEditorViewLike(InputViewLike, Protocol):
     texts: dict[str, str]
     export_filename: str
     language: str | Lexer | None
+    is_read_only: bool
 
     def tr(self, text: str) -> str: ...
 
@@ -183,20 +184,32 @@ class WebTextEditorRenderer(WebTextAreaRenderer):
     text arrive, keeps the numbers and the caret's place in step, highlights the search's
     matches, and copies or saves the text that the field shows, not the server's: a click on
     Save follows an edit not posted yet. In the field, Tab inserts four spaces, and Escape,
-    then Tab, moves the focus out (see `page.js`).
+    then Tab, moves the focus out (see `page.js`). A read-only field is `readonly`, and Tab
+    moves the focus out of it; its posts are refused (`takes_events`).
     """
 
     _role = "text_editor"
+
+    #: a read-only editor takes no edit: a crafted or stale post can't change its text either
+    @property
+    @override
+    def takes_events(self) -> bool:
+        return super().takes_events and not cast("TextEditorViewLike", self._view).is_read_only
 
     def __init__(self, view: TextEditorViewLike) -> None:
         super().__init__(view)
         #: the whole editor is to go to the page, not only the colors of its text
         self._is_whole = True
+        #: the colored lines last rendered, and what they're of: its text, language and
+        #: whether it was read-only. A page load renders them again, and a read-only text of
+        #: 1 MB takes about 2 s to color: held, they cost their size in the session's memory
+        self._colored: tuple[tuple[str, object, bool], Markup] | None = None
         self._refresh_dispatcher.update(
             {
                 "texts": self._mark_dirty,
                 "export_filename": self._mark_dirty,
                 "language": self._mark_dirty,
+                "is_read_only": self._mark_dirty,
             }
         )
 
@@ -207,6 +220,7 @@ class WebTextEditorRenderer(WebTextAreaRenderer):
             return self._colors_html(oob=True)
         view = cast("TextEditorViewLike", self._view)
         disabled = "" if self.is_enabled else " disabled"
+        read_only = " readonly" if view.is_read_only else ""
         line_count = view.text.count("\n") + 1
         return Markup(
             '<div {root_attributes} class="cui-editor">'
@@ -239,7 +253,7 @@ class WebTextEditorRenderer(WebTextAreaRenderer):
             ' data-post-event hx-swap="none" hx-sync="this:queue all"'
             ' autocomplete="off"'
             # the parser drops a new line just after the tag: this one, not the text's
-            "{disabled}>\n{text}</textarea></div></div></div>"
+            "{disabled}{read_only}>\n{text}</textarea></div></div></div>"
         ).format(
             root_attributes=self._root_attributes(oob=oob),
             widget_id=self.widget_id,
@@ -262,6 +276,7 @@ class WebTextEditorRenderer(WebTextAreaRenderer):
             colors=self._colors_html(oob=False),
             placeholder=view.placeholder,
             disabled=disabled,
+            read_only=read_only,
             text=view.text,
         )
 
@@ -278,9 +293,22 @@ class WebTextEditorRenderer(WebTextAreaRenderer):
 
     def _colors_html(self, *, oob: bool) -> Markup:
         """Render the text under the field, each colored part in a `<span>` of its kind."""
+        swap = Markup(' hx-swap-oob="true"') if oob else Markup()
+        return Markup(
+            '<pre id="{}-colors" class="cui-editor-colors" aria-hidden="true"{}>'
+            # the parser drops a new line just after the tag, as `<textarea>`'s
+            "\n{}</pre>"
+        ).format(self.widget_id, swap, self._colored_lines())
+
+    def _colored_lines(self) -> Markup:
+        """Render each line of the text, in a block of its own: again only for another text."""
         view = cast("TextEditorViewLike", self._view)
+        key = (view.text, view.language, view.is_read_only)  # a lexer as itself, not equal
+        if self._colored is not None and self._colored[0] == key:
+            return self._colored[1]
         lines: list[Markup] = []
-        for line, parts in zip(view.text.split("\n"), highlight_lines(view.text, view.language)):
+        colored = highlight_lines(view.text, view.language, is_read_only=view.is_read_only)
+        for line, parts in zip(view.text.split("\n"), colored):
             pieces: list[Markup] = []
             position = 0
             for start, end, kind in parts:
@@ -291,19 +319,12 @@ class WebTextEditorRenderer(WebTextAreaRenderer):
                 position = end
             pieces.append(Markup("{}").format(line[position:]))
             lines.append(Markup("").join(pieces))
-        swap = Markup(' hx-swap-oob="true"') if oob else Markup()
         # a line per block, ended by its new line but the last: a narrow editor wraps a line on
         # several rows, which its number takes the height of (`page.js`)
         ended = [Markup("{}\n").format(line) for line in lines[:-1]] + lines[-1:]
-        return Markup(
-            '<pre id="{}-colors" class="cui-editor-colors" aria-hidden="true"{}>'
-            # the parser drops a new line just after the tag, as `<textarea>`'s
-            "\n{}</pre>"
-        ).format(
-            self.widget_id,
-            swap,
-            Markup("").join(Markup("<span>{}</span>").format(line) for line in ended),
-        )
+        shown = Markup("").join(Markup("<span>{}</span>").format(line) for line in ended)
+        self._colored = (key, shown)
+        return shown
 
     @override
     def _mark_dirty(self, view: InputViewLike, rendered_object: str, value: Any) -> None:

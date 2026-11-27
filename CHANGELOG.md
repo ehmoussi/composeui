@@ -15,8 +15,9 @@ backends' modules included, can change in any release without an entry here.
   file: a fixed-width font, numbered lines that never wrap, and Tab that indents. A bar shows
   the file's name and the caret's line and column. The user saves the text to a file or copies
   it, and searches it. With a `language`, such as `"python"` or an app's own Pygments lexer, it
-  colors the syntax of a text up to 50 000 characters. Its `text` is study data, as a text
-  area's. The `pyside6`, `tui` and `web` extras now install Pygments.
+  colors the syntax of a text up to 50 000 characters, or 1 000 000 with `is_read_only`, which
+  lets the user read, select, copy and search the text but not change it. Its `text` is study
+  data, as a text area's. The `pyside6`, `tui` and `web` extras now install Pygments.
 
 - A package outside ComposeUI can add a view and its renderers. It defines the view with
   `define_view(renderer_key=...)`, a key that starts with its own name, and declares the

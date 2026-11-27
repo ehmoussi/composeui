@@ -65,6 +65,14 @@ class QTextEditor(QSearchText):
         """Color the text's syntax in `language`, as `highlight_lines` splits it."""
         self._highlighter.set_language(language)
 
+    def set_read_only(self, *, is_read_only: bool) -> None:
+        """Let the user only read the text, or edit it again; Tab then moves the focus out."""
+        self.setReadOnly(is_read_only)
+        if is_read_only:  # Qt's read-only text takes the mouse alone: the keys move the caret too
+            flag = Qt.TextInteractionFlag
+            self.setTextInteractionFlags(flag.TextSelectableByMouse | flag.TextSelectableByKeyboard)
+        self._highlighter.set_read_only(is_read_only=is_read_only)
+
     def numbers_width(self) -> int:
         """Get the width of the numbers' margin: the last line's number, a space each side."""
         digits = len(str(self.blockCount()))
@@ -72,6 +80,7 @@ class QTextEditor(QSearchText):
 
     @override
     def keyPressEvent(self, event: QKeyEvent) -> None:
+        # a read-only text's Tab never comes here: Qt moves the focus first, as it types nothing
         if event.key() == Qt.Key.Key_Tab and event.modifiers() == Qt.KeyboardModifier.NoModifier:
             self.textCursor().insertText(INDENT)
         elif event.key() == Qt.Key.Key_Escape:
@@ -156,6 +165,7 @@ class _Highlighter(QSyntaxHighlighter):
         super().__init__(editor)
         self._editor = editor
         self._language: str | Lexer | None = None
+        self._is_read_only = False
         #: each line's colored parts, for `_text`
         self._parts: list[list[tuple[int, int, str]]] = []
         self._text = ""
@@ -171,7 +181,14 @@ class _Highlighter(QSyntaxHighlighter):
 
     def set_language(self, language: str | Lexer | None) -> None:
         self._language = language
-        self._parts = []  # split again, in the new language
+        self._split_again()
+
+    def set_read_only(self, *, is_read_only: bool) -> None:
+        self._is_read_only = is_read_only  # its own limit of size (`highlight_lines`)
+        self._split_again()
+
+    def _split_again(self) -> None:
+        self._parts = []
         self._split()
         self.rehighlight()
 
@@ -191,7 +208,7 @@ class _Highlighter(QSyntaxHighlighter):
             return
         self._text = text
         before = self._parts
-        self._parts = highlight_lines(text, self._language)
+        self._parts = highlight_lines(text, self._language, is_read_only=self._is_read_only)
         self._changed = [
             line
             for line, parts in enumerate(self._parts)

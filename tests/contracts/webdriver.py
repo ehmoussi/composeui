@@ -214,6 +214,8 @@ class WebDriver:
 
     def _post(self, view: View, part: int, event: str, text: str) -> None:
         _, attributes, _ = self._text_boxes(view)[part]
+        if "readonly" in attributes:  # a browser neither types in it nor posts it
+            return
         box_values: dict[str, str] = json.loads(attributes.get("hx-vals") or "{}")
         value = text.replace("\n", "\r\n")
         self._send(view, {**box_values, "value": value, "event": event})

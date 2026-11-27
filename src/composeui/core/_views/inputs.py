@@ -138,6 +138,9 @@ HIGHLIGHT_COLORS: Mapping[str, tuple[str, str]] = {
 #: whole text again, on the web under the session's lock, and Pygments takes about 70 ms for
 #: 50 000 characters of Python; a longer text shows plain
 MAX_HIGHLIGHT_SIZE = 50_000
+#: the longest read-only text, in characters, whose syntax a text editor colors: colored once
+#: each time it is set, about 1.4 s for this much Python
+MAX_READ_ONLY_HIGHLIGHT_SIZE = 1_000_000
 
 
 @functools.cache
@@ -159,16 +162,17 @@ def _token_kinds() -> tuple[tuple[Any, str], ...]:
 
 
 def highlight_lines(
-    text: str, language: Union[str, Lexer, None]
+    text: str, language: Union[str, Lexer, None], *, is_read_only: bool = False
 ) -> list[list[tuple[int, int, str]]]:
     """Get the colored parts of each line of `text` in `language`: start, end and kind.
 
-    A kind is one of `HIGHLIGHT_COLORS`. Without a language, or past `MAX_HIGHLIGHT_SIZE`, no
-    line has any.
+    A kind is one of `HIGHLIGHT_COLORS`. Without a language, or past `MAX_HIGHLIGHT_SIZE`
+    (`MAX_READ_ONLY_HIGHLIGHT_SIZE` for a text that `is_read_only`), no line has any.
     """
     lines = text.split("\n")
     parts: list[list[tuple[int, int, str]]] = [[] for _ in lines]
-    if language is None or len(text) > MAX_HIGHLIGHT_SIZE:
+    limit = MAX_READ_ONLY_HIGHLIGHT_SIZE if is_read_only else MAX_HIGHLIGHT_SIZE
+    if language is None or len(text) > limit:
         return parts
     lexer = _named_lexer(language) if isinstance(language, str) else language
     starts = list(itertools.accumulate((len(line) + 1 for line in lines[:-1]), initial=0))
@@ -209,7 +213,9 @@ class TextEditorView(TextAreaMixin, View):
     copies it all, and searches it, as `find_in_lines` finds it. On Qt and Textual, "Save as"
     calls `export_text`. On the web, the browser downloads the text that the field shows, and
     the app isn't told. With a `language`, Pygments colors the text's syntax, up to
-    50 000 characters.
+    50 000 characters. With `is_read_only`, the user reads, selects, copies and searches the
+    text, but can't change it, and Tab moves the focus out; its syntax is colored up to
+    1 000 000 characters, as no edit colors it again.
 
     Its text is study data, as a `TextAreaView`'s: saved, loaded and reset with the study.
     To edit a file that the user uploads, read it into `text`. To give the file to a
@@ -229,6 +235,8 @@ class TextEditorView(TextAreaMixin, View):
     language: Union[str, Lexer, None] = attrs.field(
         default=None, validator=_check_language, metadata={OMIT: True}
     )
+    #: whether the user only reads the text, never types in it
+    is_read_only: bool = attrs.field(default=False, metadata={OMIT: True})
 
     def export_text(self, path: Path) -> None:
         """Write the text to the file `path`, in UTF-8, and say how it went.

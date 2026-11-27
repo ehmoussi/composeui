@@ -2637,6 +2637,24 @@ def test_a_text_editor_colors_the_text_typed_never_older_text_and_searches_it(
     page.close()
 
 
+def _read_only_deck() -> DeckMainView:
+    view = DeckMainView()
+    view.deck.is_read_only = True
+    return view
+
+
+def test_a_read_only_text_editor_is_left_with_tab(browser: Browser) -> None:
+    with _serve(WebApplication(build_main_view=_read_only_deck).create_starlette_app()) as url:
+        page = browser.new_page(base_url=url)
+        page.goto("/")
+        field = page.get_by_role("textbox", name="study.export")
+        field.click()
+        field.press("Tab")  # nothing to indent: the browser moves the focus
+        expect(field).not_to_be_focused()
+        expect(field).to_have_value(EXPORT)
+        page.close()
+
+
 def test_a_narrow_text_editor_wraps_its_long_lines_each_beside_its_number(
     browser: Browser, comm_base_url: str
 ) -> None:
