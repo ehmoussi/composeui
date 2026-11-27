@@ -2,17 +2,22 @@
 
 from __future__ import annotations
 
+import bisect
 import contextlib
 import datetime
+import functools
+import itertools
 import math
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from typing import (
     TYPE_CHECKING,
     Any,
     Generic,
     Optional,
+    Protocol,
     TypeVar,
+    Union,
     cast,
 )
 
@@ -33,7 +38,7 @@ from composeui.core.translation import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Mapping
     from pathlib import Path
 
 
@@ -98,6 +103,101 @@ EDITOR_TEXTS: Mapping[str, str] = {
 }
 
 
+class Lexer(Protocol):
+    """A Pygments lexer, or any object that splits a text into tokens as one does."""
+
+    def get_tokens_unprocessed(self, text: str) -> Iterable[tuple[int, Any, str]]:
+        """Get each token of `text`: where it starts, its Pygments token type, and its text."""
+        ...
+
+
+#: the kinds of token that a text editor colors, by the Pygments token types they hold, the
+#: most precise first: a token of none shows in the text's own color
+_TOKEN_KINDS = (
+    ("Comment", "comment"),
+    ("Literal.String", "string"),
+    ("Literal.Number", "number"),
+    ("Keyword", "keyword"),
+    ("Name.Builtin", "builtin"),
+    ("Name.Function", "function"),
+    ("Name.Class", "function"),
+    ("Name.Decorator", "function"),
+    ("Operator", "operator"),
+)
+#: the color of each kind of token on Qt and Textual, on a light background then a dark one
+HIGHLIGHT_COLORS: Mapping[str, tuple[str, str]] = {
+    "comment": ("#6b7280", "#9ca3af"),
+    "string": ("#15803d", "#86efac"),
+    "number": ("#b45309", "#fcd34d"),
+    "keyword": ("#4338ca", "#a5b4fc"),
+    "builtin": ("#9333ea", "#d8b4fe"),
+    "function": ("#0369a1", "#7dd3fc"),
+    "operator": ("#475569", "#cbd5e1"),
+}
+#: the longest text, in characters, whose syntax a text editor colors: each edit colors the
+#: whole text again, on the web under the session's lock, and Pygments takes about 70 ms for
+#: 50 000 characters of Python; a longer text shows plain
+MAX_HIGHLIGHT_SIZE = 50_000
+
+
+@functools.cache
+def _named_lexer(name: str) -> Lexer:
+    """Get Pygments' lexer of the language `name`, e.g. "python"; raise if it has none."""
+    from pygments.lexers import get_lexer_by_name  # noqa: PLC0415 (Pygments only to color)
+
+    return cast("Lexer", get_lexer_by_name(name))
+
+
+@functools.lru_cache(maxsize=1)
+def _token_kinds() -> tuple[tuple[Any, str], ...]:
+    from pygments.token import Token  # noqa: PLC0415 (Pygments only to color)
+
+    # e.g. "Literal.String" is Token.Literal.String
+    return tuple(
+        (functools.reduce(getattr, name.split("."), Token), kind) for name, kind in _TOKEN_KINDS
+    )
+
+
+def highlight_lines(
+    text: str, language: Union[str, Lexer, None]
+) -> list[list[tuple[int, int, str]]]:
+    """Get the colored parts of each line of `text` in `language`: start, end and kind.
+
+    A kind is one of `HIGHLIGHT_COLORS`. Without a language, or past `MAX_HIGHLIGHT_SIZE`, no
+    line has any.
+    """
+    lines = text.split("\n")
+    parts: list[list[tuple[int, int, str]]] = [[] for _ in lines]
+    if language is None or len(text) > MAX_HIGHLIGHT_SIZE:
+        return parts
+    lexer = _named_lexer(language) if isinstance(language, str) else language
+    starts = list(itertools.accumulate((len(line) + 1 for line in lines[:-1]), initial=0))
+    kinds = _token_kinds()
+    for start, token, value in lexer.get_tokens_unprocessed(text):
+        kind = next((kind for token_type, kind in kinds if token in token_type), None)
+        if kind is None:
+            continue
+        position, end = start, start + len(value)
+        while position < end:  # a token over several lines, as a docstring, colors each
+            line = bisect.bisect_right(starts, position) - 1
+            line_end = starts[line] + len(lines[line])
+            part = (position - starts[line], min(end, line_end) - starts[line], kind)
+            line_parts = parts[line]
+            if line_parts and line_parts[-1][1:] == (part[0], kind):  # the same kind goes on
+                line_parts[-1] = (line_parts[-1][0], part[1], kind)
+            elif part[0] < part[1]:
+                line_parts.append(part)
+            position = line_end + 1
+    return parts
+
+
+def _check_language(
+    _view: TextEditorView, _attribute: attrs.Attribute[Any], value: Union[str, Lexer, None]
+) -> None:
+    if isinstance(value, str):
+        _named_lexer(value)  # an unknown name, or no Pygments, fails now, not as it shows
+
+
 @define_view
 class TextEditorView(TextAreaMixin, View):
     """A box where the user edits a file's text, for example a solver's input file.
@@ -106,10 +206,10 @@ class TextEditorView(TextAreaMixin, View):
     left, under a bar with `export_filename` and the caret's line and column. Tab indents
     by four spaces. On Qt and Textual, Escape moves the focus out; on the web, Escape then
     Tab does. The user saves the text to a file, named `export_filename` at first, or
-    copies it all. On Qt and Textual, "Save as" calls `export_text`. On the web, the browser
-    downloads the text that the field shows, and the app isn't told. On Qt and Textual, the
-    user searches the text too, as `find_in_lines` finds it. On the web, the browser's own
-    search finds it.
+    copies it all, and searches it, as `find_in_lines` finds it. On Qt and Textual, "Save as"
+    calls `export_text`. On the web, the browser downloads the text that the field shows, and
+    the app isn't told. With a `language`, Pygments colors the text's syntax, up to
+    50 000 characters.
 
     Its text is study data, as a `TextAreaView`'s: saved, loaded and reset with the study.
     To edit a file that the user uploads, read it into `text`. To give the file to a
@@ -124,6 +224,11 @@ class TextEditorView(TextAreaMixin, View):
     )
     #: the name offered for the file the text is saved to
     export_filename: str = attrs.field(default="text.txt", metadata={OMIT: True})
+    #: the language whose syntax colors the text: a Pygments lexer's name, such as "python",
+    #: or a lexer, such as the app's own; None for plain text
+    language: Union[str, Lexer, None] = attrs.field(
+        default=None, validator=_check_language, metadata={OMIT: True}
+    )
 
     def export_text(self, path: Path) -> None:
         """Write the text to the file `path`, in UTF-8, and say how it went.

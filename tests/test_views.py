@@ -9,16 +9,20 @@ import pickle
 import threading
 from collections import defaultdict
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 import pytest
 from attrs import Factory
 from hypothesis import given, settings
 from hypothesis import strategies as st
+from pygments.lexer import RegexLexer
+from pygments.token import Keyword, Number, Text
+from pygments.util import ClassNotFound
 from typing_extensions import override
 
 from composeui.core._views.content import follow_match, line_styles_after
 from composeui.core._views.files import DOWNLOAD_CHUNK_SIZE, save_download
+from composeui.core._views.inputs import MAX_HIGHLIGHT_SIZE, highlight_lines
 from composeui.core.application import Application
 from composeui.core.model import RefusedError
 from composeui.core.view import (
@@ -51,6 +55,7 @@ from composeui.core.view import (
     Series,
     StreamContent,
     TableView,
+    TextEditorView,
     TextStyle,
     TreeView,
     TypedFormDialogView,
@@ -412,6 +417,52 @@ def test_a_console_saves_its_text_and_says_how_it_went(tmp_path: Path) -> None:
 
     with pytest.raises(OSError):  # noqa: PT011 (whichever the system raises)
         ConsoleView().export_text(tmp_path)  # outside a main view
+
+
+def test_a_text_editor_colors_each_line_of_its_python_a_string_on_each_of_its_lines() -> None:
+    text = 'x = LIRE(U=20)  # mesh\ndoc = """a\n\nb"""'
+
+    parts = highlight_lines(text, "python")
+
+    shown = [
+        [(line[start:end], kind) for start, end, kind in line_parts]
+        for line, line_parts in zip(text.split("\n"), parts)
+    ]
+    assert shown == [
+        [("=", "operator"), ("=", "operator"), ("20", "number"), ("# mesh", "comment")],
+        [("=", "operator"), ('"""a', "string")],  # one part: its pieces are one kind
+        [],
+        [('b"""', "string")],
+    ]
+    assert highlight_lines(text, None) == [[], [], [], []]
+    # a text too long to color again after each edit shows plain
+    longest = "1" * MAX_HIGHLIGHT_SIZE
+    assert highlight_lines(longest, "python") == [[(0, MAX_HIGHLIGHT_SIZE, "number")]]
+    assert highlight_lines(f"{longest}1", "python") == [[]]
+
+
+class _ExportLexer(RegexLexer):
+    """The lines of a Code_Aster `.export` file: a kind letter, then names and numbers."""
+
+    tokens: ClassVar[dict[str, Any]] = {
+        "root": [
+            (r"^[PFR]\b", Keyword),
+            (r"\b\d+\b", Number),
+            (r"\S+", Text),
+            (r"\s+", Text),
+        ]
+    }
+
+
+def test_a_text_editor_takes_an_app_s_own_lexer_and_refuses_an_unknown_language() -> None:
+    editor = TextEditorView(text="P ncpus 2\nF comm study.comm D 1", language=_ExportLexer())
+
+    assert highlight_lines(editor.text, editor.language) == [
+        [(0, 1, "keyword"), (8, 9, "number")],
+        [(0, 1, "keyword"), (20, 21, "number")],
+    ]
+    with pytest.raises(ClassNotFound):  # now, not once a backend shows the text
+        editor.language = "no such language"
 
 
 def test_a_text_editor_saves_its_text_and_says_so(tmp_path: Path) -> None:

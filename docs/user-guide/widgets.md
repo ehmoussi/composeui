@@ -112,7 +112,8 @@ class StudyView(MainView):
 ```
 
 - **The text as in a file.** The text shows in a fixed-width font, with the numbers of its
-  lines on its left. A long line scrolls sideways rather than wrapping.
+  lines on its left. A long line scrolls sideways rather than wrapping, except on the web in a
+  narrow frame (see below).
 - **The bar.** A bar above the text shows `export_filename` and the caret's line and column,
   "Line 4, column 12" (`texts["position"]`), to find the line that a solver's error names.
 - **Indents.** Tab inserts four spaces. On Qt and Textual, Escape moves the focus out of the
@@ -125,22 +126,54 @@ class StudyView(MainView):
   text in UTF-8, and the status bar says so. On Qt and Textual, "Save as" calls it. On the web,
   the browser downloads the text, so `export_text` doesn't run and the status bar says nothing.
   `texts["save"]` and `texts["copy"]` name the controls, "Save as" and "Copy all" by default.
-- **Search the text.** On Qt and Textual, the user searches the text, as in a
-  [console](#console): every match is highlighted, and the count says which one is current.
-  The matches follow the user's edits. On the web, the browser's own search (Ctrl+F) finds in
-  the text.
+- **Search the text.** The user searches the text, as in a [console](#console): every match
+  is highlighted, the current one darker, and the count says which one it is. Enter shows the
+  next match, and the matches follow the user's edits.
+- **Colors of the syntax.** With a `language`, the editor colors the text's syntax: comments,
+  strings, numbers, keywords, built-in names, functions, and operators. `language` is the name
+  of a [Pygments](https://pygments.org/languages/) lexer, such as `"python"` for a `.comm`
+  file, or a lexer of the app's own. The `pyside6`, `tui` and `web` extras install Pygments. An
+  unknown name raises `pygments.util.ClassNotFound` as soon as the app sets it. A text longer
+  than 50 000 characters shows plain: the editor colors the whole text again after each edit,
+  which then takes too long. A lexer for a format that Pygments doesn't know is a few lines,
+  such as one for a Code_Aster `.export` file:
+
+  ```python
+  from pygments.lexer import RegexLexer
+  from pygments.token import Keyword, Number, Text
+
+  from composeui.core.view import TextEditorView
+
+
+  class ExportLexer(RegexLexer):
+      tokens = {
+          "root": [
+              (r"^[PFR]\b", Keyword),
+              (r"\b\d+\b", Number),
+              (r"\S+", Text),
+              (r"\s+", Text),
+          ]
+      }
+
+
+  export = TextEditorView(text="P ncpus 2", export_filename="study.export", language=ExportLexer())
+  ```
 
 What each backend shows:
 
 - **Qt** shows a `QPlainTextEdit`. The current line's number is darker than the others. The bar
   holds a search field, a "Copy all" button, and a "Save as…" button, which opens a save
-  dialog.
+  dialog. A window opens with the focus in the text.
 - **Textual** shows a `TextArea`. The bar is one row: a search field and the "Copy all" and
   "Save as…" buttons. Ctrl+F goes to the search field, Enter shows the next match, and Escape
   clears the field. The terminal must allow the copy.
 - **The web** shows a `<textarea>` in a frame, which takes the focus ring as a whole. The
-  "Copy all" and "Save as" buttons copy and save the text that the field shows, an edit not sent
-  yet included. To write to the clipboard, the web needs a secure page (HTTPS or `localhost`).
+  search field's Shift+Enter shows the previous match. The colors come from the server after a
+  pause in typing: until then, the text typed shows plain. The "Copy all" and "Save as" buttons
+  copy and save the text that the field shows, an edit not sent yet included. To write to the
+  clipboard, the web needs a secure page (HTTPS or `localhost`). In a narrow frame, such as on
+  a phone, the long lines wrap on several rows, each line's number beside its first row, and the
+  bar hides the caret's place and the buttons' labels.
 
 ## Integer input
 

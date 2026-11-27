@@ -65,7 +65,7 @@ from tests.charts import ChartPagesMainView
 from tests.choices import ChoicesMainView
 from tests.console import RunMainView
 from tests.datafiles import DataFileMainView
-from tests.deck import DeckMainView
+from tests.deck import CommMainView, DeckMainView
 from tests.dialogs import DialogsMainView
 from tests.downloading import ReportMainView
 from tests.drawings import DrawingMainView
@@ -238,16 +238,22 @@ class _HostileFinder(HTMLParser):
     """Collects where `_HOSTILE` became markup, reached a script, or shows changed, in a page.
 
     Shown changed, it was escaped twice (`&lt;` shown) or cut. An attribute holding JSON
-    (`data-chart`, `hx-vals`) is read as JSON: its strings show the text.
+    (`data-chart`, `hx-vals`) is read as JSON: its strings show the text. A text editor's
+    colored text is read whole: its colors split it in parts, a `<span>` each.
     """
 
     def __init__(self) -> None:
         super().__init__()
         self.found: list[str] = []
         self.shown = 0
+        #: the elements open in a colored text, and the parts of its text read so far
+        self._colored_depth = 0
+        self._colored: list[str] = []
 
     @override
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if self._colored_depth > 0 or ("class", "cui-editor-colors") in attrs:
+            self._colored_depth += 1
         if tag == "cui-xss":
             self.found.append("<cui-xss>")
         for name, value in attrs:
@@ -261,8 +267,19 @@ class _HostileFinder(HTMLParser):
                 self._check_shown(text, f"<{tag} {name}>")
 
     @override
+    def handle_endtag(self, tag: str) -> None:
+        if self._colored_depth > 0:
+            self._colored_depth -= 1
+            if self._colored_depth == 0:
+                self._check_shown("".join(self._colored), f"colored text in <{tag}>")
+                self._colored = []
+
+    @override
     def handle_data(self, data: str) -> None:
-        self._check_shown(data, "text")
+        if self._colored_depth > 0:
+            self._colored.append(data)
+        else:
+            self._check_shown(data, "text")
 
     def _check_shown(self, text: str, where: str) -> None:
         self.shown += text.count(_HOSTILE)
@@ -323,6 +340,7 @@ class _PicturesMainView(MainView):
 _MAIN_VIEW_TYPES: list[type[MainView]] = [
     HelloMainView,
     DeckMainView,
+    CommMainView,
     ChoicesMainView,
     RangesMainView,
     ReportMainView,

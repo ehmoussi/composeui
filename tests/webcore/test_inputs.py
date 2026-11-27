@@ -14,12 +14,14 @@ pytest.importorskip("httpx2" if sys.version_info >= (3, 11) else "httpx")
 
 from typing import TYPE_CHECKING
 
+from composeui.core._views.inputs import MAX_HIGHLIGHT_SIZE
 from composeui.core.registry import RendererType
 from composeui.core.view import ButtonView, DateRangeInputView, MainView, child, define_view
 from composeui.webcore._renderers.forms import WebFormLabelRenderer
 from composeui.webcore._renderers.inputs import WebFloatInputRenderer
 from composeui.webcore.changes import collect_dirty
 from composeui.webcore.session import WebSession
+from composeui.webcore.webapplication import WebApplication
 from composeui.webcore.webrenderer import (
     UnsupportedEventError,
     handle_event,
@@ -31,6 +33,7 @@ from tests.hours import HoursMainView
 from tests.memory import MemoryMainView
 from tests.ranges import FIRST_DAY, LAST_DAY, RangesMainView
 from tests.webcore.support import (
+    _Browser,
     _count,
     _element,
     _field_id,
@@ -381,10 +384,10 @@ def test_a_text_area_set_on_the_server_keeps_its_first_new_line(
     assert area.text == "\n\nindented <b>"
 
 
-def _text_of_class(markup: str, name: str) -> str:
-    """Get the text of the one element of the class `name`, which holds no other element."""
-    (found,) = re.finditer(rf'class="{name}"[^>]*>([^<]*)<', markup)
-    return found[1]
+def _inner_of_class(markup: str, name: str) -> str:
+    """Get the markup inside the one element of the class `name`, of a tag it doesn't hold."""
+    (found,) = re.finditer(rf'<(\w+) class="{name}"[^>]*>(.*?)</\1>', markup, re.DOTALL)
+    return found[2]
 
 
 def test_a_text_editor_set_on_the_server_comes_swapped_with_its_lines_and_file_name() -> None:
@@ -400,8 +403,8 @@ def test_a_text_editor_set_on_the_server_comes_swapped_with_its_lines_and_file_n
     assert (area.tag, area.text) == ("textarea", "\n\nP ncpus 4")
     assert _element(html, f"{deck_id}-name").text == "study.export"  # its file's name, in its bar
     # a number for each of its lines; the caret at the start, as the field comes
-    assert _text_of_class(html, "cui-editor-lines") == "1\n2"
-    assert _text_of_class(html, "cui-editor-position") == "Line 1, column 1"
+    assert _inner_of_class(html, "cui-editor-lines") == "<span>1</span><span>2</span>"
+    assert _inner_of_class(html, "cui-editor-position") == "Line 1, column 1"
 
     with collect_dirty() as dirty:
         view.deck.export_filename = "run.export"
@@ -411,6 +414,48 @@ def test_a_text_editor_set_on_the_server_comes_swapped_with_its_lines_and_file_n
     descendants = _element(html, deck_id).descendants
     (save,) = [attributes for _, attributes in descendants if "data-save-text" in attributes]
     assert (save["data-save-text"], save["data-filename"]) == (f"{deck_id}-text", "run.export")
+
+
+@pytest.mark.parametrize(
+    ("language", "posted"),
+    [
+        ("python", 'x = "a"\r\ny'),
+        (None, 'x = "a"\r\ny'),
+        ("python", "1" * (MAX_HIGHLIGHT_SIZE + 1)),  # too long to color after each edit
+    ],
+    # pytest puts a test's id in an environment variable, which Windows caps at 32 767 chars
+    ids=["python", "plain", "too-long"],
+)
+def test_a_text_editor_s_edit_brings_back_only_its_text_colored_as_posted(
+    language: str | None, posted: str
+) -> None:
+    view = DeckMainView()
+    view.deck.language = language
+    app = WebApplication(build_main_view=lambda: view)
+    with _Browser(app.create_starlette_app()) as client:
+        client.get("/")
+        deck_id = _widget_id(view.deck.renderer)
+
+        html = client.post(
+            f"/_composeui/widget/{deck_id}", data={"value": posted, "event": "input"}
+        ).text
+
+    # never the field, which the user types in
+    assert _find(html, f"{deck_id}-text") is None
+    colors = _find(html, f"{deck_id}-colors")
+    if language is None or len(posted) > MAX_HIGHLIGHT_SIZE:
+        assert colors is None  # the page shows the text plain, as typed
+    else:
+        assert colors is not None
+        assert colors.attributes["hx-swap-oob"] == "true"
+        assert colors.text == '\nx = "a"\ny'  # its first new line, which a browser drops
+        # a line per block, its colored parts in it
+        assert [tag for tag, attributes in colors.descendants if "class" not in attributes] == [
+            "span",
+            "span",
+        ]
+        kinds = {attributes.get("class") for _, attributes in colors.descendants} - {None}
+        assert kinds == {"cui-hl-operator", "cui-hl-string"}
 
 
 def test_number_and_date_fields_take_a_cleared_value_and_report_a_date_once() -> None:

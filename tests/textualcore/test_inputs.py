@@ -18,6 +18,7 @@ from textual.widgets import (
 )
 from textual_fspicker import FileSave
 
+from composeui.core._views.inputs import HIGHLIGHT_COLORS
 from composeui.core.registry import RendererType
 from composeui.core.view import (
     InputView,
@@ -117,6 +118,39 @@ async def test_a_text_editor_numbers_its_lines_keeps_them_whole_and_indents_with
         await pilot.pause()
         assert view.deck.text.startswith("    P line ")
         assert app.focused is editor  # Tab types, it doesn't leave
+
+
+@pytest.mark.asyncio
+async def test_a_text_editor_colors_its_syntax_and_again_as_the_user_types() -> None:
+    view = DeckMainView()
+    view.deck.text = "x = 1"
+    view.deck.language = "python"
+    app = _app_of(view)
+    editor = _editor_box(view).editor
+
+    def color(y: int, x: int) -> str | None:
+        """Get the color of a cell of the text, as drawn, its line's number left out."""
+        x += editor.gutter_width
+        for segment in editor.render_line(y):
+            if x < len(segment.text):
+                style = segment.style
+                return None if style is None or style.color is None else style.color.name
+            x -= len(segment.text)
+        return None
+
+    async with app.run_test(size=(80, 24)) as pilot:
+        await pilot.pause()
+        is_dark = app.current_theme.dark
+        assert color(0, 4) == HIGHLIGHT_COLORS["number"][is_dark]  # 1
+        app.screen.set_focus(editor)
+        await pilot.pause()
+        await pilot.press("home", *'"""')
+        await pilot.pause()
+        assert color(0, 7) == HIGHLIGHT_COLORS["string"][is_dark]  # 1, now in a string
+
+        view.deck.language = None
+        await pilot.pause()
+        assert color(0, 7) != HIGHLIGHT_COLORS["string"][is_dark]
 
 
 @pytest.mark.asyncio
