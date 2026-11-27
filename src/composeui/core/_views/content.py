@@ -31,6 +31,7 @@ from composeui.core._views.base import (
     define_view,
     emit_if_made,
     notify_renderer,
+    write_view_text,
 )
 from composeui.core.renderer import Renderer, RendererContainer
 from composeui.core.signal import Signal, SignalNoArgs
@@ -456,6 +457,15 @@ def find_in_lines(lines: Sequence[str], query: str) -> list[tuple[int, int, int]
     ]
 
 
+def matches_text(texts: Mapping[str, str], query: str, current: int, count: int) -> str:
+    """Get a search's count of matches, in the words of `texts`: none without a search."""
+    if query == "":
+        return ""
+    if count == 0:
+        return texts.get("no_match", "")
+    return texts.get("matches", "").format(current=current, count=count)
+
+
 def follow_match(
     matches: Sequence[tuple[int, int, int]], first_line: int, current: Optional[tuple[int, int]]
 ) -> int:
@@ -604,18 +614,7 @@ class ConsoleView(View):
 
         Outside a main view, a failure raises `OSError` instead.
         """
-        main_view = None if self._main_view is None else self._main_view()
-        try:
-            path.write_text(self.text, encoding="utf-8")
-        except OSError as error:
-            if main_view is None:
-                raise
-            failed = self.tr("Can't save to {name}: {error}.")
-            main_view.notify(failed.format(name=path.name, error=error), LogType.ERROR)
-            return
-        if main_view is not None:
-            done = self.tr("Saved the output to {name}.")
-            main_view.status_bar.show_message(done.format(name=path.name))
+        write_view_text(self, path, self.text, self.tr("Saved the output to {name}."))
 
     def _add(self, text: str) -> None:
         text, self._escape = self._escape + text, ""

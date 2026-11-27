@@ -44,6 +44,7 @@ from tests.charts import ChartPagesMainView
 from tests.choices import ChoicesMainView
 from tests.console import RunMainView
 from tests.datafiles import DataFileMainView
+from tests.deck import DeckMainView
 from tests.dialogs import DialogsMainView
 from tests.expander import RecordMainView
 from tests.formdialog import PipeMainView as EditedPipeMainView
@@ -304,6 +305,7 @@ def _widgets_of(view: View) -> list[object]:
         WorkersMainView,
         ChoicesMainView,
         RangesMainView,
+        DeckMainView,
     ],
 )
 def test_a_main_view_rendered_again_keeps_every_widget(

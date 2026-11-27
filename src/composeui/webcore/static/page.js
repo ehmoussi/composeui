@@ -825,12 +825,19 @@
   }, true);
   /* a console's Copy all writes its whole text to the clipboard: the page holds the lines
      the view keeps. Without the clipboard (a page over plain HTTP from another host), it
-     selects the text instead, for the user's Ctrl+C. */
+     selects the text instead, for the user's Ctrl+C. A text editor's copies its field's
+     text, as the user sees it. */
   /** @type {WeakMap<HTMLElement, {timer: number}>} */
   var consoleCopies = new WeakMap();
   /** @param {HTMLElement} box */
   function selectConsoleText(box) {
-    window.getSelection()?.selectAllChildren(box);
+    if (box instanceof HTMLTextAreaElement) box.select();
+    else window.getSelection()?.selectAllChildren(box);
+  }
+  /** @param {HTMLElement} box */
+  function consoleText(box) {
+    if (box instanceof HTMLTextAreaElement) return box.value;
+    return /** @type {string} */ (box.textContent);
   }
   document.addEventListener("click", function (event) {
     const button = /** @type {Element} */ (event.target).closest("[data-copy-console]");
@@ -847,7 +854,7 @@
       consoleCopies.set(button, attempt);
       button.removeAttribute("data-console-copied");
       status.textContent = "";
-      navigator.clipboard.writeText(/** @type {string} */ (box.textContent)).then(function () {
+      navigator.clipboard.writeText(consoleText(box)).then(function () {
         // A replaced button or an older attempt must not announce success.
         if (!button.isConnected || consoleCopies.get(button) !== attempt) return;
         button.setAttribute("data-console-copied", "");
@@ -866,6 +873,86 @@
     } else {
       selectConsoleText(box);
     }
+  });
+  /* a text editor's Save writes its field's text to a file, in the page: the server may
+     not have the last edit yet, which posts after a pause or as the field loses the focus */
+  document.addEventListener("click", function (event) {
+    const button = /** @type {Element} */ (event.target).closest("[data-save-text]");
+    if (!(button instanceof HTMLElement)) return;
+    const field = document.getElementById(/** @type {string} */ (button.dataset.saveText));
+    if (!(field instanceof HTMLTextAreaElement)) return;
+    var link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob([field.value], {type: "text/plain"}));
+    link.download = /** @type {string} */ (button.dataset.filename);
+    link.click();
+    /* once the download took the file: a browser can read it after the click returns, and
+       Firefox later than the next task (as `charts.js`'s images) */
+    window.setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
+  });
+  /* a text editor's numbers follow its lines and its scrolling, and its bar says where the
+     caret is: the text never wraps, so a line of the text is a line of the numbers */
+  /** @param {HTMLTextAreaElement} field */
+  function syncEditor(field) {
+    var numbers = /** @type {HTMLElement} */ (field.previousElementSibling);
+    var count = field.value.split("\n").length;
+    if (numbers.dataset.count !== String(count)) {
+      var lines = [];
+      for (var line = 1; line <= count; line++) lines.push(line);
+      numbers.textContent = lines.join("\n");
+      numbers.dataset.count = String(count);
+    }
+    numbers.scrollTop = field.scrollTop;
+  }
+  /** @param {HTMLTextAreaElement} field */
+  function showCaret(field) {
+    var frame = /** @type {HTMLElement} */ (field.closest("[data-cui]"));
+    var place = /** @type {HTMLElement} */ (frame.querySelector("[data-editor-position]"));
+    var before = field.value.slice(0, field.selectionStart);
+    var line = before.split("\n").length;
+    var column = before.length - before.lastIndexOf("\n");
+    place.textContent = /** @type {string} */ (place.dataset.editorPosition)
+      .replace("{line}", String(line)).replace("{column}", String(column));
+  }
+  /** @param {EventTarget | null} target */
+  function editorField(target) {
+    return target instanceof HTMLTextAreaElement && "textEditor" in target.dataset
+      ? target : null;
+  }
+  document.addEventListener("input", function (event) {
+    var field = editorField(event.target);
+    if (field === null) return;
+    syncEditor(field);
+    showCaret(field);
+  });
+  /* scrolling doesn't bubble: caught on its way down */
+  document.addEventListener("scroll", function (event) {
+    var field = editorField(event.target);
+    if (field !== null) syncEditor(field);
+  }, true);
+  document.addEventListener("selectionchange", function () {
+    var field = editorField(document.activeElement);
+    if (field !== null) showCaret(field);
+  });
+  /* in a text editor, Tab indents by four spaces, as an undoable edit that posts as typing
+     does; Escape, then Tab, moves the focus out, so that the keyboard can leave the field */
+  document.addEventListener("keydown", function (event) {
+    var field = event.target;
+    if (!(field instanceof HTMLTextAreaElement) || !("textEditor" in field.dataset)) return;
+    var isLeaving = "leaving" in field.dataset;
+    delete field.dataset.leaving;
+    if (event.key === "Escape") {
+      field.dataset.leaving = "";
+    } else if (event.key === "Tab" && !isLeaving && !event.shiftKey && !event.ctrlKey &&
+        !event.altKey && !event.metaKey) {
+      event.preventDefault();
+      document.execCommand("insertText", false, "    ");
+    }
+  });
+  /* an Escape counts for the next key only while the field keeps the focus: back in it,
+     Tab indents again */
+  document.addEventListener("focusout", function (event) {
+    var field = editorField(event.target);
+    if (field !== null) delete field.dataset.leaving;
   });
   function keepConsoles() {
     document.querySelectorAll("[data-console]").forEach(function (element) {

@@ -62,6 +62,7 @@ from tests.charts import ChartPagesMainView
 from tests.choices import OneBaseMainView
 from tests.console import MAX_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
+from tests.deck import EXPORT, DeckMainView
 from tests.dialogs import DialogsMainView
 from tests.downloading import ReportMainView
 from tests.drawings import DrawingMainView
@@ -287,6 +288,13 @@ def colors_base_url() -> Iterator[str]:
 def run_base_url() -> Iterator[str]:
     """Serve an app writing a run's output to a console, for the whole module."""
     with _serve(WebApplication(build_main_view=RunMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def deck_base_url() -> Iterator[str]:
+    """Serve an app editing a run's `.export` file, for the whole module."""
+    with _serve(WebApplication(build_main_view=DeckMainView).create_starlette_app()) as url:
         yield url
 
 
@@ -2520,6 +2528,48 @@ def test_a_console_s_copy_all_writes_its_whole_text_to_the_clipboard(
     )
     expect(copied).to_have_css("opacity", "0")
     expect(page.get_by_role("status").filter(has_text="Copied")).to_have_count(0)
+    context.close()
+
+
+def test_a_text_editor_numbers_its_lines_indents_with_tab_and_copies_and_saves_its_text(
+    browser: Browser, deck_base_url: str
+) -> None:
+    context = browser.new_context(
+        base_url=deck_base_url, permissions=["clipboard-read", "clipboard-write"]
+    )
+    page = context.new_page()
+    page.goto("/")
+    field = page.get_by_role("textbox")
+    field.click()
+    field.press("Escape")  # as if to leave with Tab, but the user clicks out instead
+    page.get_by_text("study.export", exact=True).click()
+    expect(field).not_to_be_focused()
+    field.click(position={"x": 2, "y": 2})  # back in, before the first line's first letter
+    field.press("Tab")
+    expect(field).to_have_value(f"    {EXPORT}")  # the Escape before the click went with it
+    field.press("Control+End")
+    field.press("Enter")
+    field.press("Tab")
+    field.press_sequentially("P mpi_nbcpu 2")
+    edited = f"    {EXPORT}\n    P mpi_nbcpu 2"
+    expect(field).to_have_value(edited)
+    expect(field).to_be_focused()  # Tab typed, it didn't leave
+    # the numbers follow the new line, and the bar says where the caret is
+    expect(page.locator(".cui-editor-lines")).to_have_text("1 2 3 4 5")
+    expect(page.get_by_text("Line 5, column 18")).to_be_visible()
+    field.press("Home")
+    expect(page.get_by_text("Line 5, column 1", exact=True)).to_be_visible()
+    field.press("Escape")
+    field.press("Tab")
+    expect(field).not_to_be_focused()
+
+    # the text the field shows, the edit too: not the text the page came with
+    page.get_by_role("button", name="Copy all").click()
+    assert _clipboard_becomes(page, edited)
+    with page.expect_download() as download:
+        page.get_by_role("button", name="Save as").click()
+    assert download.value.suggested_filename == "study.export"
+    assert Path(download.value.path()).read_text(encoding="utf-8") == edited
     context.close()
 
 

@@ -75,6 +75,73 @@ is four lines high.
 
 The comment of [`src/examples/pipeform.py`](../../src/examples/pipeform.py) is a text area.
 
+## Text editor
+
+A `TextEditorView` is a box where the user edits the text of a file, for example a solver's
+input file. On the web, the user changes a value in the file they uploaded, and doesn't upload
+it again. To edit a file, read it into `text`. To give the file to a program, write `text` to it:
+
+```python
+from pathlib import Path
+
+from composeui.core.view import (
+    FileUploadView,
+    MainView,
+    TextEditorView,
+    UploadedFile,
+    child,
+    define_view,
+)
+
+
+@define_view
+class StudyView(MainView):
+    upload: FileUploadView = child(FileUploadView, extensions={"Command file": (".comm",)})
+    commands: TextEditorView = child(TextEditorView, export_filename="study.comm")
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.upload.uploaded.connect(self._edit_file)
+
+    def _edit_file(self, file: UploadedFile) -> None:
+        self.commands.text = file.path.read_text(encoding="utf-8")
+        self.commands.export_filename = file.name
+
+    def write_input(self, folder: Path) -> None:
+        (folder / "study.comm").write_text(self.commands.text, encoding="utf-8")
+```
+
+- **The text as in a file.** The text shows in a fixed-width font, with the numbers of its
+  lines on its left. A long line scrolls sideways rather than wrapping.
+- **The bar.** A bar above the text shows `export_filename` and the caret's line and column,
+  "Line 4, column 12" (`texts["position"]`), to find the line that a solver's error names.
+- **Indents.** Tab inserts four spaces. On Qt and Textual, Escape moves the focus out of the
+  editor. On the web, Escape, then Tab, moves it out.
+- **Study data.** `text` is saved, loaded, and reset with the study, as a text area's is. Its
+  signals are a text area's: `text_changed`, `text_edited`, and `editing_finished`, which the
+  editor emits when it loses the focus after a change.
+- **Save or copy the text.** The user saves the text to a file, named `export_filename`
+  (`text.txt` by default) at first, or copies the whole text. `export_text(path)` writes the
+  text in UTF-8, and the status bar says so. On Qt and Textual, "Save as" calls it. On the web,
+  the browser downloads the text, so `export_text` doesn't run and the status bar says nothing.
+  `texts["save"]` and `texts["copy"]` name the controls, "Save as" and "Copy all" by default.
+- **Search the text.** On Qt and Textual, the user searches the text, as in a
+  [console](#console): every match is highlighted, and the count says which one is current.
+  The matches follow the user's edits. On the web, the browser's own search (Ctrl+F) finds in
+  the text.
+
+What each backend shows:
+
+- **Qt** shows a `QPlainTextEdit`. The current line's number is darker than the others. The bar
+  holds a search field, a "Copy all" button, and a "Save as…" button, which opens a save
+  dialog.
+- **Textual** shows a `TextArea`. The bar is one row: a search field and the "Copy all" and
+  "Save as…" buttons. Ctrl+F goes to the search field, Enter shows the next match, and Escape
+  clears the field. The terminal must allow the copy.
+- **The web** shows a `<textarea>` in a frame, which takes the focus ring as a whole. The
+  "Copy all" and "Save as" buttons copy and save the text that the field shows, an edit not sent
+  yet included. To write to the clipboard, the web needs a secure page (HTTPS or `localhost`).
+
 ## Integer input
 
 An `IntInputView` takes a whole number between its `minimum` and `maximum`, for example

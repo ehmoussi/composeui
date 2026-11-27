@@ -206,6 +206,7 @@ from composeui.core._views.inputs import (
     ParsedInputView,
     TextAreaMixin,
     TextAreaView,
+    TextEditorView,
     format_date,
     parse_date,
 )
@@ -431,6 +432,7 @@ __all__ = [
     "TextAnchor",
     "TextAreaMixin",
     "TextAreaView",
+    "TextEditorView",
     "TextRole",
     "TextShape",
     "TextStyle",

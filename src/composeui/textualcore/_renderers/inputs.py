@@ -9,6 +9,7 @@ from textual.content import Content
 from textual.validation import Integer, Number
 from typing_extensions import Protocol, override
 
+from composeui.core._views.content import matches_text
 from composeui.core._views.inputs import date_hint
 from composeui.core.renderer import ViewLike
 from composeui.core.view import DateRangeInputMixin
@@ -17,9 +18,11 @@ from composeui.textualcore.widgets.composedateinput import ComposeDateInput
 from composeui.textualcore.widgets.composeinput import ComposeInput
 from composeui.textualcore.widgets.composerange import ComposeDateRangeInput
 from composeui.textualcore.widgets.composetextarea import ComposeTextArea
+from composeui.textualcore.widgets.composetexteditor import ComposeTextEditorBox
 
 if TYPE_CHECKING:
     import datetime
+    from pathlib import Path
 
     from composeui.core.signal import Signal, SignalNoArgs
 
@@ -116,6 +119,89 @@ class TextualTextAreaRenderer(TextualWidgetRenderer[InputViewLike, ComposeTextAr
         if self._is_edited:
             self._is_edited = False
             self._view.editing_finished.emit()
+
+
+class TextEditorViewLike(InputViewLike, Protocol):
+    texts: dict[str, str]
+    export_filename: str
+
+    def export_text(self, path: Path) -> None: ...
+
+
+class TextualTextEditorRenderer(TextualWidgetRenderer[TextEditorViewLike, ComposeTextEditorBox]):
+    """The text in a `ComposeTextEditor`, under its search, Copy and Save controls."""
+
+    def __init__(self, view: TextEditorViewLike) -> None:
+        super().__init__(view)
+        self._is_edited = False
+        self._refresh_dispatcher.update(
+            {
+                "text": self._refresh_text,
+                "placeholder": self._refresh_placeholder,
+                "texts": self._refresh_texts,
+                "export_filename": self._refresh_export_filename,
+            }
+        )
+
+    @override
+    def render(self) -> None:
+        if self._rendered_object is None:
+            self._rendered_object = ComposeTextEditorBox()
+            editor = self._rendered_object.editor
+            editor.value_changed.connect(self._update_text)
+            editor.value_submitted.connect(self._editing_finished)
+            editor.matches_changed.connect(self._show_matches)
+            self._rendered_object.save_path_chosen.connect(self._view.export_text)
+
+    @staticmethod
+    def _refresh_text(
+        _view: TextEditorViewLike, rendered_object: ComposeTextEditorBox, value: str
+    ) -> None:
+        if value != rendered_object.editor.text:  # the same text keeps the cursor
+            rendered_object.editor.text = value
+
+    @staticmethod
+    def _refresh_placeholder(
+        _view: TextEditorViewLike, rendered_object: ComposeTextEditorBox, value: str
+    ) -> None:
+        rendered_object.editor.placeholder = value
+
+    @staticmethod
+    def _refresh_texts(
+        _view: TextEditorViewLike, rendered_object: ComposeTextEditorBox, value: dict[str, str]
+    ) -> None:
+        rendered_object.copy.label = value.get("copy", "")
+        rendered_object.save.label = f"{value.get('save', '')}…"
+        rendered_object.set_search_text(value.get("search", ""))
+        rendered_object.show_position(value.get("position", ""))
+
+    @staticmethod
+    def _refresh_export_filename(
+        _view: TextEditorViewLike, rendered_object: ComposeTextEditorBox, value: str
+    ) -> None:
+        rendered_object.export_filename = value
+        rendered_object.file_name.update(value)
+
+    def _update_text(self, text: str) -> None:
+        if text == self._view.text:  # the text the view set, not an edit
+            return
+        self._is_edited = True
+        with self.stop_refresh():
+            self._view.text = text
+        self._view.text_changed.emit(text)
+        self._view.text_edited.emit(text)
+
+    def _editing_finished(self) -> None:
+        # as Qt and the browser, only after a change: leaving the editor doesn't commit it
+        if self._is_edited:
+            self._is_edited = False
+            self._view.editing_finished.emit()
+
+    def _show_matches(self, current: int, count: int) -> None:
+        """Show the search's count of matches: none without a search."""
+        assert self._rendered_object is not None
+        box = self._rendered_object
+        box.matches.update(matches_text(self._view.texts, box.search.value, current, count))
 
 
 class FloatInputViewLike(ViewLike, Protocol):

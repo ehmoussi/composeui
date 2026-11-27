@@ -18,12 +18,12 @@ from qtpy.QtWidgets import (
 )
 from typing_extensions import override
 
-from composeui.core._views.content import follow_match
+from composeui.core._views.content import follow_match, matches_text
 from composeui.core.view import find_in_lines
 from composeui.qtcore.widgets.qplaintext import plain_label
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
 
     from qtpy.QtGui import QKeyEvent
 
@@ -37,16 +37,12 @@ _MATCH_COLOR = QColor("#fde68a")
 _CURRENT_COLOR = QColor("#f59e0b")
 
 
-class QConsole(QPlainTextEdit):
-    """Read-only plain text in a fixed-width font, a block per line, the last being written.
-
-    `set_max_lines` keeps that many lines, the line being written not counted: Qt drops
-    the oldest blocks. The user selects and copies the text. Each line's styled parts, if
-    given, take their colors, weight, slant and underline.
+class QSearchText(QPlainTextEdit):
+    """Plain text in a fixed-width font, which a search finds in.
 
     `set_query` highlights the matches of a search (`find_in_lines`), and shows the first;
-    `step` shows the next, or the previous, around the ends. New lines keep the current
-    match, or the next one if it went with the oldest lines (`follow_match`).
+    `step` shows the next, or the previous, around the ends. A change of the text keeps the
+    current match, or the next one if it went (`follow_match`).
     `matches_changed` emits the current match's number, from 1, and the count: 0 and 0
     without a match.
     """
@@ -55,7 +51,6 @@ class QConsole(QPlainTextEdit):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
-        self.setReadOnly(True)
         self.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
         self._query = ""
         #: the index of the current match, in the matches
@@ -64,52 +59,6 @@ class QConsole(QPlainTextEdit):
         self._current_match: tuple[int, int] | None = None
         #: the lines dropped since the text was set, the oldest ones
         self._dropped = 0
-
-    def set_max_lines(self, count: int) -> None:
-        before = self.blockCount()
-        self.setMaximumBlockCount(count + 1)
-        self._dropped += before - self.blockCount()
-
-    def set_text(self, text: str, styles: Sequence[LineStyles] = ()) -> None:
-        """Show `text` instead, from its end, its lines styled by `styles`, if given."""
-        self.setCurrentCharFormat(QTextCharFormat())  # else the text takes the last one's
-        self.setPlainText(text)
-        self._style_lines(0, styles)
-        self._dropped = 0
-        self._scroll_to_end()
-        self._show_matches(is_moved=False)
-
-    def add(self, lines: list[str], last_line: str, styles: Sequence[LineStyles] = ()) -> None:
-        """End the line being written with `lines`, then write `last_line` in its place.
-
-        `styles`, if given, style these lines, `last_line` last. The text keeps its place
-        on the screen unless the end was shown.
-        """
-        bar = self.verticalScrollBar()
-        is_at_end = bar.value() == bar.maximum()
-        cursor = QTextCursor(self.document())
-        cursor.movePosition(QTextCursor.MoveOperation.End)
-        cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
-        before = self.blockCount()
-        # plain: else it takes the style of the text it replaces
-        cursor.insertText("\n".join([*lines, last_line]), QTextCharFormat())
-        self._dropped += before + len(lines) - self.blockCount()
-        kept = min(len(styles), self.blockCount())  # the oldest new lines may have gone too
-        self._style_lines(self.blockCount() - kept, styles[len(styles) - kept :])
-        if is_at_end:
-            self._scroll_to_end()
-        self._show_matches(is_moved=False)
-
-    def _style_lines(self, first: int, styles: Sequence[LineStyles]) -> None:
-        """Style the lines from the block `first` on, by `styles`, one per line."""
-        document = self.document()
-        for number, line_styles in enumerate(styles, start=first):
-            position = document.findBlockByNumber(number).position()
-            for start, end, style in line_styles:
-                cursor = QTextCursor(document)
-                cursor.setPosition(position + start)
-                cursor.setPosition(position + end, QTextCursor.MoveMode.KeepAnchor)
-                cursor.setCharFormat(_char_format(style))
 
     def set_query(self, query: str) -> None:
         """Highlight the matches of `query`, and show the first."""
@@ -160,6 +109,66 @@ class QConsole(QPlainTextEdit):
             self.ensureCursorVisible()
         self.matches_changed.emit(self._current + 1 if matches else 0, len(matches))
 
+
+class QConsole(QSearchText):
+    """Read-only plain text, a block per line, the last being written.
+
+    `set_max_lines` keeps that many lines, the line being written not counted: Qt drops
+    the oldest blocks. The user selects and copies the text. Each line's styled parts, if
+    given, take their colors, weight, slant and underline. New lines keep the search's
+    current match, or the next one if it went with the oldest lines.
+    """
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.setReadOnly(True)
+
+    def set_max_lines(self, count: int) -> None:
+        before = self.blockCount()
+        self.setMaximumBlockCount(count + 1)
+        self._dropped += before - self.blockCount()
+
+    def set_text(self, text: str, styles: Sequence[LineStyles] = ()) -> None:
+        """Show `text` instead, from its end, its lines styled by `styles`, if given."""
+        self.setCurrentCharFormat(QTextCharFormat())  # else the text takes the last one's
+        self.setPlainText(text)
+        self._style_lines(0, styles)
+        self._dropped = 0
+        self._scroll_to_end()
+        self._show_matches(is_moved=False)
+
+    def add(self, lines: list[str], last_line: str, styles: Sequence[LineStyles] = ()) -> None:
+        """End the line being written with `lines`, then write `last_line` in its place.
+
+        `styles`, if given, style these lines, `last_line` last. The text keeps its place
+        on the screen unless the end was shown.
+        """
+        bar = self.verticalScrollBar()
+        is_at_end = bar.value() == bar.maximum()
+        cursor = QTextCursor(self.document())
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        cursor.movePosition(QTextCursor.MoveOperation.StartOfBlock, QTextCursor.MoveMode.KeepAnchor)
+        before = self.blockCount()
+        # plain: else it takes the style of the text it replaces
+        cursor.insertText("\n".join([*lines, last_line]), QTextCharFormat())
+        self._dropped += before + len(lines) - self.blockCount()
+        kept = min(len(styles), self.blockCount())  # the oldest new lines may have gone too
+        self._style_lines(self.blockCount() - kept, styles[len(styles) - kept :])
+        if is_at_end:
+            self._scroll_to_end()
+        self._show_matches(is_moved=False)
+
+    def _style_lines(self, first: int, styles: Sequence[LineStyles]) -> None:
+        """Style the lines from the block `first` on, by `styles`, one per line."""
+        document = self.document()
+        for number, line_styles in enumerate(styles, start=first):
+            position = document.findBlockByNumber(number).position()
+            for start, end, style in line_styles:
+                cursor = QTextCursor(document)
+                cursor.setPosition(position + start)
+                cursor.setPosition(position + end, QTextCursor.MoveMode.KeepAnchor)
+                cursor.setCharFormat(_char_format(style))
+
     def _scroll_to_end(self) -> None:
         bar = self.verticalScrollBar()
         bar.setValue(bar.maximum())
@@ -194,22 +203,26 @@ class QSearchField(QLineEdit):
             super().keyPressEvent(event)
 
 
-class QConsoleBox(QWidget):
-    """A `QConsole` under its controls: a search at the left, Copy and Save at the right.
+class QSearchBox(QWidget):
+    """A `QSearchText` under its controls: a search at the left, Copy and Save at the right.
 
     `search` and the count of its `matches` first; `copy` and `save` at the right, as a
     large table's export.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, text: QSearchText) -> None:
         super().__init__()
-        self.text = QConsole()
+        self.text = text
+        # a child before the controls: first in the focus chain, a window opens with the focus
+        # in the text
+        text.setParent(self)
         self.search = QSearchField()
         self.search.setClearButtonEnabled(True)
         self.matches = plain_label()
         self.copy = QToolButton()
         self.save = QToolButton()
-        controls = QHBoxLayout()
+        #: the row of the controls, above the text
+        self.controls = controls = QHBoxLayout()
         controls.addWidget(self.search)
         controls.addWidget(self.matches)
         controls.addStretch(1)
@@ -223,3 +236,22 @@ class QConsoleBox(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self.search.textChanged.connect(self.text.set_query)
         self.search.stepped.connect(lambda is_backwards: self.text.step(is_backwards=is_backwards))
+
+    def set_texts(self, texts: Mapping[str, str]) -> None:
+        """Name the controls, by what they're for (see `CONSOLE_TEXTS` and `EDITOR_TEXTS`)."""
+        self.save.setText(f"{texts.get('save', '')}…")
+        self.copy.setText(texts.get("copy", ""))
+        self.search.setPlaceholderText(texts.get("search", ""))
+
+    def show_matches(self, current: int, count: int, texts: Mapping[str, str]) -> None:
+        """Show the search's count of matches, in `texts`' words: none without a search."""
+        self.matches.setText(matches_text(texts, self.search.text(), current, count))
+
+
+class QConsoleBox(QSearchBox):
+    """A `QConsole` under its controls."""
+
+    text: QConsole
+
+    def __init__(self) -> None:
+        super().__init__(QConsole())

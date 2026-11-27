@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime
+import re
 import sys
 
 import pytest
@@ -25,6 +26,7 @@ from composeui.webcore.webrenderer import (
     render_dirty,
 )
 from tests.bookings import BookingMainView
+from tests.deck import DeckMainView
 from tests.hours import HoursMainView
 from tests.memory import MemoryMainView
 from tests.ranges import FIRST_DAY, LAST_DAY, RangesMainView
@@ -377,6 +379,38 @@ def test_a_text_area_set_on_the_server_keeps_its_first_new_line(
     assert area.tag == "textarea"
     # a browser drops a new line just after `<textarea>`: it must not be the text's
     assert area.text == "\n\nindented <b>"
+
+
+def _text_of_class(markup: str, name: str) -> str:
+    """Get the text of the one element of the class `name`, which holds no other element."""
+    (found,) = re.finditer(rf'class="{name}"[^>]*>([^<]*)<', markup)
+    return found[1]
+
+
+def test_a_text_editor_set_on_the_server_comes_swapped_with_its_lines_and_file_name() -> None:
+    view = DeckMainView()
+    view.render(RendererType.WEB)
+    deck_id = _widget_id(view.deck.renderer)
+
+    with collect_dirty() as dirty:
+        view.deck.text = "\nP ncpus 4"
+    html = render_dirty(dirty)
+    area = _element(html, f"{deck_id}-text")
+    # a browser drops a new line just after `<textarea>`: it must not be the text's
+    assert (area.tag, area.text) == ("textarea", "\n\nP ncpus 4")
+    assert _element(html, f"{deck_id}-name").text == "study.export"  # its file's name, in its bar
+    # a number for each of its lines; the caret at the start, as the field comes
+    assert _text_of_class(html, "cui-editor-lines") == "1\n2"
+    assert _text_of_class(html, "cui-editor-position") == "Line 1, column 1"
+
+    with collect_dirty() as dirty:
+        view.deck.export_filename = "run.export"
+    html = render_dirty(dirty)
+    _swapped(html, deck_id)
+    # the page's script saves the area's text under that name
+    descendants = _element(html, deck_id).descendants
+    (save,) = [attributes for _, attributes in descendants if "data-save-text" in attributes]
+    assert (save["data-save-text"], save["data-filename"]) == (f"{deck_id}-text", "run.export")
 
 
 def test_number_and_date_fields_take_a_cleared_value_and_report_a_date_once() -> None:

@@ -51,6 +51,7 @@ from composeui.core.translation import (
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Mapping
     from contextlib import AbstractContextManager
+    from pathlib import Path
     from typing import SupportsIndex
 
     from attrs import AttrsInstance
@@ -822,6 +823,24 @@ class View:
 
 
 register_types(View, Signal)
+
+
+def write_view_text(view: View, path: Path, text: str, done: str) -> None:
+    """Write `text` to the file `path`, in UTF-8, then show `done`, with the file's name.
+
+    Outside a main view, a failure raises `OSError` instead of telling the user.
+    """
+    main_view = None if view._main_view is None else view._main_view()  # noqa: SLF001 (set as the main view is built)
+    try:
+        path.write_text(text, encoding="utf-8")
+    except OSError as error:
+        if main_view is None:
+            raise
+        failed = view.tr("Can't save to {name}: {error}.")
+        main_view.notify(failed.format(name=path.name, error=error), LogType.ERROR)
+        return
+    if main_view is not None:
+        main_view.status_bar.show_message(done.format(name=path.name))
 
 
 def _unstructure_date(value: datetime.date) -> str:

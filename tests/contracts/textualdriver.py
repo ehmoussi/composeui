@@ -12,6 +12,7 @@ from composeui.core.registry import RendererType
 from composeui.textualcore._renderers.navigation import TextualMainRenderer
 from composeui.textualcore.widgets.composerange import ComposeRangeSlider
 from composeui.textualcore.widgets.composeslider import ComposeSlider
+from composeui.textualcore.widgets.composetexteditor import ComposeTextEditorBox
 from tests.textualcore.support import _widget
 
 if TYPE_CHECKING:
@@ -52,7 +53,9 @@ class TextualDriver:
         await self._press("f7" if isinstance(box, TextArea) else "ctrl+shift+a", *keys)
 
     async def leave(self, view: View) -> None:
-        await self._press("tab")  # a text area's too: it goes to the next field
+        # a text area's Tab too goes to the next field; a text editor's indents, Escape leaves
+        is_editor = isinstance(_widget(view), ComposeTextEditorBox)
+        await self._press("escape" if is_editor else "tab")
         assert not any(box.has_focus for box in _text_boxes(view))
 
     def shown_text(self, view: View, *, part: int = 0) -> str:
@@ -97,11 +100,13 @@ class TextualDriver:
 def _text_boxes(view: View) -> list[Input | TextArea]:
     """Find the boxes that the user types in, in order.
 
-    The field, or its own: a date's, a file path's, a date range's two.
+    The field, or its own: a date's, a file path's, a date range's two; a text editor's text.
     """
     field = _widget(view)
     if isinstance(field, (Input, TextArea)):
         return [field]
+    if isinstance(field, ComposeTextEditorBox):  # not its search
+        return [field.editor]
     boxes = [box for box in field.query("Input, TextArea") if isinstance(box, (Input, TextArea))]
     assert boxes
     return boxes
