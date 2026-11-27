@@ -12,7 +12,7 @@ from markupsafe import Markup
 from typing_extensions import Protocol, override
 
 from composeui.core._views.controls import RANGE_DASH
-from composeui.core._views.inputs import date_hint
+from composeui.core._views.inputs import MAX_HIGHLIGHT_SIZE, date_hint, highlight_lines
 from composeui.core.renderer import ViewLike
 from composeui.core.view import DateRangeInputMixin, parse_date
 from composeui.webcore.changes import _DIRTY
@@ -21,6 +21,7 @@ from composeui.webcore.webrenderer import WebRenderer, _icon
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from composeui.core._views.inputs import Lexer
     from composeui.core.signal import Signal, SignalNoArgs
 
 
@@ -166,31 +167,44 @@ class WebTextAreaRenderer(WebInputRenderer):
 class TextEditorViewLike(InputViewLike, Protocol):
     texts: dict[str, str]
     export_filename: str
+    language: str | Lexer | None
 
     def tr(self, text: str) -> str: ...
 
 
 class WebTextEditorRenderer(WebTextAreaRenderer):
-    """A `<textarea>` in a frame: a bar above, and the numbers of its lines at its left.
+    """A `<textarea>` in a frame: a bar above, the numbers of its lines at its left.
 
-    The bar shows `export_filename`, the caret's line and column, and the Copy all and Save
-    buttons. The text posts its edits as `WebTextAreaRenderer` does. The page's script keeps
-    the numbers and the caret's place in step with the text, and copies or saves the text
-    that the field shows, not the server's: a click on Save follows an edit not posted yet.
-    In the field, Tab inserts four spaces, and Escape, then Tab, moves the focus out (see
-    `page.js`). The browser's own search finds in the text.
+    The bar shows `export_filename`, a search, the caret's line and column, and the Copy all
+    and Save buttons. The field's text is transparent: a `<pre>` under it shows the text, in
+    its syntax's colors with a `language`. The field posts its edits as
+    `WebTextAreaRenderer` does, and the answer to an edit brings that `<pre>` alone, colored
+    for the text posted. The page's script shows the text plain until colors for the same
+    text arrive, keeps the numbers and the caret's place in step, highlights the search's
+    matches, and copies or saves the text that the field shows, not the server's: a click on
+    Save follows an edit not posted yet. In the field, Tab inserts four spaces, and Escape,
+    then Tab, moves the focus out (see `page.js`).
     """
 
     _role = "text_editor"
 
     def __init__(self, view: TextEditorViewLike) -> None:
         super().__init__(view)
+        #: the whole editor is to go to the page, not only the colors of its text
+        self._is_whole = True
         self._refresh_dispatcher.update(
-            {"texts": self._mark_dirty, "export_filename": self._mark_dirty}
+            {
+                "texts": self._mark_dirty,
+                "export_filename": self._mark_dirty,
+                "language": self._mark_dirty,
+            }
         )
 
     @override
     def to_html(self, *, oob: bool = False) -> Markup:
+        is_whole, self._is_whole = self._is_whole, False
+        if oob and not is_whole:
+            return self._colors_html(oob=True)
         view = cast("TextEditorViewLike", self._view)
         disabled = "" if self.is_enabled else " disabled"
         line_count = view.text.count("\n") + 1
@@ -198,6 +212,11 @@ class WebTextEditorRenderer(WebTextAreaRenderer):
             '<div {root_attributes} class="cui-editor">'
             '<div class="cui-editor-bar">{file_icon}'
             '<span id="{widget_id}-name" class="cui-editor-name">{filename}</span>'
+            '<input type="search" id="{widget_id}-search" class="cui-editor-search"'
+            ' placeholder="{search}" aria-label="{search}" autocomplete="off"'
+            ' data-editor-search="{widget_id}-colors" data-matches="{matches}"'
+            ' data-no-match="{no_match}">'
+            '<span class="cui-editor-matches" aria-live="polite" data-editor-matches></span>'
             '<span class="cui-editor-position" data-editor-position="{position}">'
             "{first_position}</span>"
             '<button type="button" class="btn btn-ghost btn-xs" aria-label="{copy}"'
@@ -210,21 +229,25 @@ class WebTextEditorRenderer(WebTextAreaRenderer):
             '{save_icon}<span class="cui-editor-label" aria-hidden="true">{save}</span>'
             "</button></div>"
             '<div class="cui-editor-body">'
-            '<pre class="cui-editor-lines" aria-hidden="true">{numbers}</pre>'
+            '<pre class="cui-editor-lines" aria-hidden="true" data-editor-lines>{numbers}</pre>'
+            '<div class="cui-editor-code">{colors}'
             '<textarea id="{widget_id}-text" class="cui-editor-text" rows="18"'
-            ' wrap="off" spellcheck="false" data-text-editor'
+            ' wrap="off" spellcheck="false" data-text-editor="{widget_id}-colors"'
             ' aria-labelledby="{widget_id}-name" name="value" placeholder="{placeholder}"'
             ' hx-post="/_composeui/widget/{widget_id}"'
             ' hx-trigger="input changed delay:300ms, change"'
             ' data-post-event hx-swap="none" hx-sync="this:queue all"'
             ' autocomplete="off"'
             # the parser drops a new line just after the tag: this one, not the text's
-            "{disabled}>\n{text}</textarea></div></div>"
+            "{disabled}>\n{text}</textarea></div></div></div>"
         ).format(
             root_attributes=self._root_attributes(oob=oob),
             widget_id=self.widget_id,
             file_icon=_icon("file", "size-4 shrink-0 opacity-60"),
             filename=view.export_filename,
+            search=view.texts.get("search", ""),
+            matches=view.texts.get("matches", ""),
+            no_match=view.texts.get("no_match", ""),
             position=view.texts.get("position", ""),
             # a field swapped in has its caret at the start, until the page's script says
             first_position=view.texts.get("position", "").format(line=1, column=1),
@@ -233,11 +256,59 @@ class WebTextEditorRenderer(WebTextAreaRenderer):
             copy_icon=_icon("copy", "size-3.5"),
             save=view.texts.get("save", ""),
             save_icon=_icon("save", "size-3.5"),
-            numbers="\n".join(str(number) for number in range(1, line_count + 1)),
+            numbers=Markup("").join(
+                Markup("<span>{}</span>").format(number) for number in range(1, line_count + 1)
+            ),
+            colors=self._colors_html(oob=False),
             placeholder=view.placeholder,
             disabled=disabled,
             text=view.text,
         )
+
+    @override
+    def dispatch(self, event: str, form: Mapping[str, str]) -> None:
+        view = cast("TextEditorViewLike", self._view)
+        before = view.text
+        super().dispatch(event, form)
+        is_colored = view.language is not None and len(view.text) <= MAX_HIGHLIGHT_SIZE
+        if is_colored and view.text != before:
+            # the colors of the text posted, without the field, which the user types in; a
+            # text too long for colors shows plain, as the page shows a text it has none for
+            super()._mark_dirty(view, "", None)
+
+    def _colors_html(self, *, oob: bool) -> Markup:
+        """Render the text under the field, each colored part in a `<span>` of its kind."""
+        view = cast("TextEditorViewLike", self._view)
+        lines: list[Markup] = []
+        for line, parts in zip(view.text.split("\n"), highlight_lines(view.text, view.language)):
+            pieces: list[Markup] = []
+            position = 0
+            for start, end, kind in parts:
+                pieces.append(Markup("{}").format(line[position:start]))
+                pieces.append(
+                    Markup('<span class="cui-hl-{}">{}</span>').format(kind, line[start:end])
+                )
+                position = end
+            pieces.append(Markup("{}").format(line[position:]))
+            lines.append(Markup("").join(pieces))
+        swap = Markup(' hx-swap-oob="true"') if oob else Markup()
+        # a line per block, ended by its new line but the last: a narrow editor wraps a line on
+        # several rows, which its number takes the height of (`page.js`)
+        ended = [Markup("{}\n").format(line) for line in lines[:-1]] + lines[-1:]
+        return Markup(
+            '<pre id="{}-colors" class="cui-editor-colors" aria-hidden="true"{}>'
+            # the parser drops a new line just after the tag, as `<textarea>`'s
+            "\n{}</pre>"
+        ).format(
+            self.widget_id,
+            swap,
+            Markup("").join(Markup("<span>{}</span>").format(line) for line in ended),
+        )
+
+    @override
+    def _mark_dirty(self, view: InputViewLike, rendered_object: str, value: Any) -> None:
+        self._is_whole = True
+        super()._mark_dirty(view, rendered_object, value)
 
 
 class _NumberFieldViewLike(TextFieldViewLike, Protocol):

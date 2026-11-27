@@ -62,7 +62,7 @@ from tests.charts import ChartPagesMainView
 from tests.choices import OneBaseMainView
 from tests.console import MAX_LINES, ColoredRunMainView, RunMainView
 from tests.datafiles import DataFileMainView
-from tests.deck import EXPORT, DeckMainView
+from tests.deck import COMM, EXPORT, CommMainView, DeckMainView
 from tests.dialogs import DialogsMainView
 from tests.downloading import ReportMainView
 from tests.drawings import DrawingMainView
@@ -295,6 +295,13 @@ def run_base_url() -> Iterator[str]:
 def deck_base_url() -> Iterator[str]:
     """Serve an app editing a run's `.export` file, for the whole module."""
     with _serve(WebApplication(build_main_view=DeckMainView).create_starlette_app()) as url:
+        yield url
+
+
+@pytest.fixture(scope="module")
+def comm_base_url() -> Iterator[str]:
+    """Serve an app editing a command file in Python's colors, for the whole module."""
+    with _serve(WebApplication(build_main_view=CommMainView).create_starlette_app()) as url:
         yield url
 
 
@@ -2555,7 +2562,7 @@ def test_a_text_editor_numbers_its_lines_indents_with_tab_and_copies_and_saves_i
     expect(field).to_have_value(edited)
     expect(field).to_be_focused()  # Tab typed, it didn't leave
     # the numbers follow the new line, and the bar says where the caret is
-    expect(page.locator(".cui-editor-lines")).to_have_text("1 2 3 4 5")
+    expect(page.locator(".cui-editor-lines > span")).to_have_text(["1", "2", "3", "4", "5"])
     expect(page.get_by_text("Line 5, column 18")).to_be_visible()
     field.press("Home")
     expect(page.get_by_text("Line 5, column 1", exact=True)).to_be_visible()
@@ -2571,6 +2578,97 @@ def test_a_text_editor_numbers_its_lines_indents_with_tab_and_copies_and_saves_i
     assert download.value.suggested_filename == "study.export"
     assert Path(download.value.path()).read_text(encoding="utf-8") == edited
     context.close()
+
+
+def test_a_text_editor_colors_the_text_typed_never_older_text_and_searches_it(
+    browser: Browser, comm_base_url: str
+) -> None:
+    page = browser.new_page(base_url=comm_base_url)
+    held: list[Route] = []
+
+    def hold(route: Route) -> None:
+        held.append(route)  # each edit's answer, held until the test lets it go
+
+    def held_count(count: int) -> None:
+        """Wait, bounded, until `count` edits are held: Playwright calls `hold` between calls."""
+        for _ in range(200):
+            if len(held) == count:
+                return
+            page.evaluate("() => new Promise(requestAnimationFrame)")
+        assert len(held) == count
+
+    page.route("**/_composeui/widget/**", hold)
+    page.goto("/")
+    field = page.get_by_role("textbox", name="study.comm")
+    shown = page.locator(".cui-editor-colors")
+    field.click()
+    field.press("Control+End")
+    field.press_sequentially('\nx = "')
+    held_count(1)
+    field.press_sequentially('beam"')  # the next edit waits behind it (`hx-sync`)
+    expect(shown).to_have_text(f'{COMM}\nx = "beam"')  # shown at once, plain
+
+    # the colors of the older text come: the text typed since stays shown, plain
+    with page.expect_response("**/_composeui/widget/**"):
+        held.pop(0).continue_()
+    held_count(1)
+    assert shown.evaluate("pre => pre.textContent") == field.input_value()
+    expect(shown.locator(".cui-hl-string")).to_have_count(0)
+    with page.expect_response("**/_composeui/widget/**"):
+        held.pop(0).continue_()
+    expect(shown.locator(".cui-hl-string")).to_have_text('"beam"')  # its own colors
+    page.unroute("**/_composeui/widget/**")
+
+    search = page.get_by_role("searchbox", name="Search")
+    search.fill("mesh")
+    expect(page.get_by_text("1 of 2")).to_be_visible()
+    search.press("Enter")
+    expect(page.get_by_text("2 of 2")).to_be_visible()
+    field.press("Control+Home")
+    field.press_sequentially("mesh")  # a match before the current one
+    expect(page.get_by_text("3 of 3")).to_be_visible()
+
+    # the editor comes again, in French: its search too, the query kept
+    page.get_by_role("button", name="Language").click()
+    page.get_by_role("button", name="Français").click()
+    search = page.get_by_role("searchbox", name="Rechercher")
+    expect(search).to_have_value("mesh")
+    expect(page.get_by_text("3 sur 3")).to_be_visible()
+    page.close()
+
+
+def test_a_narrow_text_editor_wraps_its_long_lines_each_beside_its_number(
+    browser: Browser, comm_base_url: str
+) -> None:
+    page = browser.new_page(base_url=comm_base_url, viewport={"width": 1000, "height": 760})
+    page.goto("/")
+    field = page.get_by_role("textbox", name="study.comm")
+    numbers = page.locator(".cui-editor-lines > span")
+    lines = page.locator(".cui-editor-colors > span")
+    expect(numbers).to_have_count(2)
+    page.set_viewport_size({"width": 375, "height": 760})  # a phone turned upright
+    # the numbers follow the lines wrapped anew, without an edit
+    expect(numbers.nth(0)).to_have_css("height", f"{_box(lines.nth(0))['height']:g}px")
+
+    def beside(line: int) -> None:
+        """Check that the number of `line`, from 0, stands beside its first row."""
+        number, text = _box(numbers.nth(line)), _box(lines.nth(line))
+        assert number["y"] == pytest.approx(text["y"], abs=0.5)
+
+    row = field.evaluate("field => parseFloat(getComputedStyle(field).lineHeight)")
+    assert _box(lines.nth(0))["height"] >= 2 * row  # wrapped, on several rows
+    assert _box(numbers.nth(0))["height"] == pytest.approx(_box(lines.nth(0))["height"])
+    beside(1)
+    field.click()
+    field.press("Control+End")
+    with _posted(page):  # typed, shown plain, then in its colors: wrapped both times
+        field.press_sequentially(f'\nnote = "{"long " * 12}"\nFIN()')
+        beside(2)
+        beside(3)
+    expect(lines.nth(2).locator(".cui-hl-string")).to_have_count(1)
+    beside(3)
+    assert field.evaluate("field => field.scrollWidth - field.clientWidth") == 0
+    page.close()
 
 
 def test_a_table_row_is_selected_by_click_or_enter_and_keeps_the_focus(

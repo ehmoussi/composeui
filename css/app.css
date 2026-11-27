@@ -595,12 +595,30 @@ body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {
   font-family: var(--font-mono);
   font-weight: 500;
 }
-.cui-editor-position {
-  margin-left: auto;
+.cui-editor-search {
+  width: 10rem;
+  height: 1.5rem;
   padding: 0 0.5rem;
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--radius-field);
+  background-color: var(--color-base-100);
+  font-size: 0.75rem;
+}
+.cui-editor-search:focus {
+  outline: 2px solid color-mix(in oklab, var(--color-primary) 45%, transparent);
+  outline-offset: 0;
+}
+.cui-editor-matches,
+.cui-editor-position {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   color: color-mix(in oklab, var(--color-base-content) 60%, transparent);
+}
+.cui-editor-matches {
+  font-size: 0.75rem;
+}
+.cui-editor-position {
+  padding: 0 0.5rem;
 }
 .cui-editor-body {
   display: flex;
@@ -610,6 +628,7 @@ body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {
   resize: vertical;
 }
 .cui-editor-lines,
+.cui-editor-colors,
 .cui-editor-text {
   margin: 0;
   padding-top: 0.75rem;
@@ -617,6 +636,7 @@ body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {
   font-family: var(--font-mono);
   font-size: 0.875rem;
   line-height: 1.5rem;
+  tab-size: 4;
 }
 .cui-editor-lines {
   min-width: 3rem;
@@ -631,36 +651,105 @@ body:has(.cui-sidebar[hidden]) [data-sidebar-toggle] {
   text-align: right;
   user-select: none;
 }
-.cui-editor-text {
+/* the field over the text that the page shows under it: the field's own text is transparent,
+   its caret and selection are not; both scroll together (`page.js`) */
+.cui-editor-code {
+  display: grid;
   flex: 1;
   min-width: 0;
+}
+.cui-editor-colors,
+.cui-editor-text {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
   padding-left: 0.875rem;
   padding-right: 0.875rem;
+  white-space: pre;
+}
+/* a line, and its number, per block: a narrow editor wraps a line on several rows, and its
+   number takes its height (`page.js`) */
+.cui-editor-lines > span,
+.cui-editor-colors > span {
+  display: block;
+  min-height: 1.5rem;
+}
+.cui-editor-colors {
+  /* the room of the field's scroll bars: the text scrolls as far as the field's */
+  padding-right: 2.5rem;
+  padding-bottom: 1.75rem;
+  overflow: hidden;
+  pointer-events: none;
+}
+.cui-editor-text {
   overflow: auto;
   border: 0;
   outline: none;
   resize: none;
   background-color: transparent;
-  color: inherit;
-  white-space: pre;
-  tab-size: 4;
+  color: transparent;
+  caret-color: var(--color-base-content);
 }
-/* a narrow editor, on a phone or in a pane: the bar keeps the file's name and the buttons'
-   icons, whose names stay for a screen reader */
+.cui-editor-text::placeholder {
+  color: color-mix(in oklab, var(--color-base-content) 45%, transparent);
+}
+.cui-editor-text::selection {
+  background-color: color-mix(in oklab, var(--color-primary) 28%, transparent);
+  color: transparent;
+}
+.cui-editor-text:disabled {
+  cursor: not-allowed;
+}
+.cui-editor:has(.cui-editor-text:disabled) .cui-editor-colors {
+  opacity: 0.6;
+}
+/* the syntax's colors, from the theme's: they follow its light and dark variants, and an
+   app's own theme; mixed with the text's color, to read on the field's background */
+.cui-hl-comment {
+  color: color-mix(in oklab, var(--color-base-content) 55%, transparent);
+  font-style: italic;
+}
+.cui-hl-string {
+  color: color-mix(in oklch, var(--color-success) 75%, var(--color-base-content));
+}
+.cui-hl-number {
+  color: color-mix(in oklch, var(--color-warning) 70%, var(--color-base-content));
+}
+.cui-hl-keyword {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+.cui-hl-builtin {
+  color: color-mix(in oklch, var(--color-secondary) 80%, var(--color-base-content));
+}
+.cui-hl-function {
+  color: color-mix(in oklch, var(--color-info) 80%, var(--color-base-content));
+}
+.cui-hl-operator {
+  color: color-mix(in oklab, var(--color-base-content) 70%, transparent);
+}
+/* a narrow editor, on a phone or in a pane: the bar keeps the file's name, the search and
+   the buttons' icons, whose names stay for a screen reader */
 @container (max-width: 32rem) {
   .cui-editor-position,
   .cui-editor-label {
     display: none;
+  }
+  .cui-editor-search {
+    width: 6rem;
+  }
+  /* too narrow to scroll sideways with a finger: the long lines wrap, the field's and the
+     text's under it at the same places */
+  .cui-editor-colors,
+  .cui-editor-text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
   .cui-editor-lines {
     min-width: 2.5rem;
     padding-left: 0.5rem;
     padding-right: 0.5rem;
   }
-}
-.cui-editor-text:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
 }
 /* a console's search: black on amber, the current match darker, as on Qt and Textual */
 ::highlight(cui-match) {

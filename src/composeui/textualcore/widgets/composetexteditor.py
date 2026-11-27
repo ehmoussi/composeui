@@ -12,6 +12,7 @@ from textual_fspicker import FileSave
 from typing_extensions import override
 
 from composeui.core._views.content import follow_match
+from composeui.core._views.inputs import HIGHLIGHT_COLORS, highlight_lines
 from composeui.core.signal import Signal
 from composeui.core.view import find_in_lines
 from composeui.textualcore.widgets.composetextarea import ComposeTextArea
@@ -22,6 +23,8 @@ if TYPE_CHECKING:
     from rich.text import Text
     from textual import events
     from textual.app import ComposeResult
+
+    from composeui.core._views.inputs import Lexer
 
 #: a match of the search, then the current one: black on amber, as the console's
 _MATCH_STYLE = Style(color="black", bgcolor="#fde68a")
@@ -60,10 +63,31 @@ class ComposeTextEditor(ComposeTextArea):
         #: the current match: its line and its start
         self._current_match: tuple[int, int] | None = None
         self.matches_changed: Signal[int, int] = Signal()
+        #: the language of its syntax's colors (`highlight_lines`); not `TextArea.language`,
+        #: whose colors need tree-sitter
+        self._syntax: str | Lexer | None = None
+        #: each line's colored parts
+        self._parts: list[list[tuple[int, int, str]]] = []
+
+    def set_syntax(self, language: str | Lexer | None) -> None:
+        """Color the text's syntax in `language`, as `highlight_lines` splits it."""
+        self._syntax = language
+        self.color_syntax()
+
+    def color_syntax(self) -> None:
+        """Split the text again, as it is now, for its colors."""
+        self._parts = highlight_lines(self.text, self._syntax)
+        self.notify_style_update()  # the lines drawn before, in the colors before
+        self.refresh()
 
     @override
     def get_line(self, line_index: int) -> Text:
         line = super().get_line(line_index)
+        is_dark = self.app.current_theme.dark
+        # the text may have changed since its last split, which its `Changed` message runs
+        parts = self._parts[line_index] if line_index < len(self._parts) else []
+        for start, end, kind in parts:
+            line.stylize(HIGHLIGHT_COLORS[kind][is_dark], start, end)
         for _, start, end in find_in_lines([line.plain], self._query):
             is_current = self._current_match == (line_index, start)
             line.stylize(_CURRENT_STYLE if is_current else _MATCH_STYLE, start, end)
@@ -86,6 +110,8 @@ class ComposeTextEditor(ComposeTextArea):
 
     @override
     def on_text_area_changed(self, event: TextArea.Changed) -> None:
+        if self._syntax is not None:
+            self.color_syntax()
         if self._query != "":  # the matches move with the text
             self._show_matches(is_moved=False)
         super().on_text_area_changed(event)

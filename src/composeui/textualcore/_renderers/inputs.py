@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     import datetime
     from pathlib import Path
 
+    from composeui.core._views.inputs import Lexer
     from composeui.core.signal import Signal, SignalNoArgs
 
 
@@ -124,6 +125,7 @@ class TextualTextAreaRenderer(TextualWidgetRenderer[InputViewLike, ComposeTextAr
 class TextEditorViewLike(InputViewLike, Protocol):
     texts: dict[str, str]
     export_filename: str
+    language: str | Lexer | None
 
     def export_text(self, path: Path) -> None: ...
 
@@ -140,6 +142,7 @@ class TextualTextEditorRenderer(TextualWidgetRenderer[TextEditorViewLike, Compos
                 "placeholder": self._refresh_placeholder,
                 "texts": self._refresh_texts,
                 "export_filename": self._refresh_export_filename,
+                "language": self._refresh_language,
             }
         )
 
@@ -181,6 +184,12 @@ class TextualTextEditorRenderer(TextualWidgetRenderer[TextEditorViewLike, Compos
     ) -> None:
         rendered_object.export_filename = value
         rendered_object.file_name.update(value)
+
+    @staticmethod
+    def _refresh_language(
+        _view: TextEditorViewLike, rendered_object: ComposeTextEditorBox, value: str | Lexer | None
+    ) -> None:
+        rendered_object.editor.set_syntax(value)
 
     def _update_text(self, text: str) -> None:
         if text == self._view.text:  # the text the view set, not an edit

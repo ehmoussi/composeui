@@ -889,20 +889,56 @@
        Firefox later than the next task (as `charts.js`'s images) */
     window.setTimeout(function () { URL.revokeObjectURL(link.href); }, 1000);
   });
-  /* a text editor's numbers follow its lines and its scrolling, and its bar says where the
-     caret is: the text never wraps, so a line of the text is a line of the numbers */
+  /* a text editor: its field's text is transparent, over a `<pre>` that shows it, colored
+     by the server. Typing shows the new text in the `<pre>` at once, plain; the server's
+     colors replace it only while they are of the same text: a late answer is of an older
+     one. The numbers follow the lines, and both follow the field's scrolling: the text never
+     wraps, so a line of the text is a line of the numbers. The bar says where the caret is. */
   /** @param {HTMLTextAreaElement} field */
   function syncEditor(field) {
-    var numbers = /** @type {HTMLElement} */ (field.previousElementSibling);
-    var count = field.value.split("\n").length;
-    if (numbers.dataset.count !== String(count)) {
-      var lines = [];
-      for (var line = 1; line <= count; line++) lines.push(line);
-      numbers.textContent = lines.join("\n");
-      numbers.dataset.count = String(count);
+    var frame = /** @type {HTMLElement} */ (field.closest("[data-cui]"));
+    var numbers = /** @type {HTMLElement} */ (frame.querySelector("[data-editor-lines]"));
+    var shown = /** @type {HTMLElement} */ (
+      document.getElementById(/** @type {string} */ (field.dataset.textEditor))
+    );
+    var lines = field.value.split("\n");
+    /* unchanged, not set: the page's observer would run this again */
+    if (shown.textContent !== field.value) {
+      shown.replaceChildren(...lines.map(function (line, index) {
+        var block = document.createElement("span");
+        block.textContent = index < lines.length - 1 ? line + "\n" : line;
+        return block;
+      }));
     }
+    if (numbers.children.length !== lines.length) {
+      numbers.replaceChildren(...lines.map(function (_line, index) {
+        var number = document.createElement("span");
+        number.textContent = String(index + 1);
+        return number;
+      }));
+    }
+    /* wrapped, in a narrow editor: the text under the field wraps where the field does, and
+       each number takes the height of its line's rows */
+    var isWrapped = getComputedStyle(field).whiteSpace === "pre-wrap";
+    var scrollBar = field.offsetWidth - field.clientWidth;
+    shown.style.paddingRight = isWrapped
+      ? "calc(" + getComputedStyle(field).paddingRight + " + " + scrollBar + "px)" : "";
+    Array.prototype.forEach.call(numbers.children, function (number, index) {
+      /* a number per line: `numbers` got as many as `shown` above */
+      var line = /** @type {HTMLElement} */ (shown.children[index]);
+      var height = isWrapped ? line.offsetHeight + "px" : "";
+      if (number.style.height !== height) number.style.height = height;
+    });
     numbers.scrollTop = field.scrollTop;
+    shown.scrollTop = field.scrollTop;
+    shown.scrollLeft = field.scrollLeft;
   }
+  /* a phone turned, a pane resized: the lines wrap anew */
+  var editorSizes = new ResizeObserver(function (entries) {
+    entries.forEach(function (entry) {
+      syncEditor(/** @type {HTMLTextAreaElement} */ (entry.target));
+    });
+  });
   /** @param {HTMLTextAreaElement} field */
   function showCaret(field) {
     var frame = /** @type {HTMLElement} */ (field.closest("[data-cui]"));
@@ -918,11 +954,44 @@
     return target instanceof HTMLTextAreaElement && "textEditor" in target.dataset
       ? target : null;
   }
+  /** @param {HTMLTextAreaElement} field */
+  function editorSearch(field) {
+    var frame = /** @type {HTMLElement} */ (field.closest("[data-cui]"));
+    return /** @type {HTMLInputElement} */ (frame.querySelector("[data-editor-search]"));
+  }
+  /* each search's query, by the search's id: an editor swapped in, e.g. its texts in another
+     language, comes with an empty search, which takes the query back. Not `hx-preserve`,
+     which would keep the old search whole, its words in the previous language. */
+  /** @type {Map<string, string>} */
+  var editorQueries = new Map();
+  /* after a swap: the colors of another text, or a new editor */
+  function keepEditors() {
+    document.querySelectorAll("[data-text-editor]").forEach(function (element) {
+      var field = /** @type {HTMLTextAreaElement} */ (element);
+      editorSizes.observe(field);  /* once for a field: observing it again changes nothing */
+      syncEditor(field);
+      var search = editorSearch(field);
+      var query = editorQueries.get(search.id);
+      if (query !== undefined && search.value !== query) {
+        search.value = query;
+        /* htmx gave the focus back with the caret at the start of the empty search */
+        if (document.activeElement === search) search.setSelectionRange(query.length, query.length);
+      }
+      if (search.value !== "") searchEditor(search, "keep");
+    });
+  }
   document.addEventListener("input", function (event) {
     var field = editorField(event.target);
-    if (field === null) return;
-    syncEditor(field);
-    showCaret(field);
+    if (field !== null) {
+      syncEditor(field);
+      showCaret(field);
+      var search = editorSearch(field);
+      if (search.value !== "") searchEditor(search, "keep");
+    } else if ("editorSearch" in /** @type {HTMLElement} */ (event.target).dataset) {
+      var typed = /** @type {HTMLInputElement} */ (event.target);
+      editorQueries.set(typed.id, typed.value);
+      searchEditor(typed, "first");
+    }
   });
   /* scrolling doesn't bubble: caught on its way down */
   document.addEventListener("scroll", function (event) {
@@ -933,6 +1002,78 @@
     var field = editorField(document.activeElement);
     if (field !== null) showCaret(field);
   });
+  /* the search's Enter shows the next match, Shift+Enter the previous one */
+  document.addEventListener("keydown", function (event) {
+    var search = /** @type {HTMLInputElement} */ (event.target);
+    if (!("editorSearch" in search.dataset) || event.key !== "Enter") return;
+    event.preventDefault();
+    searchEditor(search, event.shiftKey ? "previous" : "next");
+  });
+  /* a text editor's search: its matches in the text shown under the field, plain text in any
+     case as `find_in_lines` finds them, highlighted as a console's are. A change of the text
+     keeps the current match, or the next one if it went. */
+  /** @param {HTMLInputElement} search @param {string} move */
+  function searchEditor(search, move) {
+    var shown = document.getElementById(/** @type {string} */ (search.dataset.editorSearch));
+    if (shown === null) return;
+    /** @type {TextPoint[]} */
+    var nodes = [];
+    var text = "", match;
+    var walker = document.createTreeWalker(shown, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      nodes.push({node: walker.currentNode, start: text.length});
+      text += walker.currentNode.textContent;
+    }
+    /** @type {Range[]} */
+    var ranges = [];
+    /** @type {[number, number][]} */
+    var places = [];
+    if (search.value !== "") {
+      var pattern = new RegExp(search.value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+      while ((match = pattern.exec(text)) !== null) {
+        var range = new Range(), end = match.index + match[0].length;
+        var from = textPoint(nodes, match.index, false), to = textPoint(nodes, end, true);
+        range.setStart(from.node, match.index - from.start);
+        range.setEnd(to.node, end - to.start);
+        ranges.push(range);
+        places.push([0, match.index]);
+      }
+    }
+    var previous = consoleMatches.get(shown.id), current = 0;
+    if (move !== "first" && previous !== undefined && ranges.length > 0) {
+      var was = previous.places[previous.current];
+      if (move === "keep" && was !== undefined) {
+        var start = was[1];
+        current = places.findIndex(function (place) { return place[1] >= start; });
+        if (current < 0) current = ranges.length - 1;
+      } else {
+        current = previous.current + (move === "next" ? 1 : move === "previous" ? -1 : 0);
+        current = (current % ranges.length + ranges.length) % ranges.length;
+      }
+    }
+    if (search.value === "") consoleMatches.delete(shown.id);
+    else consoleMatches.set(shown.id, {ranges: ranges, places: places, current: current});
+    paintConsoleMatches();
+    var field = /** @type {HTMLTextAreaElement} */ (
+      /** @type {HTMLElement} */ (shown.parentElement).querySelector("textarea")
+    );
+    if (move !== "keep" && ranges.length > 0) {
+      /* the field scrolls, the text under it follows: the match in the middle */
+      var box = shown.getBoundingClientRect();
+      var place = /** @type {Range} */ (ranges[current]).getBoundingClientRect();
+      field.scrollTop += place.top - box.top - field.clientHeight / 2;
+      field.scrollLeft += place.left - box.left - field.clientWidth / 2;
+      syncEditor(field);
+    }
+    var count = /** @type {HTMLElement} */ (
+      /** @type {HTMLElement} */ (search.parentElement).querySelector("[data-editor-matches]")
+    );
+    var matches = /** @type {string} */ (search.dataset.matches);
+    var noMatch = /** @type {string} */ (search.dataset.noMatch);
+    var said = search.value === "" ? "" : ranges.length === 0 ? noMatch :
+      matches.replace("{current}", String(current + 1)).replace("{count}", String(ranges.length));
+    if (count.textContent !== said) count.textContent = said;
+  }
   /* in a text editor, Tab indents by four spaces, as an undoable edit that posts as typing
      does; Escape, then Tab, moves the focus out, so that the keyboard can leave the field */
   document.addEventListener("keydown", function (event) {
@@ -1105,6 +1246,7 @@
     loadCalendars();
     syncSidebarToggles();
     keepConsoles();
+    keepEditors();
     new MutationObserver(function () {
       syncInvalidFields();
       syncSidebarToggles();
@@ -1115,6 +1257,7 @@
       syncMaps();
       loadCalendars();
       keepConsoles();
+      keepEditors();
     }).observe(document.body, {
       childList: true,
       subtree: true,

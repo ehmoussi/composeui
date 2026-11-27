@@ -21,6 +21,7 @@ from composeui.qtcore.widgets.qtexteditor import QTextEditorBox
 if TYPE_CHECKING:
     import datetime
 
+    from composeui.core._views.inputs import Lexer
     from composeui.core.signal import Signal, SignalNoArgs
 
 
@@ -121,6 +122,7 @@ class QtTextAreaRenderer(QtWidgetRenderer[InputViewLike, QTextArea]):
 class TextEditorViewLike(InputViewLike, Protocol):
     texts: dict[str, str]
     export_filename: str
+    language: str | Lexer | None
 
     def export_text(self, path: Path) -> None: ...
 
@@ -139,6 +141,7 @@ class QtTextEditorRenderer(QtWidgetRenderer[TextEditorViewLike, QTextEditorBox])
                 "placeholder": self._refresh_placeholder,
                 "texts": self._refresh_texts,
                 "export_filename": self._refresh_export_filename,
+                "language": self._refresh_language,
             }
         )
 
@@ -183,6 +186,12 @@ class QtTextEditorRenderer(QtWidgetRenderer[TextEditorViewLike, QTextEditorBox])
         _view: TextEditorViewLike, rendered_object: QTextEditorBox, value: str
     ) -> None:
         rendered_object.name.setText(value)  # the dialog reads it as it opens
+
+    @staticmethod
+    def _refresh_language(
+        _view: TextEditorViewLike, rendered_object: QTextEditorBox, value: str | Lexer | None
+    ) -> None:
+        rendered_object.text.set_language(value)
 
     def _update_text(self, text: str) -> None:
         with self.stop_refresh():

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from qtpy.QtCore import QDate, Qt
-from qtpy.QtGui import QColor
+from qtpy.QtGui import QColor, QPalette
 from qtpy.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -17,6 +17,7 @@ from qtpy.QtWidgets import (
     QTableView,
 )
 
+from composeui.core._views.inputs import HIGHLIGHT_COLORS
 from composeui.core.registry import RendererType
 from composeui.core.view import (
     FloatInputView,
@@ -201,6 +202,39 @@ def test_a_text_editor_numbers_its_lines_keeps_them_whole_and_indents_with_tab(
     qtbot.keyClick(editor, Qt.Key.Key_Tab)
     assert view.deck.text.startswith("    P line0 ")
     assert editor.hasFocus()  # Tab types, it doesn't leave
+
+
+def test_a_text_editor_colors_its_syntax_on_every_line_that_an_edit_reaches(
+    qtbot: QtBot,
+) -> None:
+    view = DeckMainView()
+    view.deck.text = "x = 1\ny = 2"
+    view.deck.language = "python"
+    box = _shown_editor(qtbot, view)
+    editor = box.text
+
+    def colors(line: int) -> list[tuple[int, int, str]]:
+        layout = editor.document().findBlockByNumber(line).layout()
+        # PySide's stubs give a `FormatRange` no field types
+        parts = cast("list[Any]", layout.formats())
+        return [
+            (part.start, part.length, part.format.foreground().color().name()) for part in parts
+        ]
+
+    number, string = HIGHLIGHT_COLORS["number"][0], HIGHLIGHT_COLORS["string"][0]
+    assert (4, 1, number) in colors(1)  # 2
+    editor.moveCursor(editor.textCursor().MoveOperation.Start)
+    qtbot.keyClicks(editor, '"""')  # a string opened on the first line goes on to the last
+    assert colors(1) == [(0, 5, string)]
+    assert view.deck.text == '"""x = 1\ny = 2'
+
+    palette = editor.palette()
+    palette.setColor(QPalette.ColorRole.Base, QColor("#111827"))  # a dark theme, without an edit
+    editor.setPalette(palette)
+    assert colors(1) == [(0, 5, HIGHLIGHT_COLORS["string"][1])]
+
+    view.deck.language = None
+    assert (colors(0), colors(1)) == ([], [])
 
 
 def test_a_text_editor_s_search_follows_the_user_s_edits_and_the_app_s_text(

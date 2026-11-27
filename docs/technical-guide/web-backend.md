@@ -183,11 +183,17 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   not by a route of the server. The field posts an edit after a pause, or as it loses the
   focus: a click on Save fires that post, which a download from the server could overtake.
   The `Blob` URL is a top-level download, not a fetch, so the page's policy allows it.
-- **A text editor's numbers.** The numbers of the lines are a `<pre>` beside the
-  `<textarea>`, with the same font and line height, not a part of the field. The text never
-  wraps, so a line of the text is a line of the numbers. The server writes them for the text it
-  sends; `page.js` writes them again when the count of lines changes, follows the field's
-  scrolling, and writes the caret's line and column in the bar.
+- **A text editor's colors.** The `<textarea>`'s own text is transparent, over a `<pre>` that
+  shows the text: a `<textarea>` can't color its text or highlight a search's matches, which
+  the Custom Highlight API draws in the `<pre>`. Both have the same font, line height and
+  padding, and `page.js` gives the `<pre>` the field's scrolling. Typing writes the new text
+  in the `<pre>` at once, plain. The answer to an edit's post brings the `<pre>` alone, colored
+  for the text posted (`WebTextEditorRenderer.dispatch`), never the field. `page.js` keeps it
+  only while its text is the field's: the answer to an older edit is replaced by the plain
+  text, until the next answer. The numbers of the lines are a third `<pre>`, at the left. Each
+  line of the text under the field, and each number, is a block: in a narrow frame, where the
+  field and that text wrap at the same places, `page.js` gives each number its line's height,
+  again when the field's size changes (a `ResizeObserver`).
 - **A text editor's Tab.** `page.js` inserts the spaces with `document.execCommand`, so that
   the browser's undo takes them back and the field posts them as it posts typing. Escape, then
   Tab, lets the browser move the focus, so that the keyboard can leave the field.

@@ -141,9 +141,6 @@ What an app needs to follow work that runs outside it, such as a solver or a clu
 - **Navigation in a side list** (Next). The router's pages in a side list, grouped in sections,
   with badges.
 - **Nested routes** (Next). A router inside a page, with addresses such as `/results/42/tables`.
-- **Highlighted code in the text editor** (Now). The syntax of a `TextEditorView`'s text
-  colored by Pygments on every backend, as Markdown's code: a language's name or the app's own
-  lexer, such as one for `.export` files. On the web, the colors come after a pause in typing.
 - **A Python console** (Next). For apps that offer scripting. It runs on Qt and Textual only,
   never on the web.
 - **An app's own renderers** (Next). A public way to register a renderer, and a placeholder when
