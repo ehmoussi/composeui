@@ -224,6 +224,9 @@ What an app needs to follow work that runs outside it, such as a solver or a clu
 - **A container** (Now). A Dockerfile, the port from `PORT`, a `/health` route, settings from
   environment variables, documented logs, and a clean shutdown on SIGTERM. The docs list what
   any platform must give the app.
+- **Idle sessions that wake without a reload** (Next). A session that `session_idle` saved comes
+  back as it was: the page's next click works, and the text being typed is kept. A session that
+  can't be kept this way, or that a restart woke, reloads its page as today.
 - **Sessions that survive a crash** (Later). `session_folder` keeps them across a restart, and
   the idle ones across a crash: a copy of each session in memory at intervals, with its uploads
   kept while a copy names them and one writer for its last use.
