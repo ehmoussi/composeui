@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Optional
 
-from qtpy.QtCore import QSignalBlocker, Qt, Signal, Slot
+from qtpy.QtCore import Qt, Signal, Slot
 from qtpy.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -90,8 +90,7 @@ class QCheckList(QWidget):
             self._rows = rows
             self._build_boxes()
         for box, (_key, _label, is_checked) in zip(self.boxes, shown.options):
-            with QSignalBlocker(box):
-                box.setChecked(is_checked)
+            box.setChecked(is_checked)  # not reported: the group reports clicks only
         self.set_all_checked(shown.all_checked)
 
     def _build_boxes(self) -> None:
@@ -118,11 +117,10 @@ class QCheckList(QWidget):
             False: Qt.CheckState.Unchecked,
             None: Qt.CheckState.PartiallyChecked,
         }[is_checked]
-        with QSignalBlocker(self.check_all):
-            # a click then goes from partly checked to checked, never back to partly: a
-            # partly checked box's click checks them all
-            self.check_all.setTristate(is_checked is None)
-            self.check_all.setCheckState(state)
+        # a click then goes from partly checked to checked, never back to partly: a
+        # partly checked box's click checks them all; not reported, as `clicked` isn't
+        self.check_all.setTristate(is_checked is None)
+        self.check_all.setCheckState(state)
 
     def set_search(self, text: str) -> None:
         if self.search_field.text() != text:
