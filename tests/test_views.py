@@ -22,7 +22,11 @@ from typing_extensions import override
 
 from composeui.core._views.content import follow_match, line_styles_after
 from composeui.core._views.files import DOWNLOAD_CHUNK_SIZE, save_download
-from composeui.core._views.inputs import MAX_HIGHLIGHT_SIZE, highlight_lines
+from composeui.core._views.inputs import (
+    MAX_HIGHLIGHT_SIZE,
+    MAX_READ_ONLY_HIGHLIGHT_SIZE,
+    highlight_lines,
+)
 from composeui.core.application import Application
 from composeui.core.model import RefusedError
 from composeui.core.view import (
@@ -439,6 +443,11 @@ def test_a_text_editor_colors_each_line_of_its_python_a_string_on_each_of_its_li
     longest = "1" * MAX_HIGHLIGHT_SIZE
     assert highlight_lines(longest, "python") == [[(0, MAX_HIGHLIGHT_SIZE, "number")]]
     assert highlight_lines(f"{longest}1", "python") == [[]]
+    # a read-only text, colored once each time it is set, may be longer
+    longer = f"{longest}1"
+    assert highlight_lines(longer, "python", is_read_only=True) == [[(0, len(longer), "number")]]
+    too_long = "1" * (MAX_READ_ONLY_HIGHLIGHT_SIZE + 1)
+    assert highlight_lines(too_long, "python", is_read_only=True) == [[]]
 
 
 class _ExportLexer(RegexLexer):

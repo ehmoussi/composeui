@@ -17,7 +17,7 @@ from qtpy.QtWidgets import (
     QTableView,
 )
 
-from composeui.core._views.inputs import HIGHLIGHT_COLORS
+from composeui.core._views.inputs import HIGHLIGHT_COLORS, MAX_HIGHLIGHT_SIZE
 from composeui.core.registry import RendererType
 from composeui.core.view import (
     FloatInputView,
@@ -236,6 +236,12 @@ def test_a_text_editor_colors_its_syntax_on_every_line_that_an_edit_reaches(
     view.deck.language = None
     assert (colors(0), colors(1)) == ([], [])
 
+    longer = "1" * (MAX_HIGHLIGHT_SIZE + 1)  # too long to color after each edit
+    view.deck.text, view.deck.language = longer, "python"
+    assert colors(0) == []
+    view.deck.is_read_only = True  # colored once
+    assert colors(0) == [(0, len(longer), HIGHLIGHT_COLORS["number"][1])]  # the dark theme's
+
 
 def test_a_text_editor_s_search_follows_the_user_s_edits_and_the_app_s_text(
     qtbot: QtBot,
@@ -275,6 +281,13 @@ def test_a_text_editor_s_bar_names_its_file_and_says_where_the_caret_is(qtbot: Q
     view.deck.export_filename = "run.export"
     view.deck.texts = {**view.deck.texts, "position": "Ligne {line}, colonne {column}"}
     assert (box.name.text(), box.position.text()) == ("run.export", "Ligne 2, colonne 22")
+
+    # read only: the keys still move the caret and select, as Textual's and the browser's
+    view.deck.is_read_only = True
+    qtbot.keyClick(editor, Qt.Key.Key_Home)
+    qtbot.keyClick(editor, Qt.Key.Key_Down)
+    qtbot.keyClick(editor, Qt.Key.Key_Right, Qt.KeyboardModifier.ShiftModifier)
+    assert (box.position.text(), editor.textCursor().selectedText()) == ("Ligne 3, colonne 2", "F")
 
 
 @pytest.mark.parametrize("picked", ["run.export", ""])

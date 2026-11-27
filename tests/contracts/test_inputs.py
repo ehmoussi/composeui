@@ -261,6 +261,27 @@ async def test_a_field_reports_the_user_s_text_not_the_code_s_and_finishes_editi
         assert (driver.shown_text(field), seen[reported:]) == (case.shown_again, [])
 
 
+@pytest.mark.asyncio
+async def test_a_read_only_editor_takes_no_typing_and_is_left_with_tab(driver: Driver) -> None:
+    view = _FieldsMainView()
+    view.deck.text = "P ncpus 2"
+    view.deck.is_read_only = True
+    seen: list[str] = []
+    view.deck.text_changed.connect(lambda _text: seen.append("changed"))
+    view.deck.text_edited.connect(lambda _text: seen.append("edited"))
+    view.deck.editing_finished.connect(lambda: seen.append("finished"))
+
+    async with driver.open(view):
+        await driver.type(view.deck, "P ncpus 8")
+        await driver.leave(view.deck)  # Tab: it indents nothing
+        assert (driver.shown_text(view.deck), view.deck.text, seen) == ("P ncpus 2",) * 2 + ([],)
+
+        async with driver.by_code():
+            view.deck.is_read_only = False
+        await driver.type(view.deck, "P ncpus 8")
+        assert (driver.shown_text(view.deck), view.deck.text) == ("P ncpus 8", "P ncpus 8")
+
+
 @define_view
 class _RangeMainView(MainView):
     # bounded: a date typed before the first day stays shown until the app replaces it

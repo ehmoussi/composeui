@@ -62,8 +62,10 @@ class TextualDriver:
 
     async def leave(self, view: View) -> None:
         # a text area's Tab too goes to the next field; a text editor's indents, Escape leaves
-        is_editor = isinstance(_widget(view), ComposeTextEditorBox)
-        await self._press("escape" if is_editor else "tab")
+        # a read-only one's Tab leaves, as it types nothing
+        box = _widget(view)
+        is_indenting = isinstance(box, ComposeTextEditorBox) and not box.editor.read_only
+        await self._press("escape" if is_indenting else "tab")
         assert not any(box.has_focus for box in _text_boxes(view))
 
     def shown_text(self, view: View, *, part: int = 0) -> str:

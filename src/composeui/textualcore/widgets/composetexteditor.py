@@ -74,9 +74,14 @@ class ComposeTextEditor(ComposeTextArea):
         self._syntax = language
         self.color_syntax()
 
+    def set_read_only(self, *, is_read_only: bool) -> None:
+        """Let the user only read the text, or edit it again; Tab then moves the focus out."""
+        self.read_only = is_read_only  # a read-only `TextArea` takes no key: Tab moves the focus
+        self.color_syntax()  # its own limit of size (`highlight_lines`)
+
     def color_syntax(self) -> None:
         """Split the text again, as it is now, for its colors."""
-        self._parts = highlight_lines(self.text, self._syntax)
+        self._parts = highlight_lines(self.text, self._syntax, is_read_only=self.read_only)
         self.notify_style_update()  # the lines drawn before, in the colors before
         self.refresh()
 

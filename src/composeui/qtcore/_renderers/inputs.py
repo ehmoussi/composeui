@@ -123,6 +123,7 @@ class TextEditorViewLike(InputViewLike, Protocol):
     texts: dict[str, str]
     export_filename: str
     language: str | Lexer | None
+    is_read_only: bool
 
     def export_text(self, path: Path) -> None: ...
 
@@ -142,6 +143,7 @@ class QtTextEditorRenderer(QtWidgetRenderer[TextEditorViewLike, QTextEditorBox])
                 "texts": self._refresh_texts,
                 "export_filename": self._refresh_export_filename,
                 "language": self._refresh_language,
+                "is_read_only": self._refresh_read_only,
             }
         )
 
@@ -192,6 +194,12 @@ class QtTextEditorRenderer(QtWidgetRenderer[TextEditorViewLike, QTextEditorBox])
         _view: TextEditorViewLike, rendered_object: QTextEditorBox, value: str | Lexer | None
     ) -> None:
         rendered_object.text.set_language(value)
+
+    @staticmethod
+    def _refresh_read_only(
+        _view: TextEditorViewLike, rendered_object: QTextEditorBox, value: bool
+    ) -> None:
+        rendered_object.text.set_read_only(is_read_only=value)
 
     def _update_text(self, text: str) -> None:
         with self.stop_refresh():

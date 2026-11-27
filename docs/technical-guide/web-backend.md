@@ -193,7 +193,9 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   text, until the next answer. The numbers of the lines are a third `<pre>`, at the left. Each
   line of the text under the field, and each number, is a block: in a narrow frame, where the
   field and that text wrap at the same places, `page.js` gives each number its line's height,
-  again when the field's size changes (a `ResizeObserver`).
+  again when the field's size changes (a `ResizeObserver`). The renderer keeps the colored
+  lines of the last text it rendered: a page load colors them again only for another text,
+  language, or read-only state, as a read-only text of 1 MB takes about 2 s.
 - **A text editor's Tab.** `page.js` inserts the spaces with `document.execCommand`, so that
   the browser's undo takes them back and the field posts them as it posts typing. Escape, then
   Tab, lets the browser move the focus, so that the keyboard can leave the field.

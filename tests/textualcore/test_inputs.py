@@ -18,7 +18,7 @@ from textual.widgets import (
 )
 from textual_fspicker import FileSave
 
-from composeui.core._views.inputs import HIGHLIGHT_COLORS
+from composeui.core._views.inputs import HIGHLIGHT_COLORS, MAX_HIGHLIGHT_SIZE
 from composeui.core.registry import RendererType
 from composeui.core.view import (
     InputView,
@@ -151,6 +151,15 @@ async def test_a_text_editor_colors_its_syntax_and_again_as_the_user_types() -> 
         view.deck.language = None
         await pilot.pause()
         assert color(0, 7) != HIGHLIGHT_COLORS["string"][is_dark]
+
+        number = HIGHLIGHT_COLORS["number"][is_dark]
+        view.deck.text = "1" * (MAX_HIGHLIGHT_SIZE + 1)  # too long to color after each edit
+        view.deck.language = "python"
+        await pilot.pause()
+        assert color(0, 1) != number  # past the caret, which takes its own colors
+        view.deck.is_read_only = True  # colored once
+        await pilot.pause()
+        assert color(0, 1) == number
 
 
 @pytest.mark.asyncio
