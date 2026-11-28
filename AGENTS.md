@@ -30,6 +30,7 @@ make mypy    # mypy on composeui, examples and tests, Qt binding resolved to PyS
 make typecheck  # mypy on source + tests; Pyright, Pyrefly and ty on tests
 make pyright pyrefly ty  # individual test checkers
 make test    # pytest tests in parallel, Qt offscreen, with coverage (browser tests excluded)
+make slow-test  # the tests three times, one side of their races late each time (SLOW_TESTS)
 make hooks   # git's hooks of .githooks/ in this clone (core.hooksPath)
 make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
 make translations  # each app's catalogs against the text it translates (TRANSLATED_MAIN_VIEWS)
@@ -47,7 +48,8 @@ On Windows without `make`, the matching targets are in `make.ps1`. Run
 `.\make.ps1 translations test` to match the Windows CI job. The Linux `check` job runs
 `make mypy`. The `browser` job runs `make js-check`. Locally, `make check` includes both.
 In PowerShell, use `-Examples pipeform, batman` for `EXAMPLES`, `-TailwindPlatform` for
-`TAILWIND_PLATFORM`, `-TscPlatform` for `TSC_PLATFORM`, and `-Workers` for `PYTEST_WORKERS`.
+`TAILWIND_PLATFORM`, `-TscPlatform` for `TSC_PLATFORM`, `-Workers` for `PYTEST_WORKERS`, and
+`-SlowTests` for `SLOW_TESTS`.
 Keep `make.ps1` in step with the `Makefile`, including its `$TranslatedMainViews` list
 (`TRANSLATED_MAIN_VIEWS`): `tests/test_code_rules.py` checks both.
 
@@ -263,6 +265,15 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   test races, show that the test then fails each time, and show that the fix passes in the
   same condition. A fix of a guessed cause lets the failure come back. Toolkits have timers
   too: a Textual `Button` ignores a click for 0.2 s after a press.
+- `make slow-test` runs the tests as a slow runner does, three times: with the test's own
+  steps late, with every thread late, and with every Textual timer late (`--slow-runner`,
+  `tests/slow_runner.py`). A test that waits by chance fails there each time, on any machine.
+  Run it on a test that you add or change: `make slow-test SLOW_TESTS=tests/<module>.py`.
+  It doesn't slow Qt's own timers.
+- Don't wait for a value that later work replaces, such as a repeating task's result or a
+  progress report: hold that work with an event until the test has read the value. On
+  Textual, wait for what a timer or a thread makes with `_wait_until`, and click a button
+  that may not take a click yet with `_click_laid_out` (`tests/textualcore/support.py`).
 - What only a browser shows (the page's scripts, htmx swaps) goes in `tests/test_browser.py`,
   marked `browser`. It needs the `browser` group and a Chromium:
   `uv run --group browser playwright install chromium` once, then `make browser-test`.
@@ -293,7 +304,8 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   tests. The existing mypy matrix also checks tests. Separate CI jobs run Pyright, Pyrefly and ty
   on tests on Python 3.9. The `repeat` job runs each test module that a pull request adds or
   changes 20 times on Windows with Python 3.9, fewer when many modules change: a test that
-  passes by chance fails there before it reaches `main`.
+  passes by chance fails there before it reaches `main`. The `slow` job runs the same modules
+  with `make slow-test`.
 
 ## Documentation
 
@@ -354,7 +366,8 @@ document owns what, and the checks.
   permission that they need before you open it, not after.
 - Before you push, run `make check test`. Also run `make typecheck` after a change to
   `tests/`: Pyright, Pyrefly and ty check the tests in CI, and `make check` runs none of
-  them. Run `make docs` after a change to `docs/` or a docstring, and `make browser-test`
+  them. Run `make slow-test SLOW_TESTS=...` on the test modules that you change. Run
+  `make docs` after a change to `docs/` or a docstring, and `make browser-test`
   after a change to the page's scripts or a web renderer. Run them again after a rebase.
 - When pull requests depend on each other, open one at a time. Push the next once the
   previous one merges, rebased on `origin/main` and checked again.

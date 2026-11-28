@@ -47,7 +47,7 @@ jobs:
               specs=false
             fi
           fi
-          # the test modules that the pull request adds or changes, for the repeat job
+          # the test modules that the pull request adds or changes, for the repeat and slow jobs
           tests=""
           if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
             tests=$(git diff --diff-filter=AM --name-only "$BASE...$HEAD" \
@@ -163,6 +163,33 @@ jobs:
           count=$(( count > 20 ? 20 : count < 3 ? 3 : count ))
           echo "${#modules[@]} modules, $count times each"
           uv run pytest "${modules[@]}" -m "not browser" -n auto --count "$count"
+
+  # the same test modules as a slow runner runs them, each side of their races late in turn
+  # (`make slow-test`): a test that waits by chance fails here each time, where the repeat
+  # job needs luck
+  slow:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.tests != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      SLOW_TESTS: ${{ needs.changes.outputs.tests }}  # make's variable, from the environment
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags: setuptools-scm makes the version from them
+      - name: Install the system libraries offscreen Qt needs
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.9"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked --group dev --all-extras
+      - run: make slow-test
 
   # the tests on macOS, as on Windows: its Qt, its file paths (/tmp is /private/tmp) and its
   # make (GNU make 3.81)
@@ -351,7 +378,7 @@ jobs:
   required:
     name: Required checks
     if: always()
-    needs: [changes, check, typecheck, windows, repeat, macos, browser, specs, docs]
+    needs: [changes, check, typecheck, windows, repeat, slow, macos, browser, specs, docs]
     runs-on: ubuntu-latest
     steps:
       - name: Verify the required jobs passed
@@ -377,8 +404,11 @@ jobs:
                   for job in ("check", "typecheck", "windows", "macos", "browser")
               )
               and results["specs"]["result"] == ("success" if specs == "true" else "skipped")
-              and results["repeat"]["result"]
-              == ("success" if code == "true" and outputs.get("tests") else "skipped")
+              and all(
+                  results[job]["result"]
+                  == ("success" if code == "true" and outputs.get("tests") else "skipped")
+                  for job in ("repeat", "slow")
+              )
           )
           if not passed:
               print(json.dumps(results, indent=2))

@@ -66,6 +66,18 @@ PYTEST_WORKERS ?= auto
 test:
 	QT_QPA_PLATFORM=offscreen COMPOSEUI_WINDOWS_ONLY='# windows only' uv run pytest tests -m "not browser" -n $(PYTEST_WORKERS) --cov=src --cov-report=term-missing:skip-covered
 
+# the tests as a slow runner runs them, each side of their races late in turn
+# (tests/slow_runner.py): a test that waits for a thread or a timer by chance fails here each
+# time, not now and then on CI. Some modules only: `make slow-test SLOW_TESTS="tests/x.py"`
+SLOW_TESTS ?= tests
+
+.PHONY: slow-test
+slow-test:
+	@status=0; for lateness in steps threads timers; do \
+		QT_QPA_PLATFORM=offscreen uv run pytest $(SLOW_TESTS) -m "not browser" \
+			-n $(PYTEST_WORKERS) --slow-runner=$$lateness || status=1; \
+	done; exit $$status
+
 # the web backend in headless Chromium; skipped unless Chromium is installed:
 # uv run --group browser playwright install chromium
 # No pytest-qt: it refuses to start without a Qt binding, which these tests don't need.

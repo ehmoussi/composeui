@@ -8,12 +8,13 @@
     .\make.ps1 css -TailwindPlatform windows-x64
     .\make.ps1 js-check -TscPlatform win32-x64
     .\make.ps1 test -Workers 8
+    .\make.ps1 slow-test -SlowTests tests/textualcore/test_files.py
 #>
 [CmdletBinding()]
 param(
     [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
     [ValidateSet('format', 'check', 'check_fix', 'lint', 'mypy', 'typecheck',
-        'pyright', 'pyrefly', 'ty', 'translations', 'test',
+        'pyright', 'pyrefly', 'ty', 'translations', 'test', 'slow-test',
         'browser-test', 'docs', 'screenshots', 'css', 'js-check', 'specs', 'web-deps', 'hooks',
         'clean',
         'all')]
@@ -25,7 +26,9 @@ param(
     # TypeScript's release name for this machine, detected when empty
     [string] $TscPlatform = '',
     # the test workers (pytest-xdist): a number, or 'auto' for a worker per CPU
-    [string] $Workers = 'auto'
+    [string] $Workers = 'auto',
+    # the tests that slow-test runs (all of them by default)
+    [string[]] $SlowTests = @('tests')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -289,6 +292,21 @@ function Invoke-Test {
     finally { $env:COMPOSEUI_POSIX_ONLY = $previous }
 }
 
+# the tests as a slow runner runs them, each side of their races late in turn
+# (tests/slow_runner.py); each lateness reported before failing
+function Invoke-SlowTest {
+    # a list, not an array: the block runs in a scope of its own, which adds to it
+    $failed = [System.Collections.Generic.List[string]]::new()
+    Invoke-Offscreen {
+        foreach ($lateness in 'steps', 'threads', 'timers') {
+            & uv @('run', 'pytest') @SlowTests @('-m', 'not browser', '-n', $Workers,
+                "--slow-runner=$lateness")
+            if ($LASTEXITCODE -ne 0) { $failed.Add($lateness) }
+        }
+    }
+    if ($failed.Count -gt 0) { throw "slow-test failed with these late: $($failed -join ', ')" }
+}
+
 # the web backend in headless Chromium; skipped unless Chromium is installed:
 # uv run --group browser playwright install chromium
 # No pytest-qt: it refuses to start without a Qt binding, which these tests don't need.
@@ -425,6 +443,7 @@ $actions = @{
     'ty'           = { Invoke-TypeChecker -Arguments @('ty', 'check') }
     'translations' = { Invoke-Translations }
     'test'         = { Invoke-Test }
+    'slow-test'    = { Invoke-SlowTest }
     'browser-test' = { Invoke-BrowserTest }
     'docs'         = { Invoke-Docs }
     'screenshots'  = { Invoke-Screenshots }
