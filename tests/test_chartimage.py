@@ -27,7 +27,7 @@ from composeui.core.chartimage import (
     image_style,
     save_chart_image,
 )
-from composeui.core.view import Axis, ChartView, ReferenceLine, Scale, Series
+from composeui.core.view import Axis, BarMode, ChartView, ReferenceLine, Scale, Series
 from examples.pipechart import PipeChartMainView
 from tests.charts import ChartPagesMainView
 
@@ -212,6 +212,34 @@ def test_stacked_bars_stand_on_the_values_before_them() -> None:
     assert heating[0].get_x() + heating[0].get_width() == pytest.approx(visits[0].get_x())
     bottom, top = left.get_ylim()
     assert (bottom <= -60, top >= 150) == (True, True)  # the stacks' totals
+
+
+def test_horizontal_bars_lie_along_the_x_axis_the_first_category_at_the_top() -> None:
+    pickups = ChartPagesMainView().router.chart.pickups
+    pickups.bar_mode = BarMode.STACKED
+
+    (axes,) = chart_figure(pickups).axes
+
+    weekdays, weekends = axes.containers
+    # from where the values before them end, in one slot of each station, down the side
+    assert [(bar.get_x(), bar.get_width()) for bar in weekends] == [(40, 25), (65, 50), (30, 20)]
+    assert [bar.get_y() for bar in weekdays] == pytest.approx([-0.4, 0.6, 1.6])
+    assert weekdays[0].get_height() == pytest.approx(0.8)
+    bottom, top = axes.get_ylim()
+    assert bottom > top  # the first station at the top
+    assert [label.get_text() for label in axes.get_yticklabels()] == ["North", "Centre", "South"]
+    assert (axes.get_xlabel(), axes.get_ylabel()) == ("Pickups (k)", "Station")
+    # the goal, a number of pickups, upright; the split, at an x, across
+    goal, split = axes.lines
+    assert list(np.asarray(goal.get_xdata())) == [55, 55]
+    assert list(np.asarray(split.get_ydata())) == [1.5, 1.5]
+    assert axes.get_xlim()[1] >= 115  # the stacks' totals
+    # the user's zoom: the x's range down the side, the y's along the bottom
+    zoomed = chart_figure(pickups, ImageOptions(x_range=(0.5, 2.5), y_range=(0, 60))).axes[0]
+    assert (zoomed.get_ylim(), zoomed.get_xlim()) == ((2.5, 0.5), (0, 60))
+    pickups.bar_mode = BarMode.GROUPED
+    pickups.y = attrs.evolve(pickups.y, scale=Scale.LOG)
+    assert chart_figure(pickups).axes[0].get_xscale() == "log"  # the pickups' axis
 
 
 def test_bars_without_categories_stand_at_their_x_on_a_linear_axis() -> None:

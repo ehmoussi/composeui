@@ -66,6 +66,9 @@ class ComposeChart(PlotextPlot):
         self.reference_lines: list[ReferenceLine] = []
         self.categories: list[str] = []
         self.bar_mode = BarMode.GROUPED
+        #: whether the bars lie along the bottom axis, which then shows `y`, and the left
+        #: one `x`, its first category at the top
+        self.horizontal = False
         self.image_name = "chart.pdf"
         self.image_path_chosen: Signal[Path] = Signal()
         self.set_save_image_text("Save Image")
@@ -113,17 +116,20 @@ class ComposeChart(PlotextPlot):
         plt = self.plt
         plt.clear_figure()
         plt.title(self.chart_title)
+        is_dark = self.app.current_theme.dark if self.is_mounted else False
+        colors = [
+            Color.parse(curve.color or series_color(index, is_dark=is_dark)).rgb
+            for index, curve in enumerate(self.series)
+        ]
+        if self.horizontal:
+            self._fill_horizontal_figure(colors)
+            return
         plt.xlabel(self.x.label)
         plt.ylabel(self.y.label)
         has_y2 = ChartView.has_y2(self.series, self.reference_lines)
         if has_y2:
             # plotext labels a side, as its stub doesn't say
             plt.ylabel(self.y2.label, yside="right")  # type: ignore[call-arg]
-        is_dark = self.app.current_theme.dark if self.is_mounted else False
-        colors = [
-            Color.parse(curve.color or series_color(index, is_dark=is_dark)).rgb
-            for index, curve in enumerate(self.series)
-        ]
         # a log scale only on an axis with values: plotext fails to draw the ticks of one
         # without any, e.g. an empty chart's
         lines = self._drawn_lines()
@@ -155,6 +161,53 @@ class ComposeChart(PlotextPlot):
         self._plot_bars(colors)
         self._plot_curves(colors)
         self._plot_reference_lines()
+
+    def _fill_horizontal_figure(self, colors: list[tuple[int, int, int]]) -> None:
+        """Give plotext the bars along its x axis, which shows `y`, and their lines.
+
+        A horizontal chart has bars alone, on `y` (see `ChartView.horizontal`).
+        """
+        plt = self.plt
+        plt.xlabel(self.y.label)
+        plt.ylabel(self.x.label)
+        lines = self._drawn_lines()
+        places, values = self._extent(on_y2=False)
+        places += [self._place(line.value) for line in lines if line.vertical]
+        values += [line.value for line in lines if not line.vertical]
+        # a log scale only on an axis with values, as `_fill_figure` does
+        is_log = self.y.is_log and len(values) > 0
+        if is_log:
+            plt.xscale("log")
+        limits = self._limits(self.y, values, is_log=is_log)
+        if limits is not None:
+            plt.xlim(*limits)
+        self._plot_bars(colors)
+        ink = Color.parse(self.app.theme_variables["foreground"]).rgb if self.is_mounted else None
+        # the range shown, at the axis' bounds: a label past them isn't drawn
+        values = self._shown(self.y, values)
+        for line in lines:
+            color = Color.parse(line.color).rgb if line.color is not None else ink
+            if line.vertical:
+                # at an x: across the bars, labeled over it at its right end
+                place = self._place(line.value)
+                self.plt.hline(place, color)
+                if line.label != "" and len(values) > 0:
+                    self.plt.text(line.label, max(values), place, color, alignment="right")
+            else:
+                # at a y: down the chart, labeled at its top, left of it
+                self.plt.vline(line.value, color)
+                if line.label != "" and len(places) > 0:
+                    self.plt.text(line.label, line.value, max(places), color, alignment="right")
+
+    def _place(self, x: float) -> float:
+        """Get where plotext draws an x: from 1 with categories, and horizontal, upside down.
+
+        Horizontal, the first category is at the top, and the smallest x without them.
+        """
+        count = len(self.categories)
+        if not self.horizontal:
+            return x + self._offset
+        return count - x if count > 0 else -x
 
     @property
     def _x_log(self) -> bool:
@@ -266,7 +319,7 @@ class ComposeChart(PlotextPlot):
         for curve in self.series:
             if curve.kind is ChartKind.BAR:
                 x, y = self._bars(curve)
-                x = [value + self._offset for value in x]
+                x = [self._place(value) for value in x]
             else:
                 x, y = self._points(curve)
             xs.extend(value for value in x if math.isfinite(value))
@@ -332,11 +385,19 @@ class ComposeChart(PlotextPlot):
             if curve.kind is ChartKind.BAR
         }
         xs = sorted({x for bar_xs, _heights in bars.values() for x in bar_xs})
+        # the categories' axis: down the left side when horizontal
+        ticks, limits = (
+            (self.plt.yticks, self.plt.ylim)
+            if self.horizontal
+            else (self.plt.xticks, self.plt.xlim)
+        )
         if count > 0:
             xs = [float(category) for category in range(count)]
-            # plotext counts the categories from 1
-            self.plt.xticks([category + 1 for category in xs], self.categories)
-            self.plt.xlim(0.5, count + 0.5)
+            ticks([self._place(x) for x in xs], self.categories)
+            limits(0.5, count + 0.5)
+        elif self.horizontal and len(xs) > 0:
+            # upside down: plotext's own ticks would show the x negated
+            ticks([self._place(x) for x in xs], [f"{x:g}" for x in xs])
         if len(xs) == 0:
             return
         # plotext takes a bar's width as a share of the average room between the x
@@ -363,13 +424,14 @@ class ComposeChart(PlotextPlot):
             offset, width = slots[index]
             heights = dict(zip(bar_xs, bar_heights))
             self.plt.bar(
-                [x + self._offset + offset for x in xs],
+                [self._place(x + offset) for x in xs],
                 # plotext draws numbers only: no bar is a bar from the base to itself
                 [heights.get(x, base) for x in xs],
                 label=curve.name,
                 color=colors[index],
                 minimum=base,
                 width=width / spread,
+                orientation="horizontal" if self.horizontal else "vertical",
                 yside=_SIDES[curve.on_y2],
                 reset_ticks=False,  # the categories', or plotext's own of a numeric axis
             )

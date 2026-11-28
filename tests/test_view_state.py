@@ -389,6 +389,29 @@ def test_stacked_bars_refuse_a_log_axis_and_aren_t_a_study_s() -> None:
     assert "bar_mode" not in CONVERTER.unstructure(chart)  # the app's layout
 
 
+def test_a_horizontal_chart_holds_bars_alone_on_y_and_isn_t_a_study_s() -> None:
+    chart = ChartView(horizontal=True, series=[Series.bars("Count", [1, 2])])
+    with pytest.raises(ValueError, match="'Trend' in a horizontal ChartView: only bars"):
+        chart.series = [Series.line("Trend", [0, 1], [1, 2])]
+    with pytest.raises(ValueError, match="'Visits' on y2 in a horizontal ChartView"):
+        chart.series = [Series.bars("Visits", [1], on_y2=True)]
+    with pytest.raises(ValueError, match="'Target' on y2 in a horizontal ChartView"):
+        chart.reference_lines = [ReferenceLine(5, "Target", on_y2=True)]
+    with pytest.raises(ValueError, match="as times in a horizontal chart"):
+        chart.x = Axis(scale=Scale.TIME)
+    # a line at an x stands on no y axis, whatever its `on_y2`
+    chart.reference_lines = [ReferenceLine(1, "Now", vertical=True, on_y2=True)]
+    dots = ChartView(series=[Series.scatter("Dots", [0], [1])])
+    with pytest.raises(ValueError, match="'Dots' in a horizontal ChartView: only bars"):
+        dots.horizontal = True
+    with pytest.raises(ValueError, match="'Dots' in a horizontal ChartView: only bars"):
+        ChartView(horizontal=True, series=dots.series)
+
+    chart.horizontal = False
+    chart.series = [Series.line("Trend", [0, 1], [1, 2])]  # upright again: any series
+    assert "horizontal" not in CONVERTER.unstructure(chart)  # the app's layout
+
+
 def test_an_x_axis_of_categories_or_bars_is_never_a_log_axis() -> None:
     log = Axis(scale=Scale.LOG)
     line, bars = Series.line("Decay", [1, 10], [1, 2]), Series.bars("Count", [1, 2])

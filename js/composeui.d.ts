@@ -106,6 +106,8 @@ declare global {
     categories?: string[];
     /* with bars: the room between two of their x */
     bar_step?: number;
+    /* bars alone, lying along the y axis at the bottom, the x down the left side */
+    horizontal?: boolean;
   }
   /* a chart's uPlot scales: the second y's while something is on it (a type, not an
      interface: uPlot's `Scales` takes it, which has an index signature) */

@@ -202,7 +202,7 @@ def _chart_page_chart(qtbot: QtBot, name: str = "energy") -> tuple[ChartPagesMai
     window = view.renderer.qt_object
     assert isinstance(window, QMainWindow)
     qtbot.addWidget(window)
-    window.resize(900, 900)
+    window.resize(900, 1000)
     window.show()
     view.router.current_route = "chart"
     chart_view = getattr(view.router.chart, name)
@@ -454,6 +454,65 @@ def test_bars_without_categories_stand_at_their_x_on_a_linear_axis(qtbot: QtBot)
     ages = view.router.chart.ages
     ages.series = [Series.line("Trend", [10, 40], [5, 5])]
     assert plot.getAxis("bottom").logMode  # no bars left: the log axis asked
+
+
+def test_horizontal_bars_lie_along_the_bottom_axis_the_first_category_at_the_top(
+    qtbot: QtBot,
+) -> None:
+    view, chart = _chart_page_chart(qtbot, "pickups")
+    plot = _plot_item(chart)
+    view_box = _view_box(chart)
+    weekdays, weekends = (item for item in plot.items if isinstance(item, pg.BarGraphItem))
+    left, bottom = plot.getAxis("left"), plot.getAxis("bottom")
+
+    # from 0 along the bottom axis, each in its slot of its station, down the left one
+    assert weekdays.opts["x0"] == 0
+    assert list(np.asarray(weekdays.opts["width"])) == [40, 65, 30]
+    assert list(np.asarray(weekdays.opts["y0"])) == pytest.approx([-0.4, 0.6, 1.6])
+    assert weekdays.opts["height"] == pytest.approx(0.4)
+    assert list(np.asarray(weekends.opts["y0"])) == pytest.approx([0, 1, 2])
+    stations = [[(0, "North"), (1, "Centre"), (2, "South")]]
+    assert left._tickLevels == stations  # noqa: SLF001 (pyqtgraph has no public call for the ticks)
+    assert bottom._tickLevels is None  # noqa: SLF001 (numbers, not categories)
+    assert (left.labelText, bottom.labelText, bottom.labelUnits) == ("Station", "Pickups", "k")
+    qtbot.waitUntil(lambda: view_box.viewRange()[0][1] >= 65)
+    north, south = (view_box.mapViewToScene(QPointF(0, x)).y() for x in (0, 2))
+    assert north < south  # the first at the top
+    # the goal, a number of pickups, upright; the split, at an x, across
+    lines = [
+        (item.angle, item.value())
+        for item in plot.items
+        if isinstance(item, pg.InfiniteLine) and item.isVisible()
+    ]
+    assert lines == [(90, 55), (0, 1.5)]
+    # the station under the pointer, down the side
+    chart.show_hover(view_box.mapViewToScene(QPointF(10, 1.1)))
+    assert chart.hover_text().splitlines() == ["Centre", "Weekdays: 65 k", "Weekends: 50 k"]
+    pickups = view.router.chart.pickups
+    clicks: list[tuple[float, float]] = []
+    pickups.clicked.connect(lambda x, y: clicks.append((x, y)))
+    chart.click(view_box.mapViewToScene(QPointF(30, 2)))
+    assert clicks == [pytest.approx((2, 30))]  # the x, then the y, as the axes'
+    (x_low, x_high), (_y_low, y_high) = chart.shown_range()
+    assert (x_low < -0.4, x_high > 2.4, y_high >= 65) == (True, True, True)
+    # the pickups' bounds and log scale, along the bottom
+    pickups.y = attrs.evolve(pickups.y, maximum=100)
+    qtbot.waitUntil(lambda: view_box.viewRange()[0][1] == 100)
+    pickups.y = attrs.evolve(pickups.y, maximum=None, scale=Scale.LOG)
+    assert (bottom.logMode, left.logMode) == (True, False)
+    assert weekdays.opts["x0"] == 1  # from 10 k, under the lowest
+    assert list(np.asarray(weekdays.opts["width"])) == pytest.approx(
+        [math.log10(value) - 1 for value in (40, 65, 30)]
+    )
+    pickups.y = attrs.evolve(pickups.y, scale=Scale.LINEAR)
+
+    pickups.horizontal = False
+    assert chart.hover_text() == ""  # shown at a place that no longer means the same
+    assert list(np.asarray(weekdays.opts["x0"])) == pytest.approx([-0.4, 0.6, 1.6])
+    assert list(np.asarray(weekdays.opts["height"])) == [40, 65, 30]
+    assert bottom._tickLevels == stations  # noqa: SLF001 (pyqtgraph has no public call for the ticks)
+    assert (left.labelText, bottom.labelText) == ("Pickups", "Station")
+    assert view_box.mapViewToScene(QPointF(0, 0)).y() > view_box.mapViewToScene(QPointF(0, 50)).y()
 
 
 def test_hovering_a_bar_chart_shows_its_category_s_values(qtbot: QtBot) -> None:

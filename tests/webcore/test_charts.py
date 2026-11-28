@@ -393,6 +393,24 @@ def test_bars_without_categories_are_sent_at_their_x_on_a_linear_axis() -> None:
     assert (spec["series"][0]["offset"], spec["series"][0]["width"]) == (0, 8)
 
 
+def test_a_horizontal_chart_is_sent_as_one_and_swapped_when_it_stands() -> None:
+    main_view = ChartPagesMainView()
+    main_view.render(RendererType.WEB)
+    main_view.router.navigate(main_view.router.chart.route)  # built once it shows
+    pickups = main_view.router.chart.pickups
+    assert isinstance(pickups.renderer, WebChartRenderer)
+
+    spec = json.loads(pickups.renderer.chart_json())
+
+    # the axes as they are, which the page lays out: the x down the side
+    assert spec["horizontal"] is True
+    assert (spec["x"]["label"], spec["y"]["label"]) == ("Station", "Pickups (k)")
+    with collect_dirty() as dirty:
+        pickups.horizontal = False
+        spec = _chart_spec(render_dirty(dirty), pickups)
+    assert "horizontal" not in spec
+
+
 def test_a_chart_without_bars_sends_no_bar_step() -> None:
     main_view = ChartPagesMainView()
     main_view.render(RendererType.WEB)

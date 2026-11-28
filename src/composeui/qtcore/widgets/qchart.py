@@ -112,6 +112,9 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._series: list[Series] = []
         self._categories: list[str] = []
         self._bar_mode = BarMode.GROUPED
+        #: whether the bars lie along the bottom axis, which then shows `_y`, and the left
+        #: one `_x`, its first category at the top
+        self._horizontal = False
         self._x = Axis()
         self._y = Axis()
         self._y2 = Axis()
@@ -183,10 +186,10 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         """Show `axis` at a `side`, labeled, as a log axis or a linear one.
 
         At the "bottom" the x, at the "left" the y, and at the "right" the second y, which
-        shows only with something on it. pyqtgraph scales the unit, e.g. into ms. An x of
-        categories or bars stays linear.
+        shows only with something on it; horizontal, the x at the left and the y at the
+        bottom. pyqtgraph scales the unit, e.g. into ms. An x of categories or bars stays
+        linear.
         """
-        self.getPlotItem().setLabel(side, axis.title or None, units=axis.unit or None)
         view_box = self.getPlotItem().getViewBox()
         old = {"bottom": self._x, "left": self._y}.get(side, self._y2)
         if side == "bottom":
@@ -195,13 +198,25 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
             self._y = axis
         else:
             self._y2 = axis
+        self._label_axes()
         self._draw()
         if (old.minimum, old.maximum) != (axis.minimum, axis.maximum):
             # the app's new bounds, over the user's zoom: the view fits the data again
             view = self._view2 if side == "right" else view_box
-            index = 0 if side == "bottom" else 1
+            index = 1 if side == "right" else self._view_index(is_x=side == "bottom")
             view.enableAutoRange(axis=index)
             self._keep_bounds(view, index)
+
+    def _view_index(self, *, is_x: bool) -> int:
+        """Get the index of the plot's view range that shows the x axis, or the y axis."""
+        return 0 if is_x != self._horizontal else 1
+
+    def _label_axes(self) -> None:
+        """Label each axis at its side: the x at the bottom, or at the left horizontal."""
+        plot = self.getPlotItem()
+        x_side, y_side = ("left", "bottom") if self._horizontal else ("bottom", "left")
+        for side, axis in ((x_side, self._x), (y_side, self._y), ("right", self._y2)):
+            plot.setLabel(side, axis.title or None, units=axis.unit or None)
 
     def _keep_x_bounds(self, view_box: pg.ViewBox, _x_range: tuple[float, float]) -> None:
         self._keep_bounds(view_box, 0)
@@ -218,7 +233,7 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         Not once the user zoomed, which stops it fitting: back out, it fits them again. An
         x axis of categories has no bounds.
         """
-        if index == 0:
+        if view_box is not self._view2 and index == self._view_index(is_x=True):
             axis, is_log = self._x, self._x_log
             if len(self._categories) > 0:
                 return
@@ -276,6 +291,25 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
     @property
     def _x_log(self) -> bool:
         return ChartView.is_x_log(self._x, self._categories, self._series)
+
+    def set_horizontal(self, *, horizontal: bool) -> None:
+        """Lie the bars along the bottom axis, the categories down the left one, or stand them."""
+        if horizontal == self._horizontal:
+            return
+        self._horizontal = horizontal
+        # the first category at the top
+        self.getPlotItem().getViewBox().invertY(horizontal)
+        # at the plot's own y, which the second view doesn't share, while it marks a y
+        self._holder(on_y2=not horizontal).removeItem(self._crosshair)
+        self._add(self._crosshair, z=2, on_y2=not horizontal, ignore_bounds=True)
+        self._crosshair.setAngle(0 if horizontal else 90)
+        self._label_axes()
+        self._draw()
+        # each range now shows the other axis: the view fits the data again, and the
+        # values shown were at a place that no longer means the same
+        self.getPlotItem().getViewBox().enableAutoRange()
+        self._hover.setVisible(False)
+        self._crosshair.setVisible(False)
 
     def set_bar_mode(self, bar_mode: BarMode) -> None:
         """Place the bars at an x beside each other, or stacked."""
@@ -338,7 +372,10 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
             self._holder(on_y2=self._on_y2.pop()).removeItem(self._items.pop())
         x_log = self._x_log
         # the curves draw their log themselves; the bars are given theirs (see `_apply_styles`)
-        plot.setLogMode(x=x_log, y=self._y.is_log)
+        if self._horizontal:
+            plot.setLogMode(x=self._y.is_log, y=False)
+        else:
+            plot.setLogMode(x=x_log, y=self._y.is_log)
         # the plot gave its right axis the left one's scale
         plot.getAxis("right").setLogMode(self._y2.is_log)
         for item, curve in zip(self._items, self._series):
@@ -353,7 +390,9 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
             item.setData(np.asarray(x, dtype=float), np.asarray(y, dtype=float))
             item.opts["name"] = curve.name
         ticks = [list(enumerate(self._categories))] if len(self._categories) > 0 else None
-        plot.getAxis("bottom").setTicks(ticks)
+        x_side, y_side = ("left", "bottom") if self._horizontal else ("bottom", "left")
+        plot.getAxis(x_side).setTicks(ticks)
+        plot.getAxis(y_side).setTicks(None)
         self._draw_reference_lines(x_log=x_log)
         self._apply_styles()
         self._extent2.set_bounds(self._view2.childrenBounds()[0])
@@ -365,17 +404,19 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
         self._line_items = []
         for line in self._drawn_lines():
             is_log = x_log if line.vertical else self._is_log(on_y2=line.is_on_y2)
+            # at an x: across the plot's x, or horizontal its y
+            is_upright = line.vertical != self._horizontal
             item = pg.InfiniteLine(
                 pos=math.log10(line.value) if is_log else line.value,
-                angle=90 if line.vertical else 0,
+                angle=90 if is_upright else 0,
                 movable=False,
                 # the label is a format of the line's value: braces of its own are text
                 label=line.label.replace("{", "{{").replace("}", "}}"),
                 # a horizontal one's at its right end, over it; a vertical one's at its
-                # top, left of it (now, after the data)
+                # top, left of it (now, after the data): near the start of a y inverted
                 labelOpts={
-                    "position": 0.98,
-                    "anchors": [(1, 0), (1, 0)] if line.vertical else [(1, 1), (1, 1)],
+                    "position": 0.02 if is_upright and self._horizontal else 0.98,
+                    "anchors": [(1, 0), (1, 0)] if is_upright else [(1, 1), (1, 1)],
                 },
             )
             self._add(item, z=1, on_y2=line.is_on_y2)  # over the series
@@ -414,6 +455,9 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
     def shown_range(self) -> tuple[tuple[float, float], tuple[float, float]]:
         """Get the x and y ranges the chart shows, e.g. zoomed into; not their logs."""
         x_range, y_range = self.getPlotItem().getViewBox().viewRange()
+        if self._horizontal:
+            # the x down the left side, the y along the bottom
+            x_range, y_range = y_range, x_range
         return _values(x_range, is_log=self._x_log), _values(y_range, is_log=self._y.is_log)
 
     def shown_y2_range(self) -> tuple[float, float] | None:
@@ -497,11 +541,15 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
                     starts = np.asarray(stacks[index], dtype=float)
                     tops = starts + heights
                 offset, width = slots[index]
+                # a bar across its slot, from its start to its top
+                across = {"x0": xs + offset - width / 2, "width": width}
+                along = {"y0": starts, "height": tops - starts}
+                if self._horizontal:
+                    across = {"y0": across["x0"], "height": width}
+                    along = {"x0": along["y0"], "width": along["height"]}
                 item.setOpts(
-                    x0=xs + offset - width / 2,
-                    y0=starts,
-                    height=tops - starts,
-                    width=width,
+                    **across,
+                    **along,
                     brush=color,
                     # a line of the background between neighbouring bars
                     pen=pg.mkPen(background, width=1),
@@ -545,6 +593,8 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
             return
         position = view_box.mapSceneToView(scene_position)
         x, y = position.x(), position.y()
+        if self._horizontal:
+            x, y = y, x
         # the view's values are their logs on a log axis
         if self._x_log:
             x = 10**x
@@ -563,13 +613,15 @@ class QChart(pg.PlotWidget):  # type: ignore[misc]
             self._crosshair.setVisible(False)
             return
         position = view_box.mapSceneToView(scene_position)
+        # horizontal, the x is down the left side
+        x = position.y() if self._horizontal else position.x()
         # the view's x is its log on a log axis
-        lines = self._hover_lines(10 ** position.x() if self._x_log else position.x())
+        lines = self._hover_lines(10**x if self._x_log else x)
         if len(lines) == 0:  # past the categories
             self._hover.setVisible(False)
             self._crosshair.setVisible(False)
             return
-        self._crosshair.setPos(position.x())
+        self._crosshair.setPos(x)
         self._crosshair.setVisible(True)
         self._hover.setText("\n".join(lines))
         # in the second view's values, where it is drawn

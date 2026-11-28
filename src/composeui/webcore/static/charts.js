@@ -157,6 +157,16 @@
     };
     /** @type {[uPlot.Axis, uPlot.Axis, ...uPlot.Axis[]]} */
     var axes = [axis(spec.x), axis(spec.y)];
+    if (spec.horizontal) {
+      // the x down the left side, its first value at the top, wide enough for its names;
+      // the y along the bottom. uPlot's bars lie along the y then
+      scales.x.ori = 1;
+      scales.x.dir = -1;
+      scales.y.ori = 0;
+      axes[0].side = 3;
+      axes[0].size = fittedAxisSize;
+      axes[1].side = 2;
+    }
     if (y2 !== undefined) {
       scales.y2 = { distr: y2.log ? 3 : 1 };
       // at the right, its ticks without lines: the left axis' lines alone
@@ -263,6 +273,26 @@
       },
       hooks: { draw: [drawReferenceLines(spec, ink)] },
     };
+  }
+  /* the room a left axis takes: its longest value's, as uPlot gives a bottom one its height */
+  /**
+   * @param {uPlot} chart @param {string[]} values @param {number} axisIndex
+   * @param {number} cycle @returns {number}
+   */
+  function fittedAxisSize(chart, values, axisIndex, cycle) {
+    var axis = /** @type {uPlot.Axis} */ (chart.axes[axisIndex]);
+    // uPlot asks again as the ticks settle: the room of the first ask stays
+    var known = /** @type {{_size?: number}} */ (/** @type {unknown} */ (axis))._size;
+    if (cycle > 1 && known !== undefined) return known;
+    var ticks = /** @type {uPlot.Axis.Ticks} */ (axis.ticks);
+    // the gap on each side of the values: the axis' label stands beside them
+    var size = /** @type {number} */ (ticks.size) + 2 * /** @type {number} */ (axis.gap);
+    chart.ctx.font = /** @type {[string, number]} */ (/** @type {unknown} */ (axis.font))[0];
+    // the widest value, in the canvas' pixels; none before uPlot has ticks
+    var widest = (values || []).reduce(function (width, value) {
+      return Math.max(width, chart.ctx.measureText(value).width);
+    }, 0);
+    return Math.ceil(size + widest / uPlot.pxRatio);
   }
   /* the scale of a series' y: its axis' */
   /** @param {{on_y2?: boolean}} item @returns {"y" | "y2"} */
@@ -386,15 +416,17 @@
       context.textAlign = "right";
       spec.lines.forEach(function (line) {
         var position = chart.valToPos(line.value, line.vertical ? "x" : yScale(line), true);
-        var start = line.vertical ? box.left : box.top;
-        var end = start + (line.vertical ? box.width : box.height);
+        // at an x: upright, but across a horizontal chart, whose x is down its side
+        var isUpright = line.vertical !== Boolean(spec.horizontal);
+        var start = isUpright ? box.left : box.top;
+        var end = start + (isUpright ? box.width : box.height);
         if (!(position >= start && position <= end)) return;  // zoomed past it
         context.strokeStyle = context.fillStyle = line.color || ink;
         context.setLineDash(LINE_DASHES[line.style].map(function (length) {
           return length * uPlot.pxRatio;
         }));
         context.beginPath();
-        if (line.vertical) {
+        if (isUpright) {
           context.moveTo(position, box.top);
           context.lineTo(position, box.top + box.height);
         } else {
@@ -404,7 +436,7 @@
         context.stroke();
         // a horizontal one's over it at its right end; a vertical one's at its top, left
         // of it (now, after the data)
-        if (line.vertical) {
+        if (isUpright) {
           context.textBaseline = "top";
           context.fillText(line.label, position - gap, box.top + gap);
         } else {
@@ -497,13 +529,15 @@
       if (down === null) return;
       down = null;
       var figure = /** @type {HTMLElement} */ (element.closest("figure"));
+      // a horizontal chart's x down its side, its y along the bottom
+      var isHorizontal = chartScales(chart).x.ori === 1;
       htmx.ajax("post", "/_composeui/widget/" + figure.id, {
         source: figure,
         swap: "none",
         values: {
           event: "click",
-          x: chart.posToVal(event.offsetX, "x"),
-          y: chart.posToVal(event.offsetY, "y"),
+          x: chart.posToVal(isHorizontal ? event.offsetY : event.offsetX, "x"),
+          y: chart.posToVal(isHorizontal ? event.offsetX : event.offsetY, "y"),
         },
       });
     });
@@ -574,8 +608,10 @@
     options.axes.forEach(function (axis, index) {
       axis.font = "22px system-ui, sans-serif";
       axis.labelFont = "600 24px system-ui, sans-serif";
-      axis.size = index === 0 ? 60 : 90;
       axis.labelSize = 40;
+      // a horizontal chart's left axis fits its names in this font (see `fittedAxisSize`)
+      if (spec.horizontal && index === 0) return;
+      axis.size = index === 0 || spec.horizontal ? 60 : 90;
     });
     options.series.slice(1).forEach(function (series) {
       var points = /** @type {uPlot.Series.Points} */ (series.points);

@@ -152,6 +152,22 @@ class ChartPage(PageView):
             Series.bars("Guests", [3, 5, 4], on_y2=True),
         ],
     )
+    pickups: ChartView = child(
+        ChartView,
+        title="Pickups",
+        x=Axis("Station"),
+        y=Axis("Pickups", unit="k"),
+        categories=["North", "Centre", "South"],
+        # the pickups along the bottom, the first station at the top
+        horizontal=True,
+        series=[Series.bars("Weekdays", [40, 65, 30]), Series.bars("Weekends", [25, 50, 20])],
+        reference_lines=[
+            # at a number of pickups: upright
+            ReferenceLine(55, "Goal"),
+            # at an x: across, between two stations
+            ReferenceLine(1.5, "Split", vertical=True),
+        ],
+    )
     ages: ChartView = child(
         ChartView,
         title="Ages",

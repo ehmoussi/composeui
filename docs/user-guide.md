@@ -126,6 +126,7 @@ not in the package: run them from a clone of the repository (see
 - [Charts](user-guide/charts.md)
   - [Kinds of chart](user-guide/charts.md#kinds-of-chart)
     - [Stacked bars](user-guide/charts.md#stacked-bars)
+    - [Horizontal bars](user-guide/charts.md#horizontal-bars)
   - [Axes](user-guide/charts.md#axes)
     - [Axis bounds](user-guide/charts.md#axis-bounds)
     - [Dates and times](user-guide/charts.md#dates-and-times)

@@ -197,23 +197,24 @@ def chart_figure(chart: ChartView, options: ImageOptions = DEFAULT_OPTIONS) -> F
         labels = _draw_reference_lines(sides, chart)
         if options.show_title and chart.title:
             axes.set_title(chart.title)
-        axes.set_xlabel(chart.x.label)
-        axes.set_ylabel(chart.y.label)
+        # horizontal, the x down the left side, the y along the bottom
+        axes.set_xlabel(chart.y.label if chart.horizontal else chart.x.label)
+        axes.set_ylabel(chart.x.label if chart.horizontal else chart.y.label)
         # the app's bounds, then the user's zoom over them
         if len(chart.categories) == 0:
             scale = _x_scale(chart)
-            bounds = chart.x.bounded(*(value / scale for value in axes.get_xlim()))
-            axes.set_xlim(*(value * scale for value in bounds))
-        axes.set_ylim(*chart.y.bounded(*axes.get_ylim()))
+            bounds = chart.x.bounded(*(value / scale for value in _x_range(axes, chart)))
+            _set_x_range(axes, chart, *(value * scale for value in bounds))
+        _set_y_range(axes, chart, *chart.y.bounded(*_y_range(axes, chart)))
         if sides[True] is not axes:  # without a second y axis, its bounds bound nothing
             sides[True].set_ylim(*chart.y2.bounded(*sides[True].get_ylim()))
         if options.x_range is not None:
-            axes.set_xlim(*(value * _x_scale(chart) for value in options.x_range))
+            _set_x_range(axes, chart, *(value * _x_scale(chart) for value in options.x_range))
         if options.y_range is not None:
-            axes.set_ylim(*options.y_range)
+            _set_y_range(axes, chart, *options.y_range)
         if options.y2_range is not None:
             sides[True].set_ylim(*options.y2_range)
-        _hide_labels_past(sides, labels, x_scale=_x_scale(chart))
+        _hide_labels_past(sides, labels, chart)
         if ChartView.is_x_time(chart.x, chart.categories):
             # in UTC, as the times were given (see `Scale.TIME`)
             locator = AutoDateLocator(tz=datetime.timezone.utc)
@@ -221,6 +222,32 @@ def chart_figure(chart: ChartView, options: ImageOptions = DEFAULT_OPTIONS) -> F
             axes.xaxis.set_major_formatter(ConciseDateFormatter(locator, tz=datetime.timezone.utc))
         _add_legend(figure, axes, handles, is_inside=sides[True] is axes)
     return figure
+
+
+def _x_range(axes: Axes, chart: ChartView) -> tuple[float, float]:
+    """Get the range of the chart's x axis, its lowest value first: down the side horizontal."""
+    low, high = sorted(axes.get_ylim() if chart.horizontal else axes.get_xlim())
+    return low, high
+
+
+def _set_x_range(axes: Axes, chart: ChartView, low: float, high: float) -> None:
+    if chart.horizontal:
+        axes.set_ylim(high, low)  # the first value at the top
+    else:
+        axes.set_xlim(low, high)
+
+
+def _y_range(axes: Axes, chart: ChartView) -> tuple[float, float]:
+    """Get the range of the chart's y axis: along the bottom horizontal."""
+    low, high = axes.get_xlim() if chart.horizontal else axes.get_ylim()
+    return low, high
+
+
+def _set_y_range(axes: Axes, chart: ChartView, low: float, high: float) -> None:
+    if chart.horizontal:
+        axes.set_xlim(low, high)
+    else:
+        axes.set_ylim(low, high)
 
 
 def _draw_series(sides: dict[bool, Axes], chart: ChartView) -> list[Artist | Container]:
@@ -231,12 +258,7 @@ def _draw_series(sides: dict[bool, Axes], chart: ChartView) -> list[Artist | Con
     """
     handles: list[Artist | Container] = []
     x_log = ChartView.is_x_log(chart.x, chart.categories, chart.series)
-    if x_log:
-        sides[False].set_xscale("log")
-    if chart.y.is_log:
-        sides[False].set_yscale("log")
-    if chart.y2.is_log:
-        sides[True].set_yscale("log")
+    _lay_out_axes(sides, chart, x_log=x_log)
     slots = ChartView.bar_slots(chart.series, chart.categories, chart.bar_mode)
     is_stacked = chart.bar_mode is BarMode.STACKED
     bases = ChartView.stack_bases(chart.series, chart.categories) if is_stacked else {}
@@ -248,17 +270,32 @@ def _draw_series(sides: dict[bool, Axes], chart: ChartView) -> list[Artist | Con
         if series.kind is ChartKind.BAR:
             xs, heights = ChartView.bars_of(series, chart.categories, y_log=y_log)
             offset, width = slots[index]
-            bars = axes.bar(
-                [(x + offset) * scale for x in xs],
-                heights,
-                bottom=bases.get(index, 0),
-                width=width * scale,
-                color=color,
-                hatch=HATCHES[index % len(HATCHES)],
-                edgecolor="white",
-                linewidth=0.5,
-                label=series.name,
-            )
+            places = [(x + offset) * scale for x in xs]
+            hatch = HATCHES[index % len(HATCHES)]
+            if chart.horizontal:
+                bars = axes.barh(
+                    places,
+                    heights,
+                    left=bases.get(index, 0),
+                    height=width * scale,
+                    color=color,
+                    hatch=hatch,
+                    edgecolor="white",
+                    linewidth=0.5,
+                    label=series.name,
+                )
+            else:
+                bars = axes.bar(
+                    places,
+                    heights,
+                    bottom=bases.get(index, 0),
+                    width=width * scale,
+                    color=color,
+                    hatch=hatch,
+                    edgecolor="white",
+                    linewidth=0.5,
+                    label=series.name,
+                )
             handles.append(bars)
             continue
         x, y = ChartView.drawn_points(series, x_log=x_log, y_log=y_log)
@@ -297,10 +334,29 @@ def _draw_series(sides: dict[bool, Axes], chart: ChartView) -> list[Artist | Con
                     linewidth=0,
                     step="post" if series.step else None,
                 )
-    if len(chart.categories) > 0:
-        sides[False].set_xticks(range(len(chart.categories)), chart.categories)
-        sides[False].grid(visible=False, axis="x")
     return handles
+
+
+def _lay_out_axes(sides: dict[bool, Axes], chart: ChartView, *, x_log: bool) -> None:
+    """Give the axes their scales and categories: horizontal, the x down the left side."""
+    axes = sides[False]
+    if x_log:
+        axes.set_xscale("log")
+    if chart.y.is_log:
+        if chart.horizontal:
+            axes.set_xscale("log")
+        else:
+            axes.set_yscale("log")
+    if chart.y2.is_log:
+        sides[True].set_yscale("log")
+    if len(chart.categories) > 0:
+        if chart.horizontal:
+            axes.set_yticks(range(len(chart.categories)), chart.categories)
+        else:
+            axes.set_xticks(range(len(chart.categories)), chart.categories)
+        axes.grid(visible=False, axis="y" if chart.horizontal else "x")
+    if chart.horizontal:
+        axes.invert_yaxis()  # the first x at the top
 
 
 def _draw_reference_lines(
@@ -320,15 +376,15 @@ def _draw_reference_lines(
         axes = sides[line.is_on_y2]
         color = line.color or REFERENCE_LINE_COLOR
         style = REFERENCE_LINE_STYLES[line.style]
+        value = line.value * _x_scale(chart) if line.vertical else line.value
         # not in the legend, which names the series: its label is beside it
-        if line.vertical:
-            x = line.value * _x_scale(chart)
-            axes.axvline(x, color=color, linestyle=style, linewidth=1)
+        if line.vertical != chart.horizontal:  # upright: at an x, or at a y horizontal
+            axes.axvline(value, color=color, linestyle=style, linewidth=1)
             # at its top, left of it (now, after the data): the x in data, the y in the
             # axes' share
             label = axes.annotate(
                 line.label,
-                (x, 1),
+                (value, 1),
                 xycoords=axes.get_xaxis_transform(),
                 xytext=(-3, -3),
                 textcoords="offset points",
@@ -337,11 +393,11 @@ def _draw_reference_lines(
                 color=color,
             )
         else:
-            axes.axhline(line.value, color=color, linestyle=style, linewidth=1)
+            axes.axhline(value, color=color, linestyle=style, linewidth=1)
             # at its right end, over it
             label = axes.annotate(
                 line.label,
-                (1, line.value),
+                (1, value),
                 xycoords=axes.get_yaxis_transform(),
                 xytext=(-3, 2),
                 textcoords="offset points",
@@ -354,13 +410,14 @@ def _draw_reference_lines(
 
 
 def _hide_labels_past(
-    sides: dict[bool, Axes], labels: list[tuple[ReferenceLine, Annotation]], *, x_scale: float
+    sides: dict[bool, Axes], labels: list[tuple[ReferenceLine, Annotation]], chart: ChartView
 ) -> None:
     """Hide the label of a reference line past the range shown, e.g. the axis' bounds."""
     for line, label in labels:
         axes = sides[line.is_on_y2]
-        low, high = sorted(axes.get_xlim() if line.vertical else axes.get_ylim())
-        value = line.value * x_scale if line.vertical else line.value
+        is_upright = line.vertical != chart.horizontal
+        low, high = sorted(axes.get_xlim() if is_upright else axes.get_ylim())
+        value = line.value * _x_scale(chart) if line.vertical else line.value
         label.set_visible(low <= value <= high)
 
 
