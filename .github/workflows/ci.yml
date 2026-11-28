@@ -11,11 +11,13 @@ on:
 jobs:
   # whether the push or pull request changes more than the documentation (docs/ and the
   # Markdown files) and the benchmarks' results (benchmarks/results/, data that no check
-  # reads): a change of these only needs the docs job
+  # reads): a change of these only needs the docs job. And whether it changes the specs of
+  # specs/, the code they model, or how they are checked: else the specs job has nothing new
   changes:
     runs-on: ubuntu-latest
     outputs:
       code: ${{ steps.diff.outputs.code }}
+      specs: ${{ steps.diff.outputs.specs }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -27,14 +29,25 @@ jobs:
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then
             code=false  # the release workflow checks the tagged code
+            specs=false
           elif ! git diff --name-only "$BASE...$HEAD" > changed.txt; then
             code=true  # nothing to compare with: check everything
-          elif grep -qvE '^docs/|\.md$|^benchmarks/results/' changed.txt; then
-            code=true
+            specs=true
           else
-            code=false
+            if grep -qvE '^docs/|\.md$|^benchmarks/results/' changed.txt; then
+              code=true
+            else
+              code=false
+            fi
+            # the specs, the code they model (RepeatingTasks: core/jobs.py), and how they run
+            if grep -qE '^specs/|^src/composeui/core/jobs\.py$|^Makefile$|^\.github/workflows/ci\.yml$' changed.txt; then
+              specs=true
+            else
+              specs=false
+            fi
           fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "specs=$specs" >> "$GITHUB_OUTPUT"
 
   check:
     needs: changes
@@ -182,6 +195,24 @@ jobs:
       - run: uv run playwright install --with-deps chromium
       - run: make browser-test
 
+  # the designs of specs/ in TLC, TLA+'s model checker: Java only, no Python. The runner's
+  # Java (Temurin 17) is enough. TLC's jar is cached: a failed download from GitHub doesn't
+  # block a merge; `make specs` checks its SHA-256 all the same
+  specs:
+    needs: changes
+    if: needs.changes.outputs.specs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - id: tla
+        run: echo "version=$(sed -n 's/^TLA_TOOLS_VERSION := //p' Makefile)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v4
+        with:
+          path: specs/vendor/tla2tools-${{ steps.tla.outputs.version }}.jar
+          key: tla2tools-${{ steps.tla.outputs.version }}
+      - run: java -version
+      - run: make specs
+
   docs:
     runs-on: ubuntu-latest
     steps:
@@ -282,7 +313,7 @@ jobs:
   required:
     name: Required checks
     if: always()
-    needs: [changes, check, typecheck, windows, macos, browser, docs]
+    needs: [changes, check, typecheck, windows, macos, browser, specs, docs]
     runs-on: ubuntu-latest
     steps:
       - name: Verify the required jobs passed
@@ -295,16 +326,19 @@ jobs:
           import sys
 
           results = json.loads(os.environ["RESULTS"])
-          code = results["changes"].get("outputs", {}).get("code")
+          outputs = results["changes"].get("outputs", {})
+          code, specs = outputs.get("code"), outputs.get("specs")
           expected = "success" if code == "true" else "skipped"
           passed = (
               results["changes"]["result"] == "success"
               and results["docs"]["result"] == "success"
               and code in ("true", "false")
+              and specs in ("true", "false")
               and all(
                   results[job]["result"] == expected
                   for job in ("check", "typecheck", "windows", "macos", "browser")
               )
+              and results["specs"]["result"] == ("success" if specs == "true" else "skipped")
           )
           if not passed:
               print(json.dumps(results, indent=2))

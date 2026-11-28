@@ -17,6 +17,7 @@ src/composeui/
     _renderers/  # its renderers, a module per family (renderers.py maps their keys)
 css/             # source of webcore/static/app.css (`make css`; tools land in css/vendor/)
 js/              # the scripts' type check (`make js-check`; TypeScript lands in js/vendor/)
+specs/           # TLA+ specs, checked by TLC (`make specs`; TLC lands in specs/vendor/)
 src/examples/    # example apps (pipeform.py, pipecatalogue.py, ...), also used by tests; not in the wheel
 tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pilot)
   qtcore/        # the Qt backend's tests, a module per family, as in _renderers/

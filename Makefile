@@ -183,6 +183,30 @@ js-check: $(TSC)
 		|| { echo "Delete $(JS_VENDOR)/ to download it again"; exit 1; }
 	$(TSC) -p js/tsconfig.json
 
+# TLC, TLA+'s model checker: it checks each design of specs/ (Name.tla, with its properties
+# in Name.cfg) in every state it can reach, each spec reported before failing. It needs Java
+# 11 or later. Downloaded once into specs/vendor/ (not committed), with TLC's states.
+TLA_TOOLS_VERSION := 1.7.4
+SPECS_VENDOR := specs/vendor
+TLA_TOOLS := $(SPECS_VENDOR)/tla2tools-$(TLA_TOOLS_VERSION).jar
+# the SHA-256 of tla2tools.jar, a release asset of github.com/tlaplus/tlaplus: change it with
+# the version
+TLA_TOOLS_SHA256 := 936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
+
+$(TLA_TOOLS):
+	$(call fetch,https://github.com/tlaplus/tlaplus/releases/download/v$(TLA_TOOLS_VERSION)/tla2tools.jar,$@,$(TLA_TOOLS_SHA256))
+
+.PHONY: specs
+specs: $(TLA_TOOLS)
+	@echo "$(TLA_TOOLS_SHA256)  $(TLA_TOOLS)" | $(SHA256SUM) -c \
+		|| { echo "Delete $(SPECS_VENDOR)/ to download it again"; exit 1; }
+	@status=0; for config in specs/*.cfg; do \
+		name=$$(basename $$config .cfg); \
+		java -XX:+UseParallelGC -cp $(TLA_TOOLS) tlc2.TLC -cleanup \
+			-metadir $(SPECS_VENDOR)/states/$$name -config $$config specs/$$name.tla \
+			|| status=1; \
+	done; exit $$status
+
 # the web page's scripts from npm, through unpkg, and uPlot's stylesheet, which app.css
 # imports: committed, so the package needs no download. Change a version and its SHA-256,
 # run `make web-deps css`, and commit the files.

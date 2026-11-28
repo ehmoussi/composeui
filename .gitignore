@@ -19,6 +19,8 @@ wheels/
 css/vendor/
 # downloaded by `make js-check`, not committed
 js/vendor/
+# downloaded by `make specs`, with TLC's states, not committed
+specs/vendor/
 
 # built by `make docs`
 docs/_build/

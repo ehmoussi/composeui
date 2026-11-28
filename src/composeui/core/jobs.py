@@ -809,6 +809,8 @@ def repeat_wait(every: float, backoff: float, max_wait: float | None, failures: 
 _Due = tuple[float, int, Callable[[], None]]
 
 
+# The repeats of `Task` and this timer are modelled in specs/RepeatingTasks.tla, which
+# `make specs` checks: change the spec with them, in the same commit.
 class _Timer:
     """One thread for the process, starting the next run of each repeating task when it's due.
 
