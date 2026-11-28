@@ -205,6 +205,11 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   never grant access by it.
   See
   https://ehmoussi.github.io/composeui/user-guide/running-the-app.html#show-a-browser-its-own-work
+- **Read the logged-in user with `main_view.user`,** which a login proxy names in the header
+  of `WebSettings(user_header=...)`. It is None without one, and on Qt and Textual. Each user
+  gets their own sessions and `browser_id`. Never read the header yourself.
+  See
+  https://ehmoussi.github.io/composeui/user-guide/running-the-app.html#know-the-user-behind-a-login-proxy
 - **Give the user a file with `DownloadView`**, or `main_view.download(...)` from a callback,
   not a `SavePathInputView`: on the web, a save path writes a file on the server, not on the
   user's computer. Its `content` returns the bytes, or a `DownloadedFile(filename, content,

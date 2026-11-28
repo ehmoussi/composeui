@@ -11,6 +11,12 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `WebSettings(user_header="Remote-User")` takes the user from a login proxy in front of the
+  server, such as nginx with Basic Auth or OAuth2 Proxy for OIDC, and `MainView.user` gives it
+  to the app. The server answers 403 to a request that names no user. Each user gets their own
+  sessions and `browser_id`, even in the same browser, and a saved session opens for its own
+  user only.
+
 - `ChartView.horizontal` lays the bars of a chart of bars alone along its y axis, drawn at the
   bottom, with its x axis down the left side and the first category at the top, for example
   for long names. Grouped and stacked bars, reference lines, hover, clicks and report images

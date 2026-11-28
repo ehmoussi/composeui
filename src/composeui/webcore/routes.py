@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import hashlib
 import secrets
 from typing import TYPE_CHECKING
 from urllib.parse import quote
@@ -25,6 +26,7 @@ from composeui.webcore.page import SESSION_TAG_FIELD, SESSION_TAG_HEADER
 from composeui.webcore.session import MAX_STATE_SIZE
 from composeui.webcore.streaming import StreamPlaces, StreamResponse
 from composeui.webcore.uploads import UploadRefusal, receive_upload
+from composeui.webcore.users import header_user
 from composeui.webcore.webrenderer import UnsupportedEventError
 
 if TYPE_CHECKING:
@@ -57,15 +59,40 @@ SESSION_KEY = "composeui_session"
 #: key of the browser's id (`MainView.browser_id`) in the same cookie: it stays as the
 #: session id changes, and it is no session's, so that an app can keep and show it
 BROWSER_KEY = "composeui_browser"
+#: key of the user whom the browser's id is for, in the same cookie (`_user_digest`): another
+#: user of the browser gets an id of their own
+BROWSER_USER_KEY = "composeui_browser_user"
 
 
-def _browser_id(request: Request) -> str:
-    """Get the id of the request's browser, from its cookie, else a new one put there."""
+def _user_digest(user: str) -> str:
+    """Get what the cookie keeps of `user`: not the name, which anyone who has it reads.
+
+    Of a fixed size too: a long name could take the cookie past what a browser keeps.
+    """
+    return hashlib.sha256(user.encode("utf-8")).hexdigest()
+
+
+def _user(request: Request) -> str | None:
+    """Get the user that the login proxy names (`WebSettings.user_header`); None without one.
+
+    `UserHeaderMiddleware` refused the request if the header names none.
+    """
+    header: str | None = request.app.state.user_header
+    return None if header is None else header_user(request.scope["headers"], header)
+
+
+def _browser_id(request: Request, user: str | None) -> str:
+    """Get the id of the request's browser for `user`, from its cookie, else a new one put there."""
+    digest = None if user is None else _user_digest(user)
     browser_id = request.session.get(BROWSER_KEY)
-    if isinstance(browser_id, str):
+    if isinstance(browser_id, str) and request.session.get(BROWSER_USER_KEY) == digest:
         return browser_id
     browser_id = secrets.token_urlsafe(16)
     request.session[BROWSER_KEY] = browser_id
+    if digest is None:
+        request.session.pop(BROWSER_USER_KEY, None)
+    else:
+        request.session[BROWSER_USER_KEY] = digest
     return browser_id
 
 
@@ -82,9 +109,10 @@ def _session(request: Request, tag: object = None) -> WebSession | None:
     doesn't show. Its htmx requests name its own session (`SESSION_TAG_HEADER`), and Save's
     form gives it as `tag`, so it reloads, as for a session that is gone. A link names none.
     """
-    # a session on disk is built again, for the browser its cookie names
-    with building_for_browser(functools.partial(_browser_id, request)):
-        session = _store(request).get(request.session.get(SESSION_KEY))
+    user = _user(request)
+    # a session on disk is built again, for the browser its cookie names, and its user
+    with building_for_browser(functools.partial(_browser_id, request, user), user):
+        session = _store(request).get(request.session.get(SESSION_KEY), user)
     if tag is None:
         tag = request.headers.get(SESSION_TAG_HEADER)
     if session is not None and tag is not None and tag != session.page_tag:
@@ -98,7 +126,7 @@ async def _session_off_loop(request: Request, tag: object = None) -> WebSession 
     Off the event loop when it's on disk, or being saved: it's built again, or waited for. A
     save that starts between the two looks is waited for on the loop: it takes milliseconds.
     """
-    if _store(request).is_at_hand(request.session.get(SESSION_KEY)):
+    if _store(request).is_at_hand(request.session.get(SESSION_KEY), _user(request)):
         return _session(request, tag)
     return await run_in_threadpool(_session, request, tag)
 
@@ -108,8 +136,9 @@ def _session_or_new(request: Request) -> WebSession | None:
 
     For a whole page, which the session then serves: whichever page asks.
     """
-    with building_for_browser(functools.partial(_browser_id, request)):
-        found = _store(request).get_or_create(request.session.get(SESSION_KEY))
+    user = _user(request)
+    with building_for_browser(functools.partial(_browser_id, request, user), user):
+        found = _store(request).get_or_create(request.session.get(SESSION_KEY), user)
     if found is None:
         return None
     session_id, session = found

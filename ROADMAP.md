@@ -226,13 +226,24 @@ What an app needs to follow work that runs outside it, such as a solver or a clu
 - **Formulas in CSV exports** (Now: a `shared` database holds what other users wrote). A table's
   Export CSV and `frame_content` escape a text cell that a spreadsheet would run as a formula,
   with a way to keep the exact values.
-- **Users** (Later). The user read from a login proxy's headers, for OIDC, SAML2 or Basic Auth,
-  with recipes for the proxies.
+- **The user's email and name** (Now). More of the proxy's headers beside `MainView.user`, for
+  an app that shows them.
+- **Log out** (Now). A "Log out" entry on the web, which opens the proxy's logout address that
+  the app sets.
+- **Users' recipes** (Later). A SAML2 recipe, one for Cloudflare Tunnel with Cloudflare
+  Access, and the recipes of the login proxies run in containers.
+- **Signed identity headers** (When needed). Check the token that Cloudflare Access, Google's
+  IAP or AWS's load balancer signs, for an app that something other than the proxy can reach.
+- **A login without a proxy** (When needed). An OIDC login of the server, which fills
+  `MainView.user`, for an app deployed alone. With HTTPS in the server, and a `Secure`
+  cookie.
 - **Access control** (Later). An authorization hook that the server enforces for pages, actions
   and downloads.
 - **Several processes** (Later). Sticky sessions in nginx.
 - **Framing and per-user limits** (Later). The sites allowed to frame the app, and a share of
   the disk per user.
+- **Hosts without a lasting process** (To research). Sessions kept outside the process, so
+  that a host such as Vercel can serve any request from any instance.
 
 ## Desktop
 

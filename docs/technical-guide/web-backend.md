@@ -282,6 +282,18 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   when one is built, so a request that builds none, such as a poll, sets no cookie. New and the
   check of a study build their initial view for the same id (`MainView._initial_view`): an app
   that reads it as its view is built would read the server's account instead.
+- **The user** (`MainView.user`, `WebSettings.user_header`). `UserHeaderMiddleware` refuses a
+  request whose header doesn't name one UTF-8 user, after the origin check: a request of no
+  user would share another's sessions. Each `SessionStore` entry keeps the user it was built
+  for. `_entry` gives no other user's request that entry: it doesn't wake it, wait for its
+  save, or mark it used, and the request gets a new session, whose id replaces the cookie's.
+  The previous user's session stays until `session_ttl`, as their cookie may come back. A save
+  holds its user in a `user` file beside it, which `_find_saved` reads again; a save without
+  one belongs to no user, so a server with a login opens none made without it, and the
+  reverse. The cookie keeps the browser's id with a digest of its user (`BROWSER_USER_KEY`),
+  not the name: it is signed, not encrypted, and a long name could take it past what a
+  browser keeps. Each user of a browser gets an id of their own. New, the check of a study and
+  a `--reload` save build their initial view for the same user (`MainView._initial_view`).
 - **Idle sessions on disk** (`session_idle`). The `SessionStore` tracks four states: in memory,
   being saved, on disk, and being restored.
 

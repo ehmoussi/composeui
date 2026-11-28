@@ -180,6 +180,7 @@ not in the package: run them from a clone of the repository (see
     - [Change the server's limits](user-guide/running-the-app.md#change-the-servers-limits)
     - [Change the look of the web app](user-guide/running-the-app.md#change-the-look-of-the-web-app)
     - [Deploy behind nginx](user-guide/running-the-app.md#deploy-behind-nginx)
+    - [Know the user behind a login proxy](user-guide/running-the-app.md#know-the-user-behind-a-login-proxy)
 - [Testing your app](user-guide/testing.md)
   - [Test the views](user-guide/testing.md#test-the-views)
   - [Test a component](user-guide/testing.md#test-a-component)

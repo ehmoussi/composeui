@@ -88,14 +88,27 @@ _BROWSER_ID: contextvars.ContextVar[Optional[Callable[[], str]]] = contextvars.C
 UNKNOWN_ACCOUNT = "local"
 
 
+#: the user whom a web session's main views are built for (`MainView.user`)
+_USER: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+    "composeui_user", default=None
+)
+
+
 @contextlib.contextmanager
-def building_for_browser(browser_id: Callable[[], str]) -> Iterator[None]:
-    """Give the main views built inside the id that `browser_id` returns."""
+def building_for_browser(browser_id: Callable[[], str], user: str | None = None) -> Iterator[None]:
+    """Give the main views built inside the id that `browser_id` returns, and `user`."""
     token = _BROWSER_ID.set(browser_id)
+    user_token = _USER.set(user)
     try:
         yield
     finally:
+        _USER.reset(user_token)
         _BROWSER_ID.reset(token)
+
+
+def current_user() -> str | None:
+    """Get the user whom a main view is built for; None without a login (`MainView.user`)."""
+    return _USER.get()
 
 
 def current_browser_id() -> str:

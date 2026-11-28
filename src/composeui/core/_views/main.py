@@ -71,6 +71,7 @@ from composeui.core.client import (
     check_url,
     current_browser_id,
     current_client,
+    current_user,
     launch,
 )
 from composeui.core.jobs import Jobs, _check_main_thread
@@ -509,6 +510,10 @@ class MainView(View):
     _browser_id: str = attrs.field(
         factory=current_browser_id, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
+    #: the user that a login proxy named (`user`), fixed as the view is built
+    _user: Optional[str] = attrs.field(
+        factory=current_user, init=False, repr=False, eq=False, metadata={OMIT: True}
+    )
 
     @override
     def __attrs_post_init__(self) -> None:
@@ -676,7 +681,7 @@ class MainView(View):
         Outside the session's build, e.g. for New: a view that reads its id as it is built
         would read the server's account instead.
         """
-        with building_for_browser(lambda: self._browser_id):
+        with building_for_browser(lambda: self._browser_id, self._user):
             return self.build_initial_view()
 
     def check_state_data(self, data: Any) -> None:
@@ -821,6 +826,18 @@ class MainView(View):
         by it.
         """
         return self._browser_id
+
+    @property
+    def user(self) -> str | None:
+        """Get the name of the user whom a login proxy let in, on the web; else None.
+
+        A web server with `WebSettings.user_header` reads it from that header, which the
+        proxy sets on each request. Each session belongs to its user: another user, even in
+        the same browser, gets a session and a `browser_id` of their own. Without a login,
+        on Qt and Textual, and on the web without `user_header`, it is None. It never
+        changes for a main view, and is known once the main view is made.
+        """
+        return self._user
 
     def open_folder(self, path: Path) -> None:
         """Open the folder `path` in the user's file manager: Windows' Explorer in WSL.
