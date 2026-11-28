@@ -20,13 +20,17 @@ async def test_a_repeating_task_runs_again_and_keeps_its_result_until_the_next_r
 ) -> None:
     main_view = MainView()
     runs: list[int] = []
-    second_run, release = threading.Event(), threading.Event()
+    second_run, release, third_run = threading.Event(), threading.Event(), threading.Event()
 
-    def work(_job: Job[int], start: int) -> int:
+    def work(job: Job[int], start: int) -> int:
         runs.append(start)  # one run at a time: in the order they ran
         if len(runs) == 2:
             second_run.set()
             assert release.wait(10)
+        elif len(runs) == 3:
+            # held until the cancel: its result would replace the one the test reads
+            third_run.set()
+            assert not job.sleep(10)
         return start + len(runs)
 
     task = main_view.jobs.task(work, every=0.05)
@@ -42,12 +46,15 @@ async def test_a_repeating_task_runs_again_and_keeps_its_result_until_the_next_r
 
             async with driver.by_code():
                 release.set()
-            await driver.wait_until(lambda: task.result == 12)
+            await driver.wait_until(third_run.is_set)
+
+            assert task.result == 12  # the second run's, while the third one runs
+
             async with driver.by_code():
                 task.cancel()
             await driver.wait_until(lambda: not task.is_running)
 
             assert not task.is_repeating
-            assert runs[:2] == [10, 10]  # again with its arguments
+            assert runs == [10, 10, 10]  # again with its arguments, and none after the cancel
     finally:
         release.set()
