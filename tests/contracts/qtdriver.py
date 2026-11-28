@@ -26,7 +26,7 @@ from composeui.qtcore.widgets.qvalueslider import QValueSlider
 from tests.qtcore.support import _widget
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Callable
 
     from pytestqt.qtbot import QtBot
 
@@ -61,6 +61,9 @@ class QtDriver:
     async def by_code(self) -> AsyncGenerator[None, None]:
         yield
         QCoreApplication.processEvents()
+
+    async def wait_until(self, condition: Callable[[], bool]) -> None:
+        self._qtbot.waitUntil(condition, timeout=10_000)
 
     async def type(self, view: View, text: str, *, part: int = 0) -> None:
         box = self._focus(_text_boxes(view)[part])

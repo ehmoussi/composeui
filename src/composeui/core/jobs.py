@@ -7,6 +7,7 @@ import codecs
 import collections
 import contextlib
 import functools
+import heapq
 import itertools
 import logging
 import operator
@@ -249,20 +250,54 @@ class Task(Generic[R, P, ProgressT]):
     Starting an already running task does nothing; `start_latest` replaces the run instead.
     Dropping the owner's jobs resets the task and discards queued progress and outcomes,
     as with ordinary jobs. Its state is an input of the `reactive` methods that read it.
+
+    With `every`, a started task repeats: each run starts `every` seconds after the one
+    before ends, with the same arguments, until `cancel`, `Jobs.cancel`, New, Open or closing
+    the app. A run keeps the last result until its own outcome. After a failure, the wait
+    grows by `backoff` times at each failure in a row, up to `max_wait` seconds (ten times
+    `every` if None), and a success sets it back to `every`. The three are fixed as the task
+    is built.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 (the options of a task, each by its name)
         self,
         jobs: Jobs | None,
         work: Callable[Concatenate[Job[R, ProgressT], P], R],
         *,
         debounce: float = 0.2,
+        every: float | None = None,
+        backoff: float = 2.0,
+        max_wait: float | None = None,
     ) -> None:
+        if every is not None and every <= 0:
+            msg = f"every must be more than 0 seconds, not {every}"
+            raise ValueError(msg)
+        if backoff < 1:
+            msg = f"backoff must be 1 or more, not {backoff}"
+            raise ValueError(msg)
+        if every is not None and max_wait is not None and max_wait < every:
+            msg = f"max_wait ({max_wait} s) must be every ({every} s) or more"
+            raise ValueError(msg)
         # None until the main view holding the task's view has its jobs (`Jobs._adopt`)
         self._jobs = jobs
         self._work = work
         #: seconds `start_latest` waits for a newer call before it runs the work
         self.debounce = debounce
+        # read-only: a repeat in progress counts on them, checked here
+        self._every = every
+        self._backoff = backoff
+        self._max_wait = max_wait
+        # the arguments of the runs while the task repeats, else None
+        self._repeat_args: tuple[tuple[Any, ...], dict[str, Any]] | None = None
+        # whether the repeat started with the study (`starting_study`): its runs are too
+        self._repeat_is_the_study_s = False
+        # the failures in a row of the repeat's runs
+        self._failures = 0
+        # the next run in the timer, while the task waits for it
+        self._due: _Due | None = None
+        # changed each time the next run is scheduled or the repeat stops: a due run that the
+        # timer had already posted then sees it isn't the current one any more
+        self._generation = 0
         self._name: str = getattr(work, "__name__", "task")
         name, reference = self._name, weakref.ref(self)
         self._source = Source(lambda paths: paths.get(id(reference()), name))
@@ -288,6 +323,27 @@ class Task(Generic[R, P, ProgressT]):
         """Get whether this task is waiting for its current run's outcome."""
         self._source.read()
         return self._job is not None
+
+    @property
+    def every(self) -> float | None:
+        """Get the seconds from a run's end to the next run's start; None runs once."""
+        return self._every
+
+    @property
+    def backoff(self) -> float:
+        """Get how many times longer the wait gets after each failure in a row."""
+        return self._backoff
+
+    @property
+    def max_wait(self) -> float | None:
+        """Get the longest wait after failures, in seconds; None for ten times `every`."""
+        return self._max_wait
+
+    @property
+    def is_repeating(self) -> bool:
+        """Get whether this task, with `every`, repeats its runs: from its start to its stop."""
+        self._source.read()
+        return self._repeat_args is not None
 
     @property
     def is_canceled(self) -> bool:
@@ -320,23 +376,23 @@ class Task(Generic[R, P, ProgressT]):
         return self._has_result
 
     def start(self, *args: P.args, **kwargs: P.kwargs) -> bool:
-        """Start the worker with fresh state; return False if it is already running."""
+        """Start the worker with fresh state; return False if it is already running.
+
+        A task with `every` then repeats the run with these arguments, and returns False
+        while it repeats.
+        """
         _check_main_thread("Task.start")
         check_change(self._source, f"starts the task {self._name}")
         # not `is_running`: a reactive method starting it doesn't read its state
-        if self._job is not None:
+        if self._job is not None or self._repeat_args is not None:
             return False
         jobs = self._bound_jobs()
         self._reset()
-        job = jobs._new_job(self._work)  # noqa: SLF001 (shared job lifecycle)
-        self._job = job
-        job.progress.connect(self._report_progress)
-        job.finished.connect(self._finish)
-        job.failed.connect(self._fail)
+        if self.every is not None:
+            self._start_repeat(jobs, args, kwargs)
         try:
-            jobs._start_job(job, self._work, args, kwargs)  # noqa: SLF001 (shared job lifecycle)
+            self._run(jobs, self._work, args, kwargs)
         except BaseException:
-            self._job = None  # no thread: the task can start again
             self.changed.emit()
             raise
         self.changed.emit()
@@ -348,7 +404,8 @@ class Task(Generic[R, P, ProgressT]):
         For inputs that change quickly, e.g. a slider's value: the run waits `debounce`
         seconds before it calls the work, and a newer call cancels it and drops its outcome.
         So an obsolete result never replaces the latest. The last result stays until the
-        new run's outcome.
+        new run's outcome. A task with `every` then repeats the run with these arguments,
+        whether it repeated before or not.
         """
         _check_main_thread("Task.start_latest")
         check_change(self._source, f"starts the task {self._name}")
@@ -365,11 +422,15 @@ class Task(Generic[R, P, ProgressT]):
         try:
             jobs._start_job(job, work, args, kwargs)  # noqa: SLF001 (shared job lifecycle)
         except BaseException:
-            # no thread: the run before goes on, its outcome still the task's
+            # no thread: the run before goes on, its outcome still the task's, and the
+            # repeat as it was, its next run included
             self._job, self._progress, self._error = old, progress, error
             raise
         if old is not None:
             jobs._forget(old)  # noqa: SLF001 (shared job lifecycle)
+        if self.every is not None:
+            self._unschedule()
+            self._start_repeat(jobs, args, kwargs)
         self.changed.emit()
 
     def _bound_jobs(self) -> Jobs:
@@ -386,13 +447,18 @@ class Task(Generic[R, P, ProgressT]):
     def cancel(self) -> None:
         """Ask the current run to stop; it still emits its outcome, as with `Job.cancel`.
 
-        `changed` emits, `is_canceled` then true until the outcome.
+        `changed` emits, `is_canceled` then true until the outcome. A repeating task
+        stops repeating: no run follows.
         """
         _check_main_thread("Task.cancel")
         check_change(self._source, f"cancels the task {self._name}")
         job = self._job
+        was_repeating = self._repeat_args is not None
+        self._stop_repeat()
         if job is not None and not job.is_canceled:
             job.cancel()
+            self.changed.emit()
+        elif was_repeating:
             self.changed.emit()
 
     def disables(self, *views: View, enabled_if: Callable[[], bool] | None = None) -> None:
@@ -423,13 +489,13 @@ class Task(Generic[R, P, ProgressT]):
         """Cancel the run when one of `controls` is clicked or triggered, from now on.
 
         A button, or a menu's or a toolbar's action, e.g. Stop. Each is enabled only while
-        a run goes on, until it is asked to stop.
+        a run goes on, or the task repeats, until it is asked to stop.
         """
         from composeui.core.view import ActionView  # noqa: PLC0415 (it imports this module)
 
         def update() -> None:
             for control in controls:
-                control.is_enabled = self.is_running and not self.is_canceled
+                control.is_enabled = (self.is_running or self.is_repeating) and not self.is_canceled
 
         for control in controls:
             signal = control.triggered if isinstance(control, ActionView) else control.clicked
@@ -479,6 +545,74 @@ class Task(Generic[R, P, ProgressT]):
         self._result = None
         self._error = None
         self._has_result = False
+        self._stop_repeat()
+
+    def _run(
+        self,
+        jobs: Jobs,
+        work: Callable[..., object],
+        args: tuple[Any, ...],
+        kwargs: dict[str, Any],
+    ) -> None:
+        """Start a run of `work`, the task's state left as it is: `start` resets it first."""
+        job = jobs._new_job(self._work)  # noqa: SLF001 (shared job lifecycle)
+        if self._repeat_args is not None:
+            job._is_the_study_s = self._repeat_is_the_study_s  # noqa: SLF001 (shared job lifecycle)
+        self._job = job
+        self._progress = None
+        job.progress.connect(self._report_progress)
+        job.finished.connect(self._finish)
+        job.failed.connect(self._fail)
+        try:
+            jobs._start_job(job, work, args, kwargs)  # noqa: SLF001 (shared job lifecycle)
+        except BaseException:
+            self._job = None  # no thread: the task can start again
+            self._stop_repeat()
+            raise
+
+    def _start_repeat(self, jobs: Jobs, args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
+        """Repeat the runs with these arguments, from the run that starts now."""
+        self._repeat_args = (args, kwargs)
+        # started with the study, each run is the study's: what it gives isn't the user's change
+        self._repeat_is_the_study_s = threading.get_ident() in jobs._starting_study  # noqa: SLF001 (the jobs' own bookkeeping)
+        self._failures = 0
+
+    def _stop_repeat(self) -> None:
+        """Stop repeating: no run follows, not even one the timer posted already."""
+        self._repeat_args = None
+        self._unschedule()
+
+    def _unschedule(self) -> None:
+        """Take the next run out of the timer; one already posted is ignored once it comes."""
+        self._generation += 1
+        if self._due is not None:
+            _TIMER.unschedule(self._due)
+            self._due = None
+
+    def _schedule_next(self, *, failed: bool) -> None:
+        """Have the next run start after the wait, once the run before is over."""
+        if self._repeat_args is None:  # stopped, e.g. by `Jobs.cancel`
+            return
+        assert self.every is not None  # repeating
+        jobs = self._bound_jobs()
+        self._failures = self._failures + 1 if failed else 0
+        wait = repeat_wait(self.every, self.backoff, self.max_wait, self._failures)
+        self._unschedule()
+        self._due = _TIMER.schedule(
+            time.monotonic() + wait,
+            functools.partial(_post_due, weakref.ref(jobs), weakref.ref(self), self._generation),
+        )
+
+    def _run_due(self, generation: int) -> None:
+        """Start the next run, on the main thread, unless it isn't the current one any more."""
+        if generation != self._generation or self._repeat_args is None or self._jobs is None:
+            return  # e.g. canceled, or started again, as the timer posted it
+        self._due = None
+        args, kwargs = self._repeat_args
+        try:
+            self._run(self._jobs, self._work, args, kwargs)
+        finally:
+            self.changed.emit()
 
     def _report_progress(self, value: ProgressT) -> None:
         self._progress = value
@@ -489,12 +623,16 @@ class Task(Generic[R, P, ProgressT]):
         self._job = None
         self._result = result
         self._has_result = True
+        self._error = None  # a repeating task's failure before
+        # before the signals: their callbacks may cancel the task
+        self._schedule_next(failed=False)
         self.changed.emit()
         self.finished.emit(result)
 
     def _fail(self, error: Exception) -> None:
         self._job = None
         self._error = error
+        self._schedule_next(failed=True)
         self.changed.emit()
         self.failed.emit(error)
 
@@ -654,6 +792,91 @@ def _debounced(
     if not job.sleep(delay) and job._superseded:  # noqa: SLF001 (shared job lifecycle)
         return None  # dropped: nobody gets it
     return work(job, *args, **kwargs)
+
+
+def repeat_wait(every: float, backoff: float, max_wait: float | None, failures: int) -> float:
+    """Get the seconds before a repeating task's next run, after `failures` in a row."""
+    longest = 10 * every if max_wait is None else max_wait
+    try:
+        wait = every * backoff**failures
+    except OverflowError:  # many failures in a row: the longest wait long since
+        return longest
+    return min(wait, max(longest, every))
+
+
+#: a run in the timer: when it's due, a number keeping the order of equal times, and the call
+#: that posts it
+_Due = tuple[float, int, Callable[[], None]]
+
+
+class _Timer:
+    """One thread for the process, starting the next run of each repeating task when it's due.
+
+    It keeps the runs due in a heap, the first one due first, and sleeps until it. One thread
+    for all the tasks: a web server runs a task per session.
+    """
+
+    def __init__(self) -> None:
+        self._heap: list[_Due] = []
+        self._condition = threading.Condition()
+        self._order = itertools.count()
+        self._thread: threading.Thread | None = None
+
+    def schedule(self, due: float, post: Callable[[], None]) -> _Due:
+        """Call `post` once `time.monotonic` reaches `due`, in a thread of its own."""
+        entry = (due, next(self._order), post)
+        with self._condition:
+            heapq.heappush(self._heap, entry)
+            if self._thread is None:
+                # a daemon: closing the app doesn't wait for it
+                self._thread = threading.Thread(
+                    target=self._loop, name="composeui-repeat", daemon=True
+                )
+                self._thread.start()
+            self._condition.notify()  # it may now have to wake sooner
+        return entry
+
+    def unschedule(self, entry: _Due) -> None:
+        """Forget `entry`, unless it was posted already."""
+        with self._condition:
+            with contextlib.suppress(ValueError):  # posted already
+                self._heap.remove(entry)
+                heapq.heapify(self._heap)
+            self._condition.notify()
+
+    def _loop(self) -> None:
+        while True:
+            post = self._next()
+            # in a thread of its own: a web session's post waits for the session's lock, which
+            # a long request holds, and the other tasks' runs mustn't wait for it
+            try:
+                threading.Thread(target=post, name="composeui-repeat-post", daemon=True).start()
+            except RuntimeError:  # pragma: no cover (no thread left)
+                LOGGER.exception("A repeating task's next run couldn't start")
+
+    def _next(self) -> Callable[[], None]:
+        """Wait for the first run due, and take it out of the heap."""
+        with self._condition:
+            while True:
+                now = time.monotonic()
+                if self._heap and self._heap[0][0] <= now:
+                    return heapq.heappop(self._heap)[2]
+                self._condition.wait(self._heap[0][0] - now if self._heap else None)
+
+
+_TIMER = _Timer()
+
+
+def _post_due(
+    jobs: weakref.ReferenceType[Jobs],
+    task: weakref.ReferenceType[Task[Any, Any, Any]],
+    generation: int,
+) -> None:
+    """Have the main thread start `task`'s next run, if its jobs and it are still there."""
+    owner, due = jobs(), task()
+    # a main view freed while its task waited: no test can see that nothing then happens
+    if owner is not None and due is not None:  # pragma: no branch
+        owner._post(functools.partial(due._run_due, generation))  # noqa: SLF001 (the task's own timer)
 
 
 #: a stream of a process, with the callback its text goes to
@@ -968,14 +1191,22 @@ class Jobs:
                 task_signal.set_model(model)
 
     def task(
-        self, work: Callable[Concatenate[Job[R, ProgressT], P], R], *, debounce: float = 0.2
+        self,
+        work: Callable[Concatenate[Job[R, ProgressT], P], R],
+        *,
+        debounce: float = 0.2,
+        every: float | None = None,
+        backoff: float = 2.0,
+        max_wait: float | None = None,
     ) -> Task[R, P, ProgressT]:
         """Build a reusable task for `work`, without starting it; call on the main thread.
 
-        `debounce` is the seconds `Task.start_latest` waits for a newer call.
+        `debounce` is the seconds `Task.start_latest` waits for a newer call. With `every`,
+        the task repeats its runs, `every` seconds apart, with `backoff` and `max_wait` after
+        failures (see `Task`).
         """
         _check_main_thread("Jobs.task")
-        task = Task(self, work, debounce=debounce)
+        task = Task(self, work, debounce=debounce, every=every, backoff=backoff, max_wait=max_wait)
         self._adopt(task)
         return task
 
@@ -1006,6 +1237,16 @@ class Jobs:
     def _live_tasks(self) -> list[Task[Any, Any, Any]]:
         """Get the tasks still held, by their views or the app, in the order they came."""
         return list(self._tasks.values())
+
+    @property
+    def repeat_every(self) -> float | None:
+        """Get the shortest `Task.every` of the tasks repeating, or None if none repeats."""
+        waits = [
+            task.every
+            for task in self._live_tasks()
+            if task.every is not None and task._repeat_args is not None  # noqa: SLF001 (shared task lifecycle)
+        ]
+        return min(waits, default=None)
 
     def start(
         self,
@@ -1117,9 +1358,24 @@ class Jobs:
     def cancel(self) -> None:
         """Cancel every job running; each still finishes, as soon as it notices.
 
-        Raises `CalledInJobError` in a job's thread: a job cancels itself with `Job.cancel`.
+        The tasks that repeat stop too, also those waiting for their next run, whose
+        ``changed`` emits. Raises `CalledInJobError` in a job's thread: a job cancels itself
+        with `Job.cancel`.
         """
         _check_main_thread("Jobs.cancel")
+        self._cancel_runs()
+        for task in self._live_tasks():
+            if task._repeat_args is not None:  # noqa: SLF001 (shared task lifecycle)
+                task._stop_repeat()  # noqa: SLF001 (shared task lifecycle)
+                if task._job is None:  # noqa: SLF001 (shared task lifecycle)
+                    task.changed.emit()  # a run's outcome emits it, else
+
+    def _cancel_runs(self) -> None:
+        """Cancel every job running, and nothing else: no signal emits.
+
+        For a web session that ends: its app's code mustn't run in another session's request,
+        and its posts, a repeating task's next run included, do nothing once it has ended.
+        """
         for job in self._running:
             job.cancel()
 
@@ -1132,7 +1388,7 @@ class Jobs:
         _check_main_thread("Jobs.drop")
         for job in self._running:
             job._dropped = True  # noqa: SLF001 (the jobs' own bookkeeping)
-        self.cancel()
+        self._cancel_runs()  # the tasks' reset below stops their repeats
         was_running = self.is_running
         self._running.clear()
         tasks = self._live_tasks()

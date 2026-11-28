@@ -511,9 +511,10 @@ assert main_view.solver.result == "beam.comm: stopped"
 - **From now on.** The task sets `is_enabled` at once, then at each start and outcome: a
   success, a failure, or the end of a canceled run. New, Open, and `jobs.drop()` end the
   run, and the views come back too.
-- **Asked to stop.** `cancel_with`'s controls are enabled only while a run is in progress, until
-  it is asked to stop. `task.cancel()` sets `is_canceled`, and `changed` emits: a
-  `changed` callback can show "Stopping..." until the run is over.
+- **Asked to stop.** `cancel_with`'s controls are enabled only while a run is in progress, or
+  while the task [repeats](#repeat-a-task), until it is asked to stop. `task.cancel()` sets
+  `is_canceled`, and `changed` emits: a `changed` callback can show "Stopping..." until the run
+  is over.
 - **The task's views.** The task alone sets their `is_enabled`: do not set it from another
   callback or a reactive method too. For a view with a condition of its own, give it to
   `disables` as `enabled_if`. The view is then enabled only while the task is not running
@@ -526,6 +527,85 @@ assert main_view.solver.result == "beam.comm: stopped"
   The task checks the condition again each time a view field that it reads changes, as a
   [reactive method](reactive-methods.md) does. An empty study then disables Run, also after
   a run.
+
+### Repeat a task
+
+A task built with `every` runs again and again, with the same arguments, until it stops. Use it to
+poll a server, a folder, or the jobs of a cluster:
+
+```python
+from pathlib import Path
+
+from composeui.core.jobs import Job
+from composeui.core.view import ButtonView, LabelView, MainView, child, define_view
+
+RESULTS = Path("results")
+
+
+def count_results(_job: Job[int], folder: Path) -> int:  # in its thread
+    return len(list(folder.glob("*.rmed")))
+
+
+@define_view
+class MonitorView(MainView):
+    status: LabelView = child(LabelView, text="Not checked yet")
+    stop: ButtonView = child(ButtonView, text="Stop")
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.checker = self.jobs.task(count_results, every=30.0)
+        self.checker.cancel_with(self.stop)
+        self.checker.finished.connect(self.show_count)
+        self.checker.failed.connect(self.show_error)
+        self.loaded.connect(self.start_checking)
+
+    def start_checking(self) -> None:
+        self.checker.start(RESULTS)
+
+    def show_count(self, count: int) -> None:
+        self.status.text = f"{count} results"
+
+    def show_error(self, error: Exception) -> None:
+        self.status.text = f"Not checked: {error}"
+
+
+main_view = MonitorView()
+main_view.start_checking()
+main_view.jobs.wait()  # Only for a main view with no toolkit.
+assert main_view.status.text == "0 results"
+main_view.checker.cancel()
+```
+
+`self.build_task(work, every=30.0)` builds one in another view.
+
+- **When it runs.** `start` runs the function at once. Each next run starts `every` seconds
+  after the run before ends, so two runs never overlap, and a slow server gets no requests
+  in line.
+- **Its state between runs.** `is_running` is true only during a run, and `is_repeating` from
+  the start until the task stops. A run keeps `result` and `has_result` of the run before until
+  its own outcome: [`show_state`](#show-a-tasks-state) does not show "Loading..." again at each
+  run. `error` holds the last failure until a run succeeds. `finished`, `failed`,
+  `progress_reported`, and `changed` emit for each run.
+- **After a failure.** The next run waits `backoff` times longer (2 by default) at each failure in
+  a row, up to `max_wait` seconds: ten times `every` by default. The first run that succeeds
+  sets the wait back to `every`.
+- **Stop.** `task.cancel()` stops the repeat: no run follows, and a run in progress still gives
+  its outcome. `cancel_with`'s controls are enabled while the task repeats, also between two
+  runs. `jobs.cancel()` stops every task that repeats, during a run or between two. A
+  programming error stops it too.
+- **New and Open.** New, Open, and closing the app stop every repeat, as they drop the other
+  jobs. Start it again in a `loaded` callback, as above, for the study that opens. The runs of
+  a task started there, or by the app's start, are not a change of the user's: they give what
+  the next start gives again (`has_unsaved_changes`).
+- **Start again.** While the task repeats, `start` returns `False`. `start_latest` replaces the
+  current run and the arguments of the next ones, and the waits start again from its run.
+- **On the web.** While a task only waits, the page asks the server for its changes once each
+  `every`, and every 300 ms during a run. A run then shows on the page at most one `every`
+  after it starts. A session that goes to disk (`session_idle`) or ends starts no more runs.
+  When a session comes back from disk, its `loaded` callbacks start its tasks again: start a
+  repeating task there, not only from a button.
+- **Without a toolkit.** `jobs.wait()` emits the outcome of the run in progress. A later call
+  starts a run that is due.
 
 ## Data shared by the sessions
 

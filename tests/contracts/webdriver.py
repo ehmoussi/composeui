@@ -11,7 +11,9 @@ page's scripts do is for `tests/test_browser.py`.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import time
 from contextlib import asynccontextmanager
 from html.parser import HTMLParser
 from typing import TYPE_CHECKING, Literal, NamedTuple, Optional
@@ -22,7 +24,7 @@ from composeui.webcore.webapplication import WebApplication
 from tests.webcore.support import _Browser, _element, _widget_id
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Mapping
+    from collections.abc import AsyncGenerator, Callable, Mapping
 
     from starlette.testclient import TestClient
 
@@ -45,6 +47,17 @@ class WebDriver:
     @asynccontextmanager
     async def by_code(self) -> AsyncGenerator[None, None]:
         yield  # a post is handled before its response: nothing waits
+
+    async def wait_until(self, condition: Callable[[], bool]) -> None:
+        assert self._client is not None
+        deadline = time.monotonic() + 10
+        # a thread changes the session under its lock: read it after a request, which waits
+        # for the lock, as the page's poller does
+        self._client.get("/_composeui/jobs")
+        while not condition() and time.monotonic() < deadline:
+            await asyncio.sleep(0.01)
+            self._client.get("/_composeui/jobs")
+        assert condition()
 
     async def type(self, view: View, text: str, *, part: int = 0) -> None:
         self._post(view, part, "input", text)

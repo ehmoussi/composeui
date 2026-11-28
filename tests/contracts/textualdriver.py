@@ -23,7 +23,7 @@ from composeui.textualcore.widgets.composetree import ComposeTree
 from tests.textualcore.support import _widget
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Callable
 
     from textual.pilot import Pilot
     from textual.widget import Widget
@@ -52,6 +52,14 @@ class TextualDriver:
         assert self._pilot is not None
         yield
         await self._pilot.pause()
+
+    async def wait_until(self, condition: Callable[[], bool]) -> None:
+        assert self._pilot is not None
+        for _ in range(200):  # a slow runner takes longer: until it holds, 10 s at most
+            if condition():
+                return
+            await self._pilot.pause(0.05)
+        assert condition()
 
     async def type(self, view: View, text: str, *, part: int = 0) -> None:
         box = _text_boxes(view)[part]

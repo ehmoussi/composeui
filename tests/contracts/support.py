@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Optional, Protocol
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from contextlib import AbstractAsyncContextManager
 
     from composeui.core.view import MainView, View
@@ -22,6 +23,13 @@ class Driver(Protocol):
 
         A widget's report of a change by code can come late, in a message: it comes before
         the test reads what was reported.
+        """
+        ...
+
+    async def wait_until(self, condition: Callable[[], bool]) -> None:
+        """Handle what the backend's threads post until `condition` holds; fail after 10 s.
+
+        For work that another thread hands the main thread, such as a repeating task's run.
         """
         ...
 

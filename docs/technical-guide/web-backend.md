@@ -109,6 +109,16 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   `cui-jobs` poller fetches `/_composeui/jobs` every `JOBS_POLL_MS`, which brings them. The
   server pushes nothing, so an idle page sends nothing. A response whose event starts or ends the
   jobs swaps the poller in, as it does the page's marker.
+- **Repeating tasks.** Between two runs of a task with `every`, no job runs. One thread of the
+  process (`_Timer` in `core/jobs.py`) keeps the next runs of every session in a heap, by the
+  time they are due, and posts each one to its session. The post runs in a short thread of its
+  own, as it waits for the session's lock, which a long request can hold: the other sessions'
+  runs don't wait behind it. While a task only waits, the poller fetches once each `every`
+  (`jobs_poll_delay`), not every `JOBS_POLL_MS`. A session that only waits for a task's next
+  run can hibernate: the timer isn't in its saved state, but waking opens the study again,
+  which emits `loaded`, and the app's callback starts the task again. A session that ends or
+  hibernates leaves its next run in the timer: the run's post finds the session ended
+  (`has_ended`) and starts nothing.
 - **Choices of several values.** Each box of a check list posts its key and its state, not a
   flip, and the check-all box posts its state too. A post that arrives twice leaves the same
   choice, and a click on a stale page does what the page showed. The user's change swaps only

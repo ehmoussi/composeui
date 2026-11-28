@@ -292,7 +292,10 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   never in a reactive method that sets `is_enabled` too. For an input that
   changes quickly, such as a slider, call `task.start_latest(*args)`: it replaces the
   current run, and a replaced run's result never shows. A reactive method can call it, but
-  must not read the state of the task that it starts.
+  must not read the state of the task that it starts. To poll a server or a folder, build
+  the task with `every=seconds`, not a loop of `job.sleep`: it repeats until
+  `task.cancel()`, with a longer wait after failures, and New and Open stop it, so start it
+  in a `loaded` callback.
   See https://ehmoussi.github.io/composeui/user-guide/threads.html
 - **Run an external program with `job.run_process(command, on_output=job.report_progress)`**,
   not `subprocess` by hand: it returns the exit code, and stops the program when the job is

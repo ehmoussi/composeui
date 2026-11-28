@@ -116,6 +116,32 @@ def test_the_page_asks_for_what_jobs_change_while_they_run(
     assert _swapped(polled, total_id).text == "Total: 7"
 
 
+def test_the_page_asks_once_a_wait_while_a_task_only_waits_for_its_next_run(
+    pages_views: list[PagesMainView], pages_client: TestClient
+) -> None:
+    pages_client.get("/results")
+    (main_view,) = pages_views
+    task = main_view.jobs.task(lambda _job: 7, every=2.5)
+    submit = main_view.router.inputs.submit
+
+    def start() -> None:
+        task.start()
+
+    submit.clicked.connect(start)
+    pages_client.post(f"/_composeui/widget/{_widget_id(submit.renderer)}", data={"event": "click"})
+    deadline = time.monotonic() + 10
+    while not task.has_result and time.monotonic() < deadline:
+        time.sleep(0.01)
+    poller = _element(pages_client.get("/_composeui/jobs").text, "cui-jobs").attributes
+
+    assert poller["hx-trigger"] == "load delay:2500ms"  # not every 300 ms until the next run
+
+    task.cancel()
+    assert (
+        "hx-get" not in _element(pages_client.get("/_composeui/jobs").text, "cui-jobs").attributes
+    )
+
+
 @define_view
 class GuestsMainView(MainView):
     guests: TableView = child(TableView, headers=["Name"])
