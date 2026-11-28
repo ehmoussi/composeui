@@ -210,6 +210,9 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   `user_name_header` and `user_email_header`, each None when the proxy gives none. It is None
   without a login, and on Qt and Textual. Each user id gets its own sessions and `browser_id`.
   Grant access by `id` only, never by the name or the email. Never read the headers yourself.
+  With `WebSettings(logout_url=...)`, the page has Log out: override `on_log_out` to ask first
+  or `close()` the session, and call `log_out()` when the user can leave. A job that logs out
+  at its end starts in `on_log_out` itself, so that a second click waits for it.
   See
   https://ehmoussi.github.io/composeui/user-guide/running-the-app.html#know-the-user-behind-a-login-proxy
 - **Give the user a file with `DownloadView`**, or `main_view.download(...)` from a callback,

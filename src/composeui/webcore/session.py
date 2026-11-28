@@ -71,6 +71,7 @@ if TYPE_CHECKING:
 
     from markupsafe import Markup
 
+    from composeui.core.jobs import Job
     from composeui.core.model import Model
     from composeui.core.view import DownloadedFile, MainView, Router
     from composeui.webcore.downloads import Downloads, OpenedUrl
@@ -277,10 +278,17 @@ def _upload_of(paths: Sequence[Path], uploads: Path | None, widget_id: str) -> P
 
 
 class WebSession(RenderTarget):
-    """A session's view tree, rendered once and then driven by its browser's requests."""
+    """A session's view tree, rendered once and then driven by its browser's requests.
+
+    Its page logs the user out at `logout_url` (`MainView.log_out`), if any.
+    """
 
     def __init__(
-        self, main_view: MainView, model: Model | None = None, uploads_folder: Path | None = None
+        self,
+        main_view: MainView,
+        model: Model | None = None,
+        uploads_folder: Path | None = None,
+        logout_url: str | None = None,
     ) -> None:
         super().__init__()
         self.main_view = main_view
@@ -299,6 +307,9 @@ class WebSession(RenderTarget):
         self._held_uploads: dict[str, Path] = {}
         #: the directories of uploads that were replaced, removed once no job may read them
         self._replaced_uploads: list[Path] = []
+        #: the jobs that the last Log out's `on_log_out` started: while one runs, or its
+        #: outcome waits, Log out is under way, and another click on it does nothing
+        self._log_out_jobs: set[Job[Any, Any]] = set()
         #: the order of each page's posts, which the routes handle in it
         self.post_order = PostOrder()
         #: the requests that take a while outside the session's lock (an upload's body, a
@@ -320,6 +331,8 @@ class WebSession(RenderTarget):
         main_view.loaded.connect(self._mark_loaded_again)
         with self.lock, rendering_into(self):
             main_view.render(RendererType.WEB)
+            assert isinstance(main_view.renderer, WebMainRenderer)  # the web's main renderer
+            main_view.renderer.logout_url = logout_url
 
     def _mark_loaded_again(self) -> None:
         self._is_loaded_again = True
@@ -438,6 +451,36 @@ class WebSession(RenderTarget):
         """Whether the app asked to close (`MainView.close()`, e.g. the Exit action)."""
         renderer = self.main_view.renderer
         return isinstance(renderer, WebMainRenderer) and renderer.is_closed
+
+    def log_out_clicked(self) -> tuple[str, str | None]:
+        """Answer the user's Log out (`MainView.on_log_out`); returns what `handle_event` does.
+
+        Ignored while a job that the last one's `on_log_out` started is under way: its own
+        `log_out` would come after the second one's, once the user is back from the proxy.
+        """
+        with self.lock:
+            # a job stays there until its outcome is delivered
+            running = self.main_view.jobs._running  # noqa: SLF001 (the session's own Log out)
+            self._log_out_jobs &= running
+            if self._log_out_jobs:
+                return self._respond(lambda: None)  # still what changed, e.g. its outcome
+            before = set(running)
+            answer = self._respond(self.main_view.on_log_out)
+            self._log_out_jobs = running - before
+            return answer
+
+    # modelled in specs/LogOut.tla, with the answers that call it (`routes.py`)
+    def take_log_out(self) -> str | None:
+        """Get where the page goes to log the user out, once the app asked (`MainView.log_out`).
+
+        Once only: the page leaves with this answer, and the session's next page stays.
+        """
+        with self.lock:
+            renderer = self.main_view.renderer
+            if not isinstance(renderer, WebMainRenderer) or not renderer.is_logging_out:
+                return None
+            renderer.is_logging_out = False
+            return renderer.logout_url
 
     def trigger_action(self, widget_id: str) -> None:
         """Fire the `triggered` of one of this session's actions; ignore any other id."""
@@ -875,6 +918,8 @@ class WebSession(RenderTarget):
                 body += main_view.renderer.brand_html(oob=True)
             if (main_view.language, main_view.title) != (language, title):
                 body += page_marker(main_view.language, main_view.title, oob=True)
+            if main_view.language != language and isinstance(main_view.renderer, WebMainRenderer):
+                body += main_view.renderer.user_menu_html(oob=True)  # its Log out's text
             if jobs_poll_delay(main_view.jobs) != poll_delay:
                 body += jobs_poller(delay_ms=jobs_poll_delay(main_view.jobs), oob=True)
             body += self._downloads_marker()
@@ -1181,7 +1226,7 @@ class SessionStore:
     server stops. The next server opens them. A crash loses the sessions in memory only.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 (each sets how the sessions live, by its name)
         self,
         build_session: Callable[[], tuple[MainView, Model | None]],
         *,
@@ -1189,8 +1234,11 @@ class SessionStore:
         max_sessions: int,
         saved: Path | SessionFolder | None = None,
         hibernation: Hibernation | None = None,
+        logout_url: str | None = None,
     ) -> None:
         self._build_session = build_session
+        #: where each session's page logs the user out (`WebSettings.logout_url`)
+        self._logout_url = logout_url
         self._ttl = ttl
         self._max_sessions = max_sessions
         self.hibernation = hibernation
@@ -1441,7 +1489,7 @@ class SessionStore:
         """Build a session, closing its model if the session can't take it."""
         main_view, model = self._build_session()
         try:
-            return WebSession(main_view, model, self._uploads_folder)
+            return WebSession(main_view, model, self._uploads_folder, self._logout_url)
         except BaseException:
             if model is not None:
                 model.close()

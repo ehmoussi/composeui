@@ -209,7 +209,8 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   threads and timers, `SqliteDatabase` locking, web sessions and post order, `page.js` loaders and
   swaps, reload, dialogs and screens, or a file being replaced.
 - When you change code that a TLA+ spec of `specs/` models, change the spec in the same
-  commit and run `make specs`. `RepeatingTasks.tla` models `Task`'s repeats in `core/jobs.py`.
+  commit and run `make specs`. `RepeatingTasks.tla` models `Task`'s repeats in `core/jobs.py`,
+  and `LogOut.tla` the web's Log out in `webcore/routes.py` and `webcore/session.py`.
   The spec can come before the code, for a design that is not settled yet. A new spec adds the
   module it models to the file filter of the `specs` job in `ci.yml`.
 - The public API is the `__all__` of each `composeui.core` module: the API reference shows

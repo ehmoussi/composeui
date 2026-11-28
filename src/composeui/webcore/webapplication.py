@@ -68,6 +68,7 @@ from composeui.webcore.routes import (
     homepage,
     icon,
     jobs_poll,
+    log_out,
     open_url,
     page,
     picture,
@@ -164,6 +165,7 @@ def create_starlette_app(  # noqa: PLR0913 (each sets a part of the server)
     stream_places: StreamPlaces | None = None,
     style: WebStyle | None = None,
     user_headers: UserHeaders | None = None,
+    logout_url: str | None = None,
 ) -> Starlette:
     """Create the Starlette app serving one main view per browser session.
 
@@ -176,7 +178,8 @@ def create_starlette_app(  # noqa: PLR0913 (each sets a part of the server)
     reload once another process serves (`reload_poll`). The cookie lasts `cookie_ttl`
     seconds after the last answer, at most `MAX_COOKIE_AGE`: it holds the session's id and
     the browser's (`browser_id`). With `user_headers`, each request must name its user
-    there, and each user gets sessions of their own (`MainView.user`).
+    there, and each user gets sessions of their own (`MainView.user`). With `logout_url`,
+    the route of Log out sends the page there (`MainView.log_out`).
     """
     style_files = StyleFiles(style)
     # after the origin check, which refuses another site's request whoever its user
@@ -201,6 +204,7 @@ def create_starlette_app(  # noqa: PLR0913 (each sets a part of the server)
                     Route("/state", state_download, methods=["GET"]),
                     Route("/state", state_upload, methods=["POST"]),
                     Route("/state/download", state_save, methods=["POST"]),
+                    Route("/log-out", log_out, methods=["POST"]),
                     Route("/icon/{name}", icon),
                     Route("/jobs", jobs_poll),
                     Route("/style/theme.css", theme, methods=["GET"]),
@@ -245,6 +249,8 @@ def create_starlette_app(  # noqa: PLR0913 (each sets a part of the server)
     app.state.sessions = sessions
     #: the headers that name each request's user, or None without a login
     app.state.user_headers = user_headers
+    #: the login proxy's logout address (`WebSettings.logout_url`), or None without one
+    app.state.logout_url = logout_url
     #: the app's theme and stylesheets, which its pages load
     app.state.style_files = style_files
     #: the places of the downloads written at once (`StreamResponse`)
@@ -615,6 +621,7 @@ class WebApplication(Application[MainViewT]):
             hibernation=None
             if settings.session_idle is None
             else Hibernation(settings.session_idle, settings.max_saved_sessions),
+            logout_url=settings.logout_url,
         )
         try:
             return create_starlette_app(
@@ -635,6 +642,7 @@ class WebApplication(Application[MainViewT]):
                 else UserHeaders(
                     settings.user_header, settings.user_name_header, settings.user_email_header
                 ),
+                logout_url=settings.logout_url,
             )
         except BaseException:
             # e.g. a stylesheet missing: the app fixed, the server made again takes it

@@ -233,6 +233,9 @@ class MainRenderer(Renderer[TView, TObject]):
         """
         return False
 
+    def log_out(self) -> None:
+        """Send the user to the login proxy's logout address; nothing without a login."""
+
 
 class RendererContainer(Generic[TView]):
     """The renderers of a view shown by several widgets, e.g. a form row's label and field."""

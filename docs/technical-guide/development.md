@@ -154,10 +154,11 @@ Every behavior change needs a test in `tests/`.
 - A line that only Windows runs, such as the threads that read a process's output, gets a
   `# windows only` comment. On Linux and macOS, the `Makefile` sets
   `COMPOSEUI_WINDOWS_ONLY`, and coverage leaves these lines out.
-- `specs/` holds TLA+ specs: models of a design that several threads share, such as `Task`'s
-  repeats in `core/jobs.py` (`RepeatingTasks.tla`). A spec's `.cfg` file names the properties
-  to check. `make specs` checks each spec with TLC, TLA+'s model checker, in every state that
-  the spec can reach. It needs Java 11 or later.
+- `specs/` holds TLA+ specs: models of a design that several threads share, such as `Task`'s repeats
+  in `core/jobs.py` (`RepeatingTasks.tla`), or of a state that events reach in any order, such as
+  the web's Log out in `webcore/routes.py` and `webcore/session.py` (`LogOut.tla`). A spec's `.cfg`
+  file names the properties to check. `make specs` checks each spec with TLC, TLA+'s model checker,
+  in every state that the spec can reach. It needs Java 11 or later.
 - `make specs` downloads TLC once into `specs/vendor/`, which is not committed. TLC keeps its
   states there too. It checks the file's SHA-256 against the one in the `Makefile` and
   `make.ps1`. When you change `TLA_TOOLS_VERSION`, change the SHA-256 in both files, and

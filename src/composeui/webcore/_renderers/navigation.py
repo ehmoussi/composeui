@@ -8,6 +8,7 @@ from markupsafe import Markup
 from typing_extensions import override
 
 from composeui.core._views.actions import OpenFileAction
+from composeui.core._views.main import LOG_OUT_TEXT
 from composeui.core.renderer import MainRenderer
 from composeui.core.view import (
     DialogView,
@@ -294,6 +295,14 @@ _THEME_MENU: Final = Markup(
 )
 
 
+#: the icon of the header's user menu: a person
+_USER_ICON: Final = Markup(
+    '<svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+    ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+    '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>'
+)
+
+
 class WebMainRenderer(MainRenderer[MainView, str]):
     """Renders the whole page; never swapped itself, so its attributes are no-ops."""
 
@@ -307,6 +316,11 @@ class WebMainRenderer(MainRenderer[MainView, str]):
         #: the files `MainView.download` gave and the URLs `open_url` opens, until the page
         #: fetches them
         self.downloads = Downloads()
+        #: the login proxy's logout address (`WebSettings.logout_url`): the page then has a
+        #: user menu, with Log out; None without one
+        self.logout_url: str | None = None
+        #: set by `MainView.log_out()`; the session's next answer sends the page to `logout_url`
+        self.is_logging_out = False
         self._target: RenderTarget | None = None
         self._refresh_dispatcher.update(
             dict.fromkeys(
@@ -417,7 +431,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
                 "{value}{brand_html}{toolbar}"
                 '<nav class="ml-auto flex items-center gap-1">'
                 "{join}{join2}</nav>"
-                "{THEME_MENU}"
+                "{user_menu}{THEME_MENU}"
                 "</header>"
                 "{value2}"
                 "{status_bar}{dialogs_html}"
@@ -428,6 +442,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
                 toolbar=toolbar,
                 join=Markup("").join(toolbars),
                 join2=Markup("").join(menus),
+                user_menu=self.user_menu_html(),
                 THEME_MENU=_THEME_MENU,
                 value2=sidebar.drawer_html(main) if sidebar else main,
                 status_bar=status_bar,
@@ -457,6 +472,38 @@ class WebMainRenderer(MainRenderer[MainView, str]):
             if isinstance(view, DialogView) and isinstance(view.renderer, WebDialogRenderer):
                 dialogs.append(view.renderer.to_html())
         return Markup("").join(dialogs)
+
+    def user_menu_html(self, *, oob: bool = False) -> Markup:
+        """Show the user, by their name or else their id, with their email and Log out.
+
+        Only with `logout_url`: a login proxy names the user. Log out posts, as it runs the
+        app's code (`MainView.on_log_out`).
+        """
+        user = self._view.user
+        if self.logout_url is None or user is None:
+            return Markup()
+        email = (
+            Markup("")
+            if user.email is None
+            else Markup('<li class="menu-title truncate normal-case">{}</li>').format(user.email)
+        )
+        swap = Markup(' hx-swap-oob="true"') if oob else ""
+        return Markup(
+            '<div id="cui-user-menu"{swap} data-cui="user-menu" class="dropdown dropdown-end">'
+            '<div tabindex="0" role="button" class="btn btn-ghost btn-sm max-w-48 gap-2">'
+            '{icon}<span class="truncate">{name}</span></div>'
+            '<ul tabindex="0" class="menu dropdown-content z-30 mt-2 w-56 rounded-box border'
+            ' border-base-300 bg-base-100 p-2 shadow-lg">'
+            "{email}"
+            '<li><button type="button" hx-post="/_composeui/log-out" hx-swap="none"'
+            " data-close-dropdown>{log_out}</button></li></ul></div>"
+        ).format(
+            swap=swap,
+            icon=_USER_ICON,
+            name=user.name or user.id,
+            email=email,
+            log_out=self._view.tr(LOG_OUT_TEXT),
+        )
 
     def brand_html(self, *, oob: bool = False) -> Markup:
         """Show the app's title after its icon, or a badge of its initial without one."""
@@ -502,6 +549,10 @@ class WebMainRenderer(MainRenderer[MainView, str]):
     def download(self, file: DownloadedFile) -> None:
         # the session's next answer names it (`downloads_marker`)
         self.downloads.add(file)
+
+    @override
+    def log_out(self) -> None:
+        self.is_logging_out = True  # without `logout_url`, the answer goes nowhere
 
     @override
     def open_url(self, url: str) -> bool:

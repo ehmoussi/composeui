@@ -40,8 +40,9 @@ jobs:
             else
               code=false
             fi
-            # the specs, the code they model (RepeatingTasks: core/jobs.py), and how they run
-            if grep -qE '^specs/|^src/composeui/core/jobs\.py$|^Makefile$|^\.github/workflows/ci\.yml$' changed.txt; then
+            # the specs, the code they model (RepeatingTasks: core/jobs.py; LogOut:
+            # webcore/routes.py and session.py), and how they run
+            if grep -qE '^specs/|^src/composeui/core/jobs\.py$|^src/composeui/webcore/(routes|session)\.py$|^Makefile$|^\.github/workflows/ci\.yml$' changed.txt; then
               specs=true
             else
               specs=false

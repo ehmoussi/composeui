@@ -15,6 +15,7 @@ import re
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Generic, Optional, Protocol, TextIO, TypeVar, cast
+from urllib.parse import urlsplit
 
 import attrs
 from typing_extensions import TypedDict, TypeVarTuple, Unpack, overload, override
@@ -593,6 +594,32 @@ class WebSettings:
     #: The header that gives the user's email address, such as ``"Remote-Email"`` or
     #: ``"X-Forwarded-Email"`` (`User.email`), as `user_name_header` gives the name.
     user_email_header: Optional[str] = attrs.field(default=None)
+    #: The login proxy's address that logs the user out, such as ``"/oauth2/sign_out"``: a
+    #: path of the server, or an ``http`` or ``https`` URL, with `user_header` only. The page
+    #: then has a Log out entry, which calls `MainView.on_log_out`. None, the default, has no
+    #: Log out.
+    logout_url: Optional[str] = attrs.field(default=None)
+
+    @logout_url.validator
+    def _check_logout_url(self, _attribute: attrs.Attribute[object], value: str | None) -> None:
+        if value is None:
+            return
+        if self.user_header is None:
+            msg = f"logout_url={value!r} needs a user_header: without a login, no one logs out"
+            raise ValueError(msg)
+        url = urlsplit(value)
+        # a browser reads "/\host" as "//host": another site
+        is_path = not url.scheme and not url.netloc and value[:1] == "/" and value[1:2] != "\\"
+        is_url = url.scheme in {"http", "https"} and bool(url.netloc)
+        # the address goes in a header: a percent-encoded ASCII URL, no space or control
+        if (
+            not (is_path or is_url)
+            or not value.isascii()
+            or not value.isprintable()
+            or " " in value
+        ):
+            msg = f"logout_url={value!r} isn't a path of the server nor an http or https URL"
+            raise ValueError(msg)
 
     @user_header.validator
     @user_name_header.validator

@@ -134,6 +134,15 @@ def test_closing_a_main_view_not_rendered_drops_its_jobs() -> None:
     assert not view.jobs.is_running
 
 
+def test_an_app_s_own_test_of_its_log_out_runs_without_a_backend() -> None:
+    """`log_out` does nothing there, as on Qt and Textual: no login to leave, no error."""
+    view = _CountMainView()
+
+    view.on_log_out()
+
+    assert view.renderer is None
+
+
 def test_a_date_in_a_format_that_isn_t_one_is_read_as_iso() -> None:
     assert parse_date("2026-10-18", "not a format") == datetime.date(2026, 10, 18)
 

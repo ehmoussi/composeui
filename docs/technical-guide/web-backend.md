@@ -300,6 +300,21 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   not the name: it is signed, not encrypted, and a long name could take it past what a
   browser keeps. Each user of a browser gets an id of their own. New, the check of a study and
   a `--reload` save build their initial view for the same user (`MainView._initial_view`).
+- **Log out** (`MainView.on_log_out`, `WebSettings.logout_url`). The entry posts to
+  `/_composeui/log-out`, not a link: it runs the app's code, which may ask first, and a GET must not
+  change the session. `log_out` only sets `WebMainRenderer.is_logging_out`. Each answer that runs
+  the session's pending work checks it (`WebSession.take_log_out`), as a job's callback runs in
+  whichever request takes that work next: a post and a fragment send the page to the address with
+  `HX-Redirect`, a jobs poll too, and a page's load with a 303. The check clears the flag: a session
+  that stays doesn't send its next page away again. After `close`, the page goes there too, and the
+  session is dropped as on Exit. The address is the app's own setting, never the request's, and
+  `WebSettings` refuses one that isn't a path or an `http` or `https` URL in ASCII: it goes in a
+  header. A path that starts with `/\` is refused too: a browser reads it as `//`, another site.
+  Without the session, the route sends the page to the address at once. While a job that
+  `on_log_out` started is in the jobs' running set, which keeps it until its outcome is delivered,
+  the route runs no `on_log_out` (`WebSession.log_out_clicked`): the second job's `log_out` would
+  wait in a session that stays, and send the user back to the proxy at their next visit.
+  `specs/LogOut.tla` models the flag and these answers.
 - **Idle sessions on disk** (`session_idle`). The `SessionStore` tracks four states: in memory,
   being saved, on disk, and being restored.
 

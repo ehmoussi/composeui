@@ -846,5 +846,75 @@ Set `user_email_header="Remote-Email"` to read the email. OAuth2 Proxy gives no 
 display.
 
 The user is the provider's id of the user. With `--prefer-email-to-user`, OAuth2 Proxy gives
-the user's email instead. A link to `/oauth2/sign_out` logs the user out of OAuth2 Proxy, not
-of the identity provider.
+the user's email instead. Its address `/oauth2/sign_out` logs the user out of OAuth2 Proxy,
+not of the identity provider: set it in `logout_url` (see
+[Log the user out](#log-the-user-out)).
+
+### Log the user out
+
+Set the login proxy's logout address in `logout_url`. The page then shows the user at the right
+of its header: a menu, named by the user's name or else their id, with their email and a
+**Log out** entry. Log out sends the page to the proxy's address, and the proxy logs the user
+out:
+
+```python
+from composeui.core.application import WebSettings, run
+from composeui.core.view import LabelView, MainView, child, define_view
+
+
+@define_view
+class GreetingView(MainView):
+    hello: LabelView = child(LabelView, text="Hello")
+
+
+if __name__ == "__main__":
+    run(
+        GreetingView,
+        web_settings=WebSettings(
+            user_header="Remote-User",
+            user_email_header="Remote-Email",
+            logout_url="/oauth2/sign_out",
+        ),
+    )
+```
+
+`logout_url` is a path of the server, such as `"/oauth2/sign_out"`, or an `http` or `https`
+URL. It needs `user_header`. Log out works as follows:
+
+- **The session stays.** Log out works as closing the tab does: when the same user logs in
+  again before the session ends (`session_ttl`), they find the app as they left it. Another
+  user who logs in gets a session of their own.
+- **The app decides what Log out does.** Log out calls `MainView.on_log_out`, which calls
+  `MainView.log_out`. Override `on_log_out` to ask first, or to end the session too. Call
+  `log_out` when the user can leave. If it is never called, the user stays in the app.
+- **The page leaves with the next answer.** After `log_out`, the session's next answer sends
+  the page to `logout_url`: the answer of the click on Log out, of a dialog's answer, of the
+  poll that brings a job's result, or of the page's load. Without `logout_url`, and on Qt and
+  Textual, `log_out` does nothing.
+- **One Log out at a time.** While a job that `on_log_out` started runs, and until its result
+  arrives, another click on Log out does nothing. Else the second job's `log_out` would wait in
+  the session, and send the user back to the proxy once they log in again. Only the jobs that
+  `on_log_out` starts count: start such a job there, not in a dialog's answer.
+
+For example, this main view asks before Log out, and ends the session once the user agrees:
+
+```python
+from composeui.core.view import DialogKind, DialogView, MainView, child, define_view
+
+
+@define_view
+class AppView(MainView):
+    confirm_log_out: DialogView = child(
+        DialogView, title="Log out?", text="Your work here ends.", kind=DialogKind.CONFIRM
+    )
+
+    def on_log_out(self) -> None:
+        self.confirm_log_out.ask(self.end_and_log_out)
+
+    def end_and_log_out(self) -> None:
+        self.close()  # ends the session, as Exit does
+        self.log_out()
+```
+
+To warn about unsaved changes instead, call `self.ask_discard_changes(proceed=self.log_out)`
+in `on_log_out` (see [Unsaved changes](building-views.md#unsaved-changes)).
