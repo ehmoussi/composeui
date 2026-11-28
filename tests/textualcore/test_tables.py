@@ -25,7 +25,6 @@ from composeui.core._views.tables import SOURCE_TABLE_WINDOW
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.registry import RendererType
 from composeui.core.view import (
-    SEARCH_DELAY_MS,
     CellStyle,
     CellWidget,
     EditRefusedError,
@@ -83,7 +82,14 @@ if TYPE_CHECKING:
 
     from composeui.core.view import TableView
 
-from tests.textualcore.support import _app_of, _click_laid_out, _field_widget, _names, _widget
+from tests.textualcore.support import (
+    _app_of,
+    _click_laid_out,
+    _field_widget,
+    _names,
+    _wait_until,
+    _widget,
+)
 
 
 @pytest.mark.asyncio
@@ -108,7 +114,9 @@ async def test_the_summary_table_shows_each_edit_as_plain_text() -> None:
         radius.focus()
         await pilot.press("end", *["backspace"] * 10, *"35", "tab")
         view.pages.navigate("results")
-        await pilot.pause()
+        # the field focused leaves as its page hides: its editing finished writes the summary
+        # again, after the next refresh
+        await _wait_until(pilot, lambda: app.focused is None)
         assert lines()[1].split() == ["Main", "Pipe", "35", "20", "200"]
 
         # shown as typed, not read as Rich markup (which would drop "[red]")
@@ -753,8 +761,7 @@ async def test_the_filter_bar_searches_and_adds_filters_shown_as_chips() -> None
         await pilot.press(*"ROOM")
         await pilot.pause()
         assert view.rooms.search == ""  # once the user stops typing: one search, not four
-        await pilot.pause(SEARCH_DELAY_MS / 1000 * 2)
-        assert _shown_column(table, 0) == ["Bedroom"]
+        await _wait_until(pilot, lambda: _shown_column(table, 0) == ["Bedroom"])
         assert str(bar.count.render()) == "1 of 4"
         await pilot.press(*["backspace"] * 4)
         await pilot.pause()
@@ -773,9 +780,9 @@ async def test_the_filter_bar_searches_and_adds_filters_shown_as_chips() -> None
         (chip,) = bar.chips.query(ComposeFilterChip)
         assert str(chip.open_button.label) == "Temperature: >=20 \u270e"
         assert str(chip.open_button.tooltip) == "Edit the filter on Temperature"
-        # its chip has the focus: Enter opens it again, to replace the filter on its
-        # column; another column's combines
-        assert app.focused is chip.open_button
+        # its chip has the focus, after the next refresh: Enter opens it again, to replace
+        # the filter on its column; another column's combines
+        await _wait_until(pilot, lambda: app.focused is chip.open_button)
         await pilot.press("enter")
         await pilot.pause()
         assert bar.value.value == ">=20"
@@ -1207,7 +1214,7 @@ async def test_the_search_s_button_or_escape_empties_it_then_escape_goes_on() ->
         await pilot.press(*"kit")
         assert bar.clear_search.display
         # the search is empty at once, not after the delay of typing, the focus kept
-        await pilot.click(bar.clear_search)
+        await _click_laid_out(pilot, bar.clear_search)  # shown: laid out after a refresh
         assert (bar.search.value, searched[-1:], bar.clear_search.display) == ("", [""], False)
         assert app.focused is bar.search
 

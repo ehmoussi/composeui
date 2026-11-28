@@ -18,7 +18,7 @@ from textual.widgets import (
     Input,
 )
 from textual_fspicker import FileSave, SelectDirectory
-from textual_fspicker.base_dialog import Dialog
+from textual_fspicker.base_dialog import Dialog, FileSystemPickerScreen
 from textual_fspicker.parts import DirectoryNavigation
 from textual_fspicker.parts.directory_navigation import DirectoryEntry, DirectoryEntryStyling
 
@@ -42,7 +42,22 @@ if TYPE_CHECKING:
     from textual.screen import Screen
 
 
-from tests.textualcore.support import _app_of, _click_laid_out, _field_widget
+from tests.textualcore.support import (
+    _app_of,
+    _click_laid_out,
+    _field_widget,
+    _wait_for_screen,
+    _wait_until,
+)
+
+
+async def _open_picker(pilot: Pilot[Any], field: ComposeFilePathInput) -> None:
+    """Click the field's browse button, once it takes a click, and wait for its picker.
+
+    A button pressed less than 0.2 s ago ignores a click: on a slow machine, the last one.
+    """
+    await _click_laid_out(pilot, field.browse_button)
+    await _wait_for_screen(pilot, FileSystemPickerScreen, DirectoryNavigation)
 
 
 @pytest.mark.asyncio
@@ -229,7 +244,8 @@ async def test_a_file_upload_with_multiple_gives_the_files_marked_in_the_picker(
         picker.navigation.focus()
         await picker.mark("rivers.shp")  # unmarked, though gone
         await picker.mark("roads.shp")
-        await picker.pilot.click("#select")
+        # clicked again: once it takes a click
+        await _click_laid_out(picker.pilot, picker.pilot.app.screen.query_one("#select"))
         await picker.pilot.pause()
 
         expected = tuple(UploadedFile.of_path(tmp_path / n) for n in ("roads.dbf", "roads.shp"))
@@ -265,17 +281,18 @@ async def test_a_file_path_is_typed_or_picked_in_the_picker_and_reloaded(tmp_pat
         await pilot.pause()
         assert measurements.path == tmp_path / "x"
 
-        await pilot.click(field.browse_button)
-        await pilot.pause()
+        await _open_picker(pilot, field)
         assert [type(s).__name__ for s in app.screen_stack] == ["Screen", "FileOpen"]
+        # the picker settles first: its folder read in a thread, its filter's change focusing
+        # the list, which would take Enter
+        await app.workers.wait_for_complete()
+        await pilot.pause()
         file_input = app.screen.query_one(Input)
         file_input.focus()
         file_input.value = str(tmp_path / "flows.csv")
-        await pilot.pause()
+        await _wait_until(pilot, lambda: file_input.has_focus)
         await pilot.press("enter")
-        for _ in range(4):
-            await pilot.pause()
-        assert len(app.screen_stack) == 1
+        await _wait_until(pilot, lambda: len(app.screen_stack) == 1)
         assert (measurements.path, picked) == (tmp_path / "flows.csv", [tmp_path / "flows.csv"])
         assert field.input.value == str(tmp_path / "flows.csv")
         # the picked path changes the text, then is reported, but the user didn't type it
@@ -300,8 +317,7 @@ async def test_a_file_path_s_picker_opens_here_on_a_path_typed_halfway_and_cance
         await pilot.pause()
         field.input.focus()
         await pilot.press(*"nowhere/da")
-        await pilot.click(field.browse_button)
-        await pilot.pause()
+        await _open_picker(pilot, field)
         opened = [type(screen).__name__ for screen in app.screen_stack]
         app.screen.dismiss(None)  # as the picker's Cancel does
         # the focus comes back in a call of its own, which a slow runner makes later
@@ -328,8 +344,7 @@ async def test_a_file_path_s_picker_opens_in_its_first_server_root_and_can_leave
         field = _field_widget(view.study.renderer)
         assert isinstance(field, ComposeFilePathInput)
         await pilot.pause()
-        await pilot.click(field.browse_button)
-        await pilot.pause()
+        await _open_picker(pilot, field)
         location = app.screen.query_one(DirectoryNavigation).location
         app.screen.dismiss(tmp_path / "elsewhere.py")  # as the picker's Open does
         await pilot.pause()
@@ -358,8 +373,7 @@ async def test_a_file_path_s_picker_opens_in_its_base_folder_and_shows_its_files
         locations: list[Path] = []
         shown: list[str] = []
         for file in (study / "inputs" / "model.py", tmp_path / "elsewhere.py"):
-            await pilot.click(field.browse_button)
-            await pilot.pause()
+            await _open_picker(pilot, field)
             locations.append(Path(app.screen.query_one(DirectoryNavigation).location))
             app.screen.dismiss(file)  # as the picker's Open does
             await pilot.pause()
@@ -393,8 +407,7 @@ async def test_a_folder_path_s_picker_selects_a_folder_from_its_folder_else_its_
         for text in ("", str(tmp_path), "nowhere/halfway"):
             field.input.value = text
             await pilot.pause()
-            await pilot.click(field.browse_button)
-            await pilot.pause()
+            await _open_picker(pilot, field)
             screen = app.screen
             assert isinstance(screen, SelectDirectory)
             locations.append(Path(screen.query_one(DirectoryNavigation).location))
@@ -430,8 +443,7 @@ async def test_a_picker_s_folder_list_reads_its_styles_on_the_app_s_thread() -> 
         field = _field_widget(view.form.measurements.renderer)
         assert isinstance(field, ComposeFilePathInput)
         await pilot.pause()
-        await pilot.click(field.browse_button)
-        await pilot.pause()
+        await _open_picker(pilot, field)
         navigation = app.screen.query_one(DirectoryNavigation)
         # as Textual applies the list's styles again: none, until the app's thread is done
         styles = navigation._component_styles  # noqa: SLF001 (nothing else reaches them)
@@ -468,15 +480,13 @@ async def test_a_save_path_is_picked_in_a_save_picker_and_replaces_a_file_once_a
         await pilot.pause()
 
         async def save(path: Path) -> Screen[Any]:
-            await pilot.click(field.browse_button)
-            await pilot.pause()
+            await _open_picker(pilot, field)
             assert isinstance(app.screen, FileSave)
             app.screen.dismiss(path)  # as the picker's Save does
             await pilot.pause()
             return app.screen
 
-        await pilot.click(field.browse_button)
-        await pilot.pause()
+        await _open_picker(pilot, field)
         location = app.screen.query_one(DirectoryNavigation).location
         app.screen.dismiss(None)  # cancelled
         await pilot.pause()

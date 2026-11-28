@@ -1140,7 +1140,10 @@ async def test_textual_draws_again_for_each_change_that_moves_its_dots() -> None
         assert widget.render_line(4).text.strip() == ""
 
         await pilot.resize_terminal(60, 20)
-        await pilot.pause()
+        for _ in range(200):  # laid out again by a timer of the app, late on a slow machine
+            if len(widget.render_line(0).text) == 60:
+                break
+            await pilot.pause(0.05)
         assert len(widget.render_line(0).text) == 60
 
 

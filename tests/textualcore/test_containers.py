@@ -50,7 +50,7 @@ from tests.vertical import VerticalMainView
 if TYPE_CHECKING:
     from composeui.core.view import View
 
-from tests.textualcore.support import _app_of, _field_widget, _widget
+from tests.textualcore.support import _app_of, _field_widget, _wait_until, _widget
 
 
 @pytest.mark.asyncio
@@ -97,7 +97,8 @@ async def test_content_taller_than_the_terminal_is_reachable_by_scrolling() -> N
         # the user's pick, the next one after Normal: a value set by code isn't reported
         await pilot.press("down", "enter")
         scroller = app.screen.query_one(VerticalScroll)
-        scroller.scroll_home(animate=False)  # where the focus left it
+        scroller.scroll_home(animate=False)  # where the focus left it, after the next refresh
+        await _wait_until(pilot, lambda: scroller.scroll_y == 0)
         await pilot.pause()
 
         chamfer_renderer = view.pages.inputs.pipe_form.chamfer.renderer
@@ -110,8 +111,7 @@ async def test_content_taller_than_the_terminal_is_reachable_by_scrolling() -> N
 
         assert scroller.max_scroll_y > 0  # there's actually overflow to scroll through
         scroller.scroll_end(animate=False)
-        await pilot.pause()
-        assert chamfer_widget.region.y < screen_height  # reachable now
+        await _wait_until(pilot, lambda: chamfer_widget.region.y < screen_height)  # reachable now
 
 
 @pytest.mark.asyncio
