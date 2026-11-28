@@ -1,9 +1,10 @@
-"""Where the app runs for its user: what its client can do (`ClientCapabilities`).
+"""Where the app runs for its user, and who the user is (`ClientCapabilities`, `User`).
 
 The same app may run on the user's own computer (Qt, Textual, a local web server) or on
 another one that the user reaches through a browser or a terminal. `MainView.open_folder`,
 `open_file`, `open_url` and `display_path` adapt to it. An app reads `MainView.client` only
-to hide or change a control, such as an "Open folder" button that can't work.
+to hide or change a control, such as an "Open folder" button that can't work. Behind a
+login proxy, on the web, `MainView.user` says who the user is.
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ import attrs
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
 
-__all__ = ["ClientCapabilities"]
+__all__ = ["ClientCapabilities", "User"]
 
 #: the schemes that `MainView.open_url` opens: a page, never a program or a file. Not
 #: ``mailto``: on the web, its new tab would stay blank once the mail app opens
@@ -61,6 +62,26 @@ class ClientCapabilities:
         return cls(shares_files=False, can_open_on_desktop=False, multi_user=True)
 
 
+@attrs.frozen(kw_only=True)
+class User:
+    """The user whom a login proxy let in, on the web (`MainView.user`).
+
+    The proxy names them in the headers of each request (`WebSettings.user_header`,
+    `user_name_header`, `user_email_header`). Only `id` tells users apart: the name and the
+    email are for the app to show, and None when the proxy gives none. Never grant access by
+    them: a user can often change both at the identity provider, and it may not have checked
+    the email.
+    """
+
+    #: The user's id, as the proxy names it, such as a login name or an email address. Each
+    #: id has sessions of its own.
+    id: str
+    #: The user's name for display, such as ``"Ada Lovelace"``, or None.
+    name: Optional[str] = None
+    #: The user's email address, as the proxy gives it, or None.
+    email: Optional[str] = None
+
+
 class _Current:
     """The capabilities of the app this process runs, from the start of its build."""
 
@@ -89,13 +110,13 @@ UNKNOWN_ACCOUNT = "local"
 
 
 #: the user whom a web session's main views are built for (`MainView.user`)
-_USER: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
+_USER: contextvars.ContextVar[Optional[User]] = contextvars.ContextVar(
     "composeui_user", default=None
 )
 
 
 @contextlib.contextmanager
-def building_for_browser(browser_id: Callable[[], str], user: str | None = None) -> Iterator[None]:
+def building_for_browser(browser_id: Callable[[], str], user: User | None = None) -> Iterator[None]:
     """Give the main views built inside the id that `browser_id` returns, and `user`."""
     token = _BROWSER_ID.set(browser_id)
     user_token = _USER.set(user)
@@ -106,7 +127,7 @@ def building_for_browser(browser_id: Callable[[], str], user: str | None = None)
         _BROWSER_ID.reset(token)
 
 
-def current_user() -> str | None:
+def current_user() -> User | None:
     """Get the user whom a main view is built for; None without a login (`MainView.user`)."""
     return _USER.get()
 

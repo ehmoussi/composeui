@@ -26,7 +26,6 @@ from composeui.webcore.page import SESSION_TAG_FIELD, SESSION_TAG_HEADER
 from composeui.webcore.session import MAX_STATE_SIZE
 from composeui.webcore.streaming import StreamPlaces, StreamResponse
 from composeui.webcore.uploads import UploadRefusal, receive_upload
-from composeui.webcore.users import header_user
 from composeui.webcore.webrenderer import UnsupportedEventError
 
 if TYPE_CHECKING:
@@ -35,8 +34,10 @@ if TYPE_CHECKING:
     from markupsafe import Markup
     from starlette.requests import Request
 
+    from composeui.core.client import User
     from composeui.webcore.session import SessionStore, WebSession
     from composeui.webcore.style import StyleFiles
+    from composeui.webcore.users import UserHeaders
 
 #: Every page and fragment reflects live server state: a browser reusing a cached copy
 #: (or restoring the fields of one) would show values the server no longer has, e.g.
@@ -72,13 +73,18 @@ def _user_digest(user: str) -> str:
     return hashlib.sha256(user.encode("utf-8")).hexdigest()
 
 
-def _user(request: Request) -> str | None:
+def _user(request: Request) -> User | None:
     """Get the user that the login proxy names (`WebSettings.user_header`); None without one.
 
-    `UserHeaderMiddleware` refused the request if the header names none.
+    `UserHeaderMiddleware` refused the request if the headers name none.
     """
-    header: str | None = request.app.state.user_header
-    return None if header is None else header_user(request.scope["headers"], header)
+    headers: UserHeaders | None = request.app.state.user_headers
+    return None if headers is None else headers.read(request.scope["headers"])
+
+
+def _user_id(user: User | None) -> str | None:
+    """Get the id that a session of `user` belongs to (`SessionStore`); None without a login."""
+    return None if user is None else user.id
 
 
 def _browser_id(request: Request, user: str | None) -> str:
@@ -110,9 +116,10 @@ def _session(request: Request, tag: object = None) -> WebSession | None:
     form gives it as `tag`, so it reloads, as for a session that is gone. A link names none.
     """
     user = _user(request)
+    user_id = _user_id(user)
     # a session on disk is built again, for the browser its cookie names, and its user
-    with building_for_browser(functools.partial(_browser_id, request, user), user):
-        session = _store(request).get(request.session.get(SESSION_KEY), user)
+    with building_for_browser(functools.partial(_browser_id, request, user_id), user):
+        session = _store(request).get(request.session.get(SESSION_KEY), user_id)
     if tag is None:
         tag = request.headers.get(SESSION_TAG_HEADER)
     if session is not None and tag is not None and tag != session.page_tag:
@@ -126,7 +133,7 @@ async def _session_off_loop(request: Request, tag: object = None) -> WebSession 
     Off the event loop when it's on disk, or being saved: it's built again, or waited for. A
     save that starts between the two looks is waited for on the loop: it takes milliseconds.
     """
-    if _store(request).is_at_hand(request.session.get(SESSION_KEY), _user(request)):
+    if _store(request).is_at_hand(request.session.get(SESSION_KEY), _user_id(_user(request))):
         return _session(request, tag)
     return await run_in_threadpool(_session, request, tag)
 
@@ -137,8 +144,9 @@ def _session_or_new(request: Request) -> WebSession | None:
     For a whole page, which the session then serves: whichever page asks.
     """
     user = _user(request)
-    with building_for_browser(functools.partial(_browser_id, request, user), user):
-        found = _store(request).get_or_create(request.session.get(SESSION_KEY), user)
+    user_id = _user_id(user)
+    with building_for_browser(functools.partial(_browser_id, request, user_id), user):
+        found = _store(request).get_or_create(request.session.get(SESSION_KEY), user_id)
     if found is None:
         return None
     session_id, session = found

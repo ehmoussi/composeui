@@ -723,8 +723,10 @@ browser. To tell the app which user is logged in, see
 
 The app can take the user from a login proxy in front of it. The proxy logs the user in, with
 a password, OIDC or SAML2, and names the user in a header of each request. Set the header's
-name in `user_header`, and read the user in `MainView.user`, for example to label the records
-that each user writes:
+name in `user_header`. Many proxies also give the user's name and email in headers of their own:
+set those names in `user_name_header` and `user_email_header`. Read the user in `MainView.user`,
+a `User`, for example to label the records that each user writes with `user.id`, or to greet
+them by their name:
 
 ```python
 from composeui.core.application import WebSettings, run
@@ -737,18 +739,42 @@ class GreetingView(MainView):
 
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.hello.text = f"Hello, {self.user}" if self.user else "Hello"
+        if self.user is None:
+            self.hello.text = "Hello"
+        else:
+            self.hello.text = f"Hello, {self.user.name or self.user.id}"
 
 
 if __name__ == "__main__":
-    run(GreetingView, web_settings=WebSettings(user_header="Remote-User"))
+    run(
+        GreetingView,
+        web_settings=WebSettings(
+            user_header="Remote-User",
+            user_name_header="Remote-Name",
+            user_email_header="Remote-Email",
+        ),
+    )
 ```
+
+A `User` has three attributes:
+
+- **`id`**: the user, as `user_header` names them, such as a login name or an email address.
+  Only the id tells users apart.
+- **`name`**: the user's name for display, from `user_name_header`, or None.
+- **`email`**: the user's email address, from `user_email_header`, or None.
+
+Never grant access by `name` or `email`. A user can often change both at the identity provider,
+and the provider may not have checked the email. Use `id`. To keep a list of the app's users in
+a database, see [Record the app's users](sqlite-model.md#record-the-apps-users).
 
 With `user_header`, the server works as follows:
 
 - **Each request names its user.** The server answers 403 to a request without the header, with
   an empty one, with two of them, or with a name that isn't UTF-8. A missing line in the
   proxy's configuration shows at the first page.
+- **The name and the email can be missing.** A request without the name's or the email's
+  header, or with an empty value, or with one that isn't UTF-8, gives None. A request with two
+  of one of these headers gets 403, as for two users.
 - **Each user gets their own sessions.** A session belongs to the user that it was made for.
   When another user logs in to the same browser, that user gets a new session, and the page of
   the previous user's session reloads. A session saved to disk (`session_idle`,
@@ -756,16 +782,17 @@ With `user_header`, the server works as follows:
   opens none of the sessions that users saved.
 - **Each user of a browser gets their own `browser_id`.** Two users of one browser don't see
   each other's work (see [Show a browser its own work](#show-a-browser-its-own-work)).
-- **`user` never changes for a main view.** It is known once the main view is made. Without
-  `user_header`, and on Qt and Textual, it is None.
+- **`user` never changes for a main view.** It is known once the main view is made. A session
+  that was saved to disk gets the name and the email of the request that opens it again.
+  Without `user_header`, and on Qt and Textual, it is None.
 
 The server can't tell the proxy's requests from others. Anyone who reaches the server
 another way can name any user in the header. So:
 
 - **Only the proxy may reach the server.** Keep the server on its default address
   `127.0.0.1`, behind a proxy on the same machine, or on a network that only the proxy reaches.
-- **The proxy sets the header on each request.** It must replace a header of that name that the
-  browser sent. nginx's `proxy_set_header` does.
+- **The proxy sets the headers on each request.** It must replace a header of each name that the
+  browser sent, the name's and the email's too. nginx's `proxy_set_header` does.
 
 With the Basic Auth of [Deploy behind nginx](#deploy-behind-nginx), add this line to the
 `location` block. nginx then sends the name that the user typed:
@@ -808,8 +835,13 @@ In the app's `location /` block, add:
         auth_request /oauth2/auth;
         error_page 401 = @oauth2_signin;
         auth_request_set $user $upstream_http_x_auth_request_user;
+        auth_request_set $email $upstream_http_x_auth_request_email;
         proxy_set_header Remote-User $user;
+        proxy_set_header Remote-Email $email;
 ```
+
+Set `user_email_header="Remote-Email"` to read the email. OAuth2 Proxy gives no name for
+display.
 
 The user is the provider's id of the user. With `--prefer-email-to-user`, OAuth2 Proxy gives
 the user's email instead. A link to `/oauth2/sign_out` logs the user out of OAuth2 Proxy, not

@@ -1131,7 +1131,7 @@ class _Entry:
 
     def __init__(self, session: WebSession | None, place: _Place, user: str | None) -> None:
         self.place = place
-        #: the user it belongs to (`MainView.user`): no other user's request gets it
+        #: the id of the user it belongs to (`User.id`): no other user's request gets it
         self.user = user
         #: None while on disk
         self.session = session

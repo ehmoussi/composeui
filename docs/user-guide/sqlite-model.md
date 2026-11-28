@@ -311,4 +311,85 @@ class PickupsModel(DatabaseModel):
   `shared(Materials, location=Path("materials.sqlite"), read_only=True)`. It must be at the
   database's `schema_version`, as it can't be brought up to date.
 
+### Record the app's users
+
+Behind a login proxy, `MainView.user` gives the user of each session, a `User` (see
+[Know the user behind a login proxy](running-the-app.md#know-the-user-behind-a-login-proxy)).
+To keep a list of the app's users, record each user in a `shared` database. `setup_model`
+gets the main view and the model of a session once both are built, so it can write the user
+in the database:
+
+```python
+from pathlib import Path
+
+from composeui.core.application import WebSettings, run
+from composeui.core.client import User
+from composeui.core.sqlitemodel import (
+    DatabaseModel,
+    SqliteDatabase,
+    SqliteTable,
+    shared,
+    table,
+)
+from composeui.core.view import MainView, define_view
+
+
+class Users(SqliteTable):
+    create = (
+        "CREATE TABLE app_user(id TEXT PRIMARY KEY, name TEXT, email TEXT,"
+        " last_seen TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);"
+    )
+
+    def record(self, user: User) -> None:
+        """Add the user, or update their name, their email and the time of their last session."""
+        with self.connection() as db:
+            db.execute(
+                "INSERT INTO app_user(id, name, email) VALUES (?, ?, ?)"
+                " ON CONFLICT(id) DO UPDATE SET name = excluded.name,"
+                " email = excluded.email, last_seen = CURRENT_TIMESTAMP",
+                (user.id, user.name, user.email),
+            )
+
+
+class AppData(SqliteDatabase):
+    users = table(Users)
+
+
+class AppModel(DatabaseModel):
+    data = shared(AppData, location=Path("app.sqlite"))
+
+
+@define_view
+class AppView(MainView):
+    pass
+
+
+def setup_model(main_view: AppView, model: AppModel) -> None:
+    if main_view.user is not None:
+        model.data.users.record(main_view.user)
+
+
+if __name__ == "__main__":
+    run(
+        AppView,
+        build_model=AppModel,
+        setup_model=setup_model,
+        web_settings=WebSettings(
+            user_header="Remote-User",
+            user_name_header="Remote-Name",
+            user_email_header="Remote-Email",
+        ),
+    )
+```
+
+- **Each session records its user.** `setup_model` runs for each new session, not for each
+  request. It runs again for a session that the server saved to disk and opens again. The row
+  then gets the name and the email that the proxy gives now.
+- **Key the records by `id`.** Give each record that a user writes their `main_view.user.id`,
+  for example in a `created_by` column. A callback that writes the record gets `main_view` and
+  `model` from `Signal.connect`. Never key the records by the name or the email: they can
+  change.
+- **Without a login, the app records no user.** On Qt and Textual, and on the web without
+  `user_header`, `main_view.user` is None.
+
 To import CSV data into a table of the database, see [Importing CSV data](csv-import.md).

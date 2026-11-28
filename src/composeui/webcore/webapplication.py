@@ -83,7 +83,7 @@ from composeui.webcore.routes import (
 from composeui.webcore.session import Hibernation, SessionFolder, SessionStore
 from composeui.webcore.streaming import StreamPlaces
 from composeui.webcore.style import StyleFiles, style_file, theme
-from composeui.webcore.users import UserHeaderMiddleware
+from composeui.webcore.users import UserHeaderMiddleware, UserHeaders
 
 if TYPE_CHECKING:
     import datetime
@@ -163,7 +163,7 @@ def create_starlette_app(  # noqa: PLR0913 (each sets a part of the server)
     reloading: bool = False,
     stream_places: StreamPlaces | None = None,
     style: WebStyle | None = None,
-    user_header: str | None = None,
+    user_headers: UserHeaders | None = None,
 ) -> Starlette:
     """Create the Starlette app serving one main view per browser session.
 
@@ -175,12 +175,12 @@ def create_starlette_app(  # noqa: PLR0913 (each sets a part of the server)
     (`reloading`) saves the sessions as it stops (`SessionStore.save_all`), and its pages
     reload once another process serves (`reload_poll`). The cookie lasts `cookie_ttl`
     seconds after the last answer, at most `MAX_COOKIE_AGE`: it holds the session's id and
-    the browser's (`browser_id`). With `user_header`, each request must name its user
+    the browser's (`browser_id`). With `user_headers`, each request must name its user
     there, and each user gets sessions of their own (`MainView.user`).
     """
     style_files = StyleFiles(style)
     # after the origin check, which refuses another site's request whoever its user
-    users = [] if user_header is None else [Middleware(UserHeaderMiddleware, header=user_header)]
+    users = [] if user_headers is None else [Middleware(UserHeaderMiddleware, headers=user_headers)]
     app = Starlette(
         routes=[
             Route("/", homepage),
@@ -243,8 +243,8 @@ def create_starlette_app(  # noqa: PLR0913 (each sets a part of the server)
         lifespan=_lifespan(sessions, reloading=reloading),
     )
     app.state.sessions = sessions
-    #: the header that names each request's user, or None without a login
-    app.state.user_header = user_header
+    #: the headers that name each request's user, or None without a login
+    app.state.user_headers = user_headers
     #: the app's theme and stylesheets, which its pages load
     app.state.style_files = style_files
     #: the places of the downloads written at once (`StreamResponse`)
@@ -630,7 +630,11 @@ class WebApplication(Application[MainViewT]):
                 secret_key=secret_key,
                 reloading=saved_sessions is not None,
                 style=self.style,
-                user_header=settings.user_header,
+                user_headers=None
+                if settings.user_header is None
+                else UserHeaders(
+                    settings.user_header, settings.user_name_header, settings.user_email_header
+                ),
             )
         except BaseException:
             # e.g. a stylesheet missing: the app fixed, the server made again takes it
