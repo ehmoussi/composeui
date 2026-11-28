@@ -301,6 +301,12 @@ one backend installs ComposeUI. The `specs` job runs `make specs` with the runne
 runs only for a change of `specs/`, `core/jobs.py`, the `Makefile` or `ci.yml`. When it runs,
 the "Required checks" job needs it to pass. Run `make check test` before you commit.
 
+On a pull request, the `repeat` job runs each test module that the pull request adds or
+changes on Windows with Python 3.9, the slowest runner. It runs each module 20 times, and
+fewer when many modules change, down to 3 times. A test that races a timer or another thread
+can pass one run by chance. Repeated, it fails there before it reaches `main`. The job leaves
+out `tests/test_browser.py`, and runs only when a test module changes.
+
 The existing mypy matrix checks source, examples, and tests together. Separate jobs run
 `make pyright`, `make pyrefly`, and `make ty` on tests on Python 3.9, matching their
 configuration. Failures in these jobs fail the workflow. Run `make typecheck` locally to
