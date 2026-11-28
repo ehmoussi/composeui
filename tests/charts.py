@@ -200,6 +200,8 @@ class ChartPage(PageView):
             ),
             Series.line("Queued", [1, 4], [0.5, 1], step=True),
         ],
+        # past the data: the x range takes it in
+        reference_lines=[ReferenceLine(10, "Deadline", vertical=True)],
     )
 
 

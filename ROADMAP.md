@@ -169,8 +169,6 @@ What an app needs to follow work that runs outside it, such as a solver or a clu
 
 - **Evaluate [`textual-plot`](https://github.com/davidfokkema/textual-plot)** (Now). Zoom and pan
   on Textual, if it matches `textual-plotext`'s charts and keeps Python 3.9 support.
-- **A zoom inside the vertical reference lines** (Now). On the web, the x range takes the
-  vertical lines in at a zoom too, so a drag can't zoom inside a line's x.
 - **Histograms** (Now). Bins computed in the core, by count, percent or density.
 - **Range selection** (Now). Selecting an x range emits it, for example to filter a table. Not
   on Textual.

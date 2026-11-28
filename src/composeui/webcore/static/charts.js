@@ -235,11 +235,11 @@
     if (spec.y.stack !== undefined) lineYs = lineYs.concat(spec.y.stack);
     if (y2 !== undefined && y2.stack !== undefined) lineY2s = lineY2s.concat(y2.stack);
     if (categories === undefined) {
-      scales.x.range = rangeWith(rangeFunction(scales.x), lineXs, spec.x.log, false);
+      scales.x.range = rangeWith(rangeFunction(scales.x), lineXs, spec.x.log, false, true);
     }
-    scales.y.range = rangeWith(rangeFunction(scales.y), lineYs, spec.y.log, true);
+    scales.y.range = rangeWith(rangeFunction(scales.y), lineYs, spec.y.log, true, false);
     if (scales.y2 !== undefined && y2 !== undefined) {
-      scales.y2.range = rangeWith(rangeFunction(scales.y2), lineY2s, y2.log, true);
+      scales.y2.range = rangeWith(rangeFunction(scales.y2), lineY2s, y2.log, true, false);
     }
     // the app's bounds, over all that: the x's not over the user's zoom
     if (categories === undefined) {
@@ -338,17 +338,20 @@
   function rangeFunction(scale) {
     return /** @type {uPlot.Range.Function | undefined} */ (scale.range);
   }
-  /* a scale's range, uPlot's own unless given, widened to `values`; as given without any */
+  /* a scale's range, uPlot's own unless given, widened to `values`; as given without any.
+     `keepsZoom`: the x's, which uPlot asks at a zoom too, left as the user put it */
   /**
    * @param {uPlot.Range.Function | undefined} range @param {number[]} values
-   * @param {boolean} log @param {boolean} padded @returns {uPlot.Range.Function | undefined}
+   * @param {boolean} log @param {boolean} padded @param {boolean} keepsZoom
+   * @returns {uPlot.Range.Function | undefined}
    */
-  function rangeWith(range, values, log, padded) {
+  function rangeWith(range, values, log, padded, keepsZoom) {
     if (values.length === 0) return range;
     var given = range !== undefined ? range : fittedRange(log, padded);
     var low = Math.min.apply(null, values);
     var high = Math.max.apply(null, values);
     return function (chart, min, max, key) {
+      if (keepsZoom && isZoom(chart, min, max)) return given(chart, min, max, key);
       // no data: the lines alone
       return given(
         chart,
@@ -703,11 +706,14 @@
     if (xs.length === 0) return undefined;
     var first = /** @type {number} */ (xs[0]);
     var last = /** @type {number} */ (xs[xs.length - 1]);
-    if (min <= first && max >= last) return undefined;
-    // all the data at the axis' bounds, narrower than the data: no zoom either
     var range = rangeFunction(chartScales(chart).x);
     var full = range !== undefined ? range(chart, first, last, "x") : [first, last];
-    if (min === full[0] && max === full[1]) return undefined;
+    var low = /** @type {number} */ (full[0]);
+    var high = /** @type {number} */ (full[1]);
+    // all the data and the vertical lines past it
+    if (min <= Math.min(first, low) && max >= Math.max(last, high)) return undefined;
+    // all the data at the axis' bounds, narrower than the data: no zoom either
+    if (min === low && max === high) return undefined;
     return { min: min, max: max };
   }
   /* a chart's scales: the x and the y, which every chart has, and the second y */
