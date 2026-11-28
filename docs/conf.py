@@ -70,7 +70,7 @@ html_baseurl = _SITE_ROOT + ("stable/" if _DOCS_REF != "main" else "")
 sitemap_url_scheme = "{link}"
 # Sphinx marks its search page as noindex.
 sitemap_excludes = ["search.html"]
-html_title = f"ComposeUI: Python UIs for desktop, terminal, and web ({_DOCS_REF})"
+html_title = f"ComposeUI: Python apps for desktop, terminal, and web ({_DOCS_REF})"
 html_static_path = ["_static"]
 templates_path = ["_templates"]
 html_css_files = ["versions.css", "github.css"]
