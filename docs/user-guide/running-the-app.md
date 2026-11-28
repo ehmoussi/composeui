@@ -265,6 +265,8 @@ On Qt:
   answer within 5 seconds, for example while it is busy, is terminated, and its state
   since the previous change is lost. While a dialog is open, the app runs the changed code
   once it closes.
+- **On a change while the app starts,** before its window takes your input, a new child
+  process starts at once with the changed code. Textual does the same.
 - **When you close the window,** the program ends.
 
 On a change of the app's code, the app builds a new model before it closes the previous

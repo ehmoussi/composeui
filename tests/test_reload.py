@@ -31,6 +31,7 @@ from composeui.core.reload import (
     rerun_program,
     run_reloading,
     save_reloaded_state,
+    start_following,
     take_changes,
     watch_changes,
 )
@@ -63,6 +64,33 @@ def _wait_for(condition: Callable[[], bool]) -> None:
     while not condition():
         assert time.monotonic() < deadline, "timed out"
         time.sleep(0.05)
+
+
+def _temp_env(tmp_path: Path) -> dict[str, str]:
+    """Get the environment that puts a child's temporary files in `tmp_path`, hidden there.
+
+    So `_follows` finds the supervisor's directory, which it shares with its app.
+    """
+    temp = tmp_path / ".temp"
+    temp.mkdir(exist_ok=True)
+    # what `tempfile.gettempdir` reads, on POSIX and on Windows
+    return {"TMPDIR": str(temp), "TEMP": str(temp), "TMP": str(temp)}
+
+
+def _follows(tmp_path: Path) -> bool:
+    """Tell whether the app of a supervisor run with `_temp_env` looks for changes.
+
+    Before, a change starts a new app at once: the state that the app has set is lost.
+    """
+    return any((tmp_path / ".temp").rglob("composeui-reload-*/following"))
+
+
+def _no_change() -> Iterator[set[Path]]:
+    """Yield no change, as the supervisor waits for its app to exit; fail if it doesn't."""
+    deadline = time.monotonic() + _TIMEOUT
+    while True:
+        assert time.monotonic() < deadline, "timed out"
+        yield set()
 
 
 def _stop(program: subprocess.Popen[bytes]) -> None:
@@ -99,6 +127,9 @@ def test_the_app_runs_the_changed_code_or_again_in_a_new_process_or_after_a_fail
         import os, pathlib, sys, time
         log = pathlib.Path({str(log)!r})
         mode = pathlib.Path({str(mode)!r})
+        # first, as an app's start, which only one app makes: a change from the start the
+        # test waits for is taken
+        pathlib.Path(os.environ["COMPOSEUI_RELOADED"], "following").touch(exist_ok=False)
         with log.open("a") as file:
             file.write("start\\n")
         if mode.read_text() not in ("ack", "slow", "exit"):
@@ -143,8 +174,7 @@ def test_the_app_runs_the_changed_code_or_again_in_a_new_process_or_after_a_fail
         assert runs().count("start") == 3
         mode.write_text("0")
         yield changed
-        while True:  # until the app exits by itself, without an error
-            yield set()
+        yield from _no_change()  # until the app exits by itself, without an error
 
     with caplog.at_level(logging.INFO, logger="COMPOSEUI"):
         assert run_reloading([sys.executable, "-c", program], changes()) == 0
@@ -501,12 +531,17 @@ def test_a_qt_app_with_reload_shows_the_changed_code_in_its_window_as_it_was_lef
         program = subprocess.Popen(  # noqa: S603 (a command the code builds, no user input)
             [sys.executable, str(script), "--reload"],
             cwd=tmp_path,
-            env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "RUNS_LOG": str(log)},
+            env={
+                **os.environ,
+                **_temp_env(tmp_path),
+                "QT_QPA_PLATFORM": "offscreen",
+                "RUNS_LOG": str(log),
+            },
             stdout=out,
             stderr=subprocess.STDOUT,
         )
         try:
-            _wait_for(lambda: _lines(log) == 1)
+            _wait_for(lambda: _lines(log) == 1 and _follows(tmp_path))
             script.write_text(code.replace("VERSION = 1", "VERSION = ("))  # a syntax error
             _wait_for(lambda: "The changed code fails" in output.read_text())
             script.write_text(code.replace("VERSION = 1", "VERSION = 2"))
@@ -549,7 +584,9 @@ def test_a_qt_app_saves_its_state_and_exits_for_a_new_process_when_composeui_cha
         first.kill()
     # taken, but not run in place: never acknowledged
     assert (state / "taken").exists()
-    (state / "taken").unlink()  # as the supervisor cleans up
+    # as the supervisor cleans up, and before the next app starts
+    (state / "taken").unlink()
+    (state / "following").unlink()
 
     # the supervisor runs it again
     subprocess.run(  # noqa: S603
@@ -742,6 +779,7 @@ def test_a_qt_app_whose_changed_code_can_t_show_runs_it_again_in_a_new_process(
         cwd=tmp_path,
         env={
             **os.environ,
+            **_temp_env(tmp_path),
             "QT_QPA_PLATFORM": "offscreen",
             "RUNS_LOG": str(log),
             "FAIL_RENDER": str(failing),
@@ -751,7 +789,7 @@ def test_a_qt_app_whose_changed_code_can_t_show_runs_it_again_in_a_new_process(
         stderr=subprocess.DEVNULL,
     )
     try:
-        _wait_for(lambda: "render|1" in _text(log))
+        _wait_for(lambda: "render|1" in _text(log) and _follows(tmp_path))
         failing.touch()
         script.write_text(_FAILING_RENDER_APP.replace("VERSION = 1", "VERSION = 2"))
         assert program.wait(timeout=_TIMEOUT) == 0
@@ -813,12 +851,17 @@ def test_a_qt_app_without_a_model_shows_the_changed_code_in_its_window(
     program = subprocess.Popen(  # noqa: S603 (a command the code builds, no user input)
         [sys.executable, str(script), "--reload"],
         cwd=tmp_path,
-        env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "RUNS_LOG": str(log)},
+        env={
+            **os.environ,
+            **_temp_env(tmp_path),
+            "QT_QPA_PLATFORM": "offscreen",
+            "RUNS_LOG": str(log),
+        },
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     try:
-        _wait_for(lambda: "render|1" in _text(log))
+        _wait_for(lambda: "render|1" in _text(log) and _follows(tmp_path))
         script.write_text(_NO_MODEL_APP.replace("VERSION = 1", "VERSION = 2"))
         assert program.wait(timeout=_TIMEOUT) == 0
     finally:
@@ -879,12 +922,17 @@ def test_a_failed_save_of_the_state_keeps_the_qt_app_and_later_changes_reload(
     program = subprocess.Popen(  # noqa: S603 (a command the code builds, no user input)
         [sys.executable, str(script), "--reload"],
         cwd=tmp_path,
-        env={**os.environ, "QT_QPA_PLATFORM": "offscreen", "RUNS_LOG": str(log)},
+        env={
+            **os.environ,
+            **_temp_env(tmp_path),
+            "QT_QPA_PLATFORM": "offscreen",
+            "RUNS_LOG": str(log),
+        },
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     try:
-        _wait_for(lambda: "render|1" in _text(log))
+        _wait_for(lambda: "render|1" in _text(log) and _follows(tmp_path))
         script.write_text(_FAILED_SAVE_APP.replace("VERSION = 1", "VERSION = 2"))
         _wait_for(lambda: "save failed" in _text(log))
         script.write_text(_FAILED_SAVE_APP.replace("VERSION = 1", "VERSION = 3"))
@@ -941,6 +989,7 @@ def test_a_textual_app_with_reload_runs_again_in_a_new_process_as_it_was_left(
         cwd=tmp_path,
         env={
             **os.environ,
+            **_temp_env(tmp_path),
             # no terminal here
             "TEXTUAL_DRIVER": "textual.drivers.headless_driver:HeadlessDriver",
             "RUNS_LOG": str(log),
@@ -949,7 +998,8 @@ def test_a_textual_app_with_reload_runs_again_in_a_new_process_as_it_was_left(
         stderr=subprocess.DEVNULL,
     )
     try:
-        _wait_for(lambda: _lines(log) == 1)
+        # once mounted: the app's mounted callbacks set the state first
+        _wait_for(lambda: _lines(log) == 1 and _follows(tmp_path))
         with script.open("a") as file:
             file.write("# changed\n")
         assert program.wait(timeout=_TIMEOUT) == 0
@@ -1180,8 +1230,25 @@ def test_a_state_dropped_keeps_the_language_it_was_shown_in_if_the_same(
     assert languages == []  # no language to set back
 
 
-#: an app logging each start, which never looks at the changes, and exits on its second
+#: an app logging each start, which says it follows the changes but never looks at them, and
+#: exits on its second
 _DEAF_APP = textwrap.dedent(
+    """
+    import os, pathlib, sys, time
+    pathlib.Path(os.environ["COMPOSEUI_RELOADED"], "following").touch(exist_ok=False)
+    log = pathlib.Path(sys.argv[1])
+    with log.open("a") as file:
+        file.write("start\\n")
+    if log.read_text().count("start") == 2:
+        sys.exit(0)
+    while True:
+        time.sleep(0.05)
+    """
+)
+
+
+#: an app logging each start, whose first start never ends, and which exits on its second
+_STARTING_APP = textwrap.dedent(
     """
     import pathlib, sys, time
     log = pathlib.Path(sys.argv[1])
@@ -1195,6 +1262,62 @@ _DEAF_APP = textwrap.dedent(
 )
 
 
+def test_an_app_still_starting_runs_again_at_once_with_the_changed_code(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    # longer than the test waits: waiting for the app to answer would fail it
+    monkeypatch.setattr("composeui.core.reload._RELOAD_TIMEOUT", 2 * _TIMEOUT)
+    log = tmp_path / "runs.log"
+
+    def changes() -> Iterator[set[Path]]:
+        _wait_for(lambda: _lines(log) == 1)
+        yield {tmp_path / "app.py"}
+        yield from _no_change()  # until the second app exits by itself
+
+    begin = time.monotonic()
+    with caplog.at_level(logging.INFO, logger="COMPOSEUI"):
+        code = run_reloading([sys.executable, "-c", _STARTING_APP, str(log)], changes())
+
+    assert code == 0
+    assert _lines(log) == 2
+    assert time.monotonic() - begin < _TIMEOUT
+    assert "The app didn't answer" not in caplog.text
+
+
+@pytest.mark.parametrize(("backend", "package"), [("qt", "qtpy.QtWidgets"), ("textual", "textual")])
+def test_an_app_that_the_supervisor_replaces_as_it_starts_exits_without_saving(
+    backend: str, package: str, tmp_path: Path
+) -> None:
+    pytest.importorskip(package)
+    state = tmp_path / "state"
+    state.mkdir()
+    # as the supervisor leaves it when a change comes before the app looks for changes
+    (state / "following").touch()
+    app = "from composeui.core.application import run\nfrom composeui.core.view import MainView\n"
+    script = tmp_path / "app.py"
+    script.write_text(app + "run(MainView)\n")
+    env = {
+        **os.environ,
+        "QT_QPA_PLATFORM": "offscreen",
+        "TEXTUAL_DRIVER": "textual.drivers.headless_driver:HeadlessDriver",  # no terminal here
+        "COMPOSEUI_RELOADED": str(state),
+    }
+
+    # else it would show its window until closed
+    subprocess.run(  # noqa: S603 (a command the code builds, no user input)
+        [sys.executable, str(script), "--backend", backend],
+        cwd=tmp_path,
+        env=env,
+        timeout=_TIMEOUT,
+        check=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    assert not (state / "study").exists()  # the previous run's study, if any, is the one to open
+
+
 def test_an_app_not_taking_a_change_in_time_runs_again_in_a_new_process(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -1205,8 +1328,7 @@ def test_an_app_not_taking_a_change_in_time_runs_again_in_a_new_process(
     def changes() -> Iterator[set[Path]]:
         _wait_for(lambda: _lines(log) == 1)
         yield {tmp_path / "app.py"}
-        while True:  # until the second app exits by itself
-            yield set()
+        yield from _no_change()  # until the second app exits by itself
 
     with caplog.at_level(logging.INFO, logger="COMPOSEUI"):
         code = run_reloading([sys.executable, "-c", _DEAF_APP, str(log)], changes())
@@ -1244,9 +1366,10 @@ def test_an_app_running_the_changed_code_then_exiting_isn_t_run_again(
     app_code = textwrap.dedent(
         f"""
         import os, pathlib, time
+        changes = pathlib.Path(os.environ["COMPOSEUI_RELOADED"], "changes")
+        changes.with_name("following").touch(exist_ok=False)  # before the start the test waits for
         with pathlib.Path({str(log)!r}).open("a") as file:
             file.write("start\\n")
-        changes = pathlib.Path(os.environ["COMPOSEUI_RELOADED"], "changes")
         while not changes.exists():
             time.sleep(0.01)
         taken = changes.with_name("taken")
@@ -1285,6 +1408,7 @@ def test_an_app_acknowledging_then_exiting_between_two_looks_isn_t_run_again(
 
         def __init__(self, _command: list[str], *, env: dict[str, str]) -> None:
             monkeypatch.setenv(RELOADED_VARIABLE, env[RELOADED_VARIABLE])
+            assert start_following()  # started at once
             self.returncode: int | None = None
             self._has_taken = False
             started.append(self)

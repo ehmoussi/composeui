@@ -279,6 +279,10 @@ backends' modules included, can change in any release without an entry here.
   `max_session_download_streams`, `shutdown_timeout` or `filter_patterns` in a subclass now
   passes them in a `WebSettings`: a subclass that still sets one fails with a `TypeError`.
 
+- With `--reload` on Qt and Textual, a change while the app still starts runs a new process with
+  the changed code at once. Before, the supervisor waited 5 seconds for an answer that the app
+  couldn't give yet, then stopped it.
+
 ### Fixed
 
 - On the web, a chart's zoom shows the x range that the user selected. Before, the range grew

@@ -23,6 +23,7 @@ from composeui.core.reload import (
     load_reloaded_state,
     run_reloading,
     save_reloaded_state,
+    start_following,
     take_changes,
 )
 from composeui.textualcore._renderers.navigation import TextualMainRenderer
@@ -135,6 +136,11 @@ def _show(
                 app.exit()
 
         def follow_changes() -> None:
+            # once mounted, before the user's keys: a supervisor replacing the app as it
+            # starts runs a new process, which opens the study of the previous run
+            if not start_following():
+                app.exit()
+                return
             app.set_interval(_CHANGES_CHECK_INTERVAL, exit_on_changes)
 
         app.mounted_callbacks.append(follow_changes)
