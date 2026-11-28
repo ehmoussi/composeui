@@ -14,6 +14,8 @@ from textual.widgets import (
     Footer,
     Input,
 )
+from textual_fspicker.base_dialog import FileSystemPickerScreen
+from textual_fspicker.parts import DirectoryNavigation
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.registry import RendererType
@@ -31,7 +33,13 @@ from examples.pipeform import PipeMainView
 from tests.dialogs import DialogsMainView
 from tests.markdown import HelpMainView, HelpViewerMainView
 from tests.menubutton import MenuButtonMainView
-from tests.textualcore.support import _app_of, _click_laid_out, _field_widget, _widget
+from tests.textualcore.support import (
+    _app_of,
+    _click_laid_out,
+    _field_widget,
+    _wait_for_screen,
+    _widget,
+)
 from tests.toolbar import ToolBarMainView
 
 if TYPE_CHECKING:
@@ -309,8 +317,8 @@ async def test_a_toolbar_shows_its_actions_above_the_pages_toolbar() -> None:
 
         # the picker blocks its caller: run from the app's own thread, it would never show
         await pilot.click(buttons["Open"])
-        await pilot.pause()
-        await pilot.pause()
+        # pushed by the action's worker thread
+        await _wait_for_screen(pilot, FileSystemPickerScreen, DirectoryNavigation)
         assert [type(s).__name__ for s in app.screen_stack] == ["Screen", "FileOpen"]
 
 

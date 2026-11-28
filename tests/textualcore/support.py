@@ -20,10 +20,12 @@ from composeui.textualcore._renderers.navigation import TextualMainRenderer
 from composeui.textualcore.textualrenderer import TextualWidgetRenderer
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from textual.app import App
     from textual.pilot import Pilot
+    from textual.screen import Screen
 
     from composeui.core.view import (
         MainView,
@@ -69,6 +71,37 @@ async def _click_laid_out(pilot: Pilot[Any], widget: Widget) -> None:
         await pilot.pause(0.05)
     assert not widget.has_class("-active")
     assert await pilot.click(widget)
+
+
+async def _wait_until(pilot: Pilot[Any], condition: Callable[[], bool]) -> None:
+    """Pause until `condition` holds, 10 s at most, then assert it.
+
+    For what a worker thread or a timer of the app makes, which a slow machine makes late: a
+    fixed count of pauses is enough only on a fast one.
+    """
+    for _ in range(200):
+        if condition():
+            return
+        await pilot.pause(0.05)
+    assert condition()
+
+
+async def _wait_for_screen(
+    pilot: Pilot[Any], screen: type[Screen[Any]], part: type[Widget]
+) -> None:
+    """Wait until the app shows a `screen`, mounted and laid out: until its `part` takes room.
+
+    A screen pushed is on the stack before it is mounted: a key, a click or the app's end that
+    comes then is too soon, on a slow machine.
+    """
+
+    def is_shown() -> bool:
+        shown = pilot.app.screen
+        return isinstance(shown, screen) and any(
+            widget.region.area > 0 for widget in shown.query(part)
+        )
+
+    await _wait_until(pilot, is_shown)
 
 
 def _app_of(view: MainView) -> App[Any]:
