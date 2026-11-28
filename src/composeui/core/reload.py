@@ -50,6 +50,7 @@ __all__ = [
     "rerun_program",
     "run_reloading",
     "save_reloaded_state",
+    "start_following",
     "take_changes",
     "watch_changes",
 ]
@@ -61,11 +62,14 @@ LOGGER = logging.getLogger("COMPOSEUI")
 RELOADED_VARIABLE = "COMPOSEUI_RELOADED"
 #: the files of that directory: the last study saved; what the study doesn't hold, its
 #: file's path, the language shown and the `SESSION` fields (JSON); the files changed, one
-#: per line, which the app renames once it takes them, and removes once it runs their code
+#: per line, which the app renames once it takes them, and removes once it runs their code;
+#: made by the app as it starts to look for changes, or by the supervisor that replaces an app
+#: still starting, whichever comes first
 _STUDY_NAME = "study"
 _SESSION_NAME = "session.json"
 _CHANGES_NAME = "changes"
 _TAKEN_NAME = "taken"
+_FOLLOWING_NAME = "following"
 #: seconds a running app has to take the files changed, or to exit, before it is
 #: terminated; once taken, running their code may take as long as it does
 _RELOAD_TIMEOUT = 5.0
@@ -91,6 +95,24 @@ def _state_directory() -> Path:
     # in the supervisor's folder: kept until this process ends, if the supervisor is killed
     hold_scratch(directory.parent)
     return directory
+
+
+def _claim_following(directory: Path) -> bool:
+    """Make the `_FOLLOWING_NAME` file of `directory`; tell whether it was missing."""
+    try:
+        (directory / _FOLLOWING_NAME).touch(exist_ok=False)
+    except FileExistsError:
+        return False
+    return True
+
+
+def start_following() -> bool:
+    """Tell the supervisor that the app looks for changes from now on, before any user input.
+
+    False if the supervisor is replacing the app, still starting, with a new process: the app
+    exits without saving, as the study of the previous run is still the one to open.
+    """
+    return _claim_following(_state_directory())
 
 
 def take_changes() -> list[Path] | None:
@@ -498,6 +520,8 @@ def run_reloading(
                     names = ", ".join(sorted(os.path.relpath(p, directory) for p in changed))
                     LOGGER.info("Reloading: %s changed", names)
                     if not in_place:
+                        # the previous app's, if any: the new one says when it follows
+                        (Path(state_directory) / _FOLLOWING_NAME).unlink(missing_ok=True)
                         child = subprocess.Popen(command, env=env)  # noqa: S603 (a command the code builds, no user input)
                 else:
                     code = None if child is None else child.poll()
@@ -528,6 +552,10 @@ def _reload_in_place(
     An app that ran it may have exited since, e.g. its window closed: it isn't run again.
     """
     if child is None or child.poll() is not None:
+        return False
+    if _claim_following(state_directory):
+        # still starting: it can't take the change yet, and has taken no user input
+        LOGGER.info("The app hasn't started yet: it runs again with the changed code")
         return False
     request = state_directory / _CHANGES_NAME
     taken = state_directory / _TAKEN_NAME

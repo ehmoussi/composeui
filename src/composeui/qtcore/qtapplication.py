@@ -22,6 +22,7 @@ from composeui.core.reload import (
     rerun_program,
     run_reloading,
     save_reloaded_state,
+    start_following,
     take_changes,
 )
 from composeui.qtcore._renderers.navigation import QtMainRenderer, QtMainWindow
@@ -95,6 +96,10 @@ def _exec(run: _Run) -> int:
                 run.model.close()
     reloads = _Reloads(run)
     try:
+        # last, as no user input comes before the loop: a supervisor replacing the app as it
+        # starts runs a new process, which opens the study of the previous run
+        if not start_following():
+            return 0
         return app.exec()
     finally:
         reloads.close()
