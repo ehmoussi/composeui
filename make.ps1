@@ -14,7 +14,8 @@ param(
     [Parameter(Position = 0, ValueFromRemainingArguments = $true)]
     [ValidateSet('format', 'check', 'check_fix', 'lint', 'mypy', 'typecheck',
         'pyright', 'pyrefly', 'ty', 'translations', 'test',
-        'browser-test', 'docs', 'screenshots', 'css', 'js-check', 'web-deps', 'hooks', 'clean',
+        'browser-test', 'docs', 'screenshots', 'css', 'js-check', 'specs', 'web-deps', 'hooks',
+        'clean',
         'all')]
     [string[]] $Targets = @('all'),
     # the examples to take screenshots of (all of them when empty)
@@ -72,6 +73,15 @@ $TscSha256 = @{
     'win32-x64'    = '61fc4e141d2bc687db580e71bbfa63b9c209f0310645d82ca1b457eb3a24fd19'
     'win32-arm64'  = '0a73534e6ee50cdbb2a29ac48657ca0ad13cf0f424cf63808e4df7baeb87b8be'
 }
+
+# TLC, TLA+'s model checker: it checks each design of specs/ (Name.tla, with its properties
+# in Name.cfg). It needs Java 11 or later. Downloaded once into specs/vendor/, with TLC's
+# states.
+$TlaToolsVersion = '1.7.4'
+$SpecsVendor = 'specs/vendor'
+# the SHA-256 of tla2tools.jar, a release asset of github.com/tlaplus/tlaplus: change it with
+# the version
+$TlaToolsSha256 = '936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88'
 
 # the web page's scripts from npm, through unpkg, and uPlot's stylesheet, which app.css
 # imports: committed, so the package needs no download. Change a version and its SHA-256,
@@ -347,6 +357,22 @@ function Invoke-JsCheck {
     Invoke-Native (Resolve-Path $tsc).Path @('-p', 'js/tsconfig.json')
 }
 
+# each spec reported before failing
+function Invoke-Specs {
+    $tlaTools = "$SpecsVendor/tla2tools-$TlaToolsVersion.jar"
+    $url = 'https://github.com/tlaplus/tlaplus/releases/download/' +
+        "v$TlaToolsVersion/tla2tools.jar"
+    Invoke-Download $url $tlaTools $TlaToolsSha256 -Vendor $SpecsVendor
+    $failed = @()
+    foreach ($config in Get-ChildItem specs -Filter *.cfg) {
+        $name = $config.BaseName
+        & java -XX:+UseParallelGC -cp $tlaTools tlc2.TLC -cleanup `
+            -metadir "$SpecsVendor/states/$name" -config "specs/$name.cfg" "specs/$name.tla"
+        if ($LASTEXITCODE -ne 0) { $failed += $name }
+    }
+    if ($failed.Count -gt 0) { throw "TLC found an error in: $($failed -join ', ')" }
+}
+
 # Cally's file has no license comment: it gets Cally's LICENSE as one; uPlot's has only its
 # address, and its LICENSE goes beside it
 function Invoke-WebDeps {
@@ -404,6 +430,7 @@ $actions = @{
     'screenshots'  = { Invoke-Screenshots }
     'css'          = { Invoke-Css }
     'js-check'     = { Invoke-JsCheck }
+    'specs'        = { Invoke-Specs }
     'web-deps'     = { Invoke-WebDeps }
     'hooks'        = { Invoke-Hooks }
     'clean'        = { Invoke-Clean }

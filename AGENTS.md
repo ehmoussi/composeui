@@ -34,6 +34,7 @@ make hooks   # git's hooks of .githooks/ in this clone (core.hooksPath)
 make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
 make translations  # each app's catalogs against the text it translates (TRANSLATED_MAIN_VIEWS)
 make js-check  # the page's scripts against their JSDoc types (TypeScript's compiler, no Node)
+make specs  # the TLA+ specs of specs/ in TLC, TLA+'s model checker (needs Java 11 or later)
 make check   # lint + mypy + translations + js-check
 make all     # clean + check + test
 make css     # rebuild webcore/static/app.css after changing classes in webcore (commit it)
@@ -81,6 +82,7 @@ src/composeui/
     _renderers/  # its renderers, a module per family (renderers.py maps their keys)
 css/             # source of webcore/static/app.css (`make css`; tools land in css/vendor/)
 js/              # the scripts' type check (`make js-check`; TypeScript lands in js/vendor/)
+specs/           # TLA+ specs, checked by TLC (`make specs`; TLC lands in specs/vendor/)
 src/examples/    # example apps (pipeform.py, pipecatalogue.py, ...), also used by tests; not in the wheel
 tests/           # pytest suite (pytest-qt, pytest-asyncio, Textual run_test pilot)
   qtcore/        # the Qt backend's tests, a module per family, as in _renderers/
@@ -204,6 +206,10 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
 - Load the `state-machines` skill before you change code that holds state over time: jobs,
   threads and timers, `SqliteDatabase` locking, web sessions and post order, `page.js` loaders and
   swaps, reload, dialogs and screens, or a file being replaced.
+- When you change code that a TLA+ spec of `specs/` models, change the spec in the same
+  commit and run `make specs`. `RepeatingTasks.tla` models `Task`'s repeats in `core/jobs.py`.
+  The spec can come before the code, for a design that is not settled yet. A new spec adds the
+  module it models to the file filter of the `specs` job in `ci.yml`.
 - The public API is the `__all__` of each `composeui.core` module: the API reference shows
   only it, and `tests/test_docs.py` checks that the docs and examples import nothing else.
   Add a name that apps use to it. The other names, also those the backends import, can

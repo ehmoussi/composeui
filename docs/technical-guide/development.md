@@ -30,6 +30,7 @@ make hooks         # git's hooks of .githooks/ in this clone
 make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
 make translations  # each app's catalogs against the text it translates
 make js-check      # the page's scripts against their JSDoc types (TypeScript's compiler)
+make specs         # the TLA+ specs of specs/ in TLC, TLA+'s model checker (needs Java 11 or later)
 make check         # lint + mypy + translations + js-check
 make all           # clean + check + test
 make css           # rebuild webcore/static/app.css after changing classes in webcore
@@ -138,6 +139,14 @@ Every behavior change needs a test in `tests/`.
 - A line that only Windows runs, such as the threads that read a process's output, gets a
   `# windows only` comment. On Linux and macOS, the `Makefile` sets
   `COMPOSEUI_WINDOWS_ONLY`, and coverage leaves these lines out.
+- `specs/` holds TLA+ specs: models of a design that several threads share, such as `Task`'s
+  repeats in `core/jobs.py` (`RepeatingTasks.tla`). A spec's `.cfg` file names the properties
+  to check. `make specs` checks each spec with TLC, TLA+'s model checker, in every state that
+  the spec can reach. It needs Java 11 or later.
+- `make specs` downloads TLC once into `specs/vendor/`, which is not committed. TLC keeps its
+  states there too. It checks the file's SHA-256 against the one in the `Makefile` and
+  `make.ps1`. When you change `TLA_TOOLS_VERSION`, change the SHA-256 in both files, and
+  delete `specs/vendor/`.
 
 ## Translations
 
@@ -231,6 +240,10 @@ files, and delete `js/vendor/`.
   each event does in each state. The `state-machines` skill gives the method. It applies to jobs,
   threads and timers, `SqliteDatabase` locking, web sessions and post order, `page.js` loaders and
   swaps, reload, dialogs and screens, or a file being replaced.
+- When you change code that a TLA+ spec of `specs/` models, change the spec in the same
+  commit and run `make specs` (see [Tests](#tests)). For a design that is not settled yet, you
+  can write the spec before the code: TLC finds a bad order of events sooner. A new spec adds
+  the module it models to the file filter of the `specs` job in `ci.yml`.
 - The `__all__` of each module of `composeui.core` is its public API. The API reference
   shows only these names, and `tests/test_docs.py` checks that the docs and the examples
   import no other name. Add a name that apps use to `__all__`. The other names, also those
@@ -284,7 +297,9 @@ the lint, `make mypy`, `make translations`, and `make test` on Python 3.9 to 3.1
 `make js-check`, `make browser-test` and `make docs` on Python 3.13. On Windows, it runs
 `.\make.ps1 translations test`, and on macOS `make translations test`, on Python 3.9 and
 3.14. The `without-extras` job runs the tests on Python 3.9 without any extra, as an app with
-one backend installs ComposeUI. Run `make check test` before you commit.
+one backend installs ComposeUI. The `specs` job runs `make specs` with the runner's Java. It
+runs only for a change of `specs/`, `core/jobs.py`, the `Makefile` or `ci.yml`. When it runs,
+the "Required checks" job needs it to pass. Run `make check test` before you commit.
 
 The existing mypy matrix checks source, examples, and tests together. Separate jobs run
 `make pyright`, `make pyrefly`, and `make ty` on tests on Python 3.9, matching their
