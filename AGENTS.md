@@ -287,7 +287,9 @@ docs/            # user guide, examples guide, technical guide; Sphinx site (con
   only the documentation (`docs/`, Markdown files) and benchmark results
   (`benchmarks/results/`) runs only the docs job: the site build, docs lint, and documentation
   tests. The existing mypy matrix also checks tests. Separate CI jobs run Pyright, Pyrefly and ty
-  on tests on Python 3.9.
+  on tests on Python 3.9. The `repeat` job runs each test module that a pull request adds or
+  changes 20 times on Windows with Python 3.9, fewer when many modules change: a test that
+  passes by chance fails there before it reaches `main`.
 
 ## Documentation
 

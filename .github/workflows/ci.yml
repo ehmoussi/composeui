@@ -18,6 +18,7 @@ jobs:
     outputs:
       code: ${{ steps.diff.outputs.code }}
       specs: ${{ steps.diff.outputs.specs }}
+      tests: ${{ steps.diff.outputs.tests }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -46,8 +47,16 @@ jobs:
               specs=false
             fi
           fi
+          # the test modules that the pull request adds or changes, for the repeat job
+          tests=""
+          if [ "$GITHUB_EVENT_NAME" = pull_request ]; then
+            tests=$(git diff --diff-filter=AM --name-only "$BASE...$HEAD" \
+              | grep -E '^tests/(.+/)?test_[^/]+\.py$' | grep -v '^tests/test_browser\.py$' \
+              | tr '\n' ' ' || true)
+          fi
           echo "code=$code" >> "$GITHUB_OUTPUT"
           echo "specs=$specs" >> "$GITHUB_OUTPUT"
+          echo "tests=$tests" >> "$GITHUB_OUTPUT"
 
   check:
     needs: changes
@@ -125,6 +134,35 @@ jobs:
           cache-dependency-glob: uv.lock
       - run: uv sync --locked --group dev --all-extras
       - run: ./make.ps1 translations test
+
+  # the test modules that a pull request adds or changes, many times on the slowest runner: a
+  # test that waits for a timer or another thread by chance fails there now and then, and
+  # once merged fails main's runs. 20 times each, fewer when many modules changed
+  repeat:
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.tests != ''
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      QT_QPA_PLATFORM: offscreen
+      TESTS: ${{ needs.changes.outputs.tests }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the tags: setuptools-scm makes the version from them
+      - uses: astral-sh/setup-uv@v10.2.0
+        with:
+          python-version: "3.9"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked --group dev --all-extras
+      - shell: bash
+        run: |
+          read -ra modules <<< "$TESTS"
+          count=$(( 100 / ${#modules[@]} ))
+          count=$(( count > 20 ? 20 : count < 3 ? 3 : count ))
+          echo "${#modules[@]} modules, $count times each"
+          uv run pytest "${modules[@]}" -m "not browser" -n auto --count "$count"
 
   # the tests on macOS, as on Windows: its Qt, its file paths (/tmp is /private/tmp) and its
   # make (GNU make 3.81)
@@ -313,7 +351,7 @@ jobs:
   required:
     name: Required checks
     if: always()
-    needs: [changes, check, typecheck, windows, macos, browser, specs, docs]
+    needs: [changes, check, typecheck, windows, repeat, macos, browser, specs, docs]
     runs-on: ubuntu-latest
     steps:
       - name: Verify the required jobs passed
@@ -339,6 +377,8 @@ jobs:
                   for job in ("check", "typecheck", "windows", "macos", "browser")
               )
               and results["specs"]["result"] == ("success" if specs == "true" else "skipped")
+              and results["repeat"]["result"]
+              == ("success" if code == "true" and outputs.get("tests") else "skipped")
           )
           if not passed:
               print(json.dumps(results, indent=2))
