@@ -257,7 +257,8 @@ def test_a_web_server_s_new_process_runs_the_file_again(
     assert 'id="cui-reload"' in page
 
 
-#: a file without `run` that logs each main view it builds. Version 2 ends its process soon
+#: a file without `run` that logs each main view it builds. Version 1 on Qt also logs once the
+#: reloaded app's event loop runs, where it looks for changes. Version 2 ends its process soon
 #: after: `terminate` on Windows would end the supervisor alone
 _LOGGED_APP = textwrap.dedent(
     """
@@ -269,9 +270,14 @@ _LOGGED_APP = textwrap.dedent(
     import threading
 
     from composeui.core.application import current_backend
+    from composeui.core.reload import is_reloaded
     from composeui.core.view import MainView, define_view
 
     VERSION = 1
+
+    def log(kind: object) -> None:
+        with pathlib.Path(os.environ["RUNS_LOG"]).open("a") as file:
+            file.write(f"{kind}|{current_backend().name}|{os.getpid()}\\n")
 
     def end() -> None:
         if sys.platform == "win32":
@@ -290,8 +296,11 @@ _LOGGED_APP = textwrap.dedent(
     class LoggedMainView(MainView):
         def __attrs_post_init__(self) -> None:
             super().__attrs_post_init__()
-            with pathlib.Path(os.environ["RUNS_LOG"]).open("a") as log:
-                log.write(f"{VERSION}|{current_backend().name}|{os.getpid()}\\n")
+            log(VERSION)
+            if VERSION == 1 and current_backend().name == "QT" and is_reloaded():
+                from qtpy.QtCore import QTimer
+                # posted now, run by the loop that `exec` starts
+                QTimer.singleShot(0, lambda: log("ready"))
             if VERSION == 2:
                 threading.Timer(1.0, end).start()
     """
@@ -339,8 +348,14 @@ def test_the_command_shows_the_changed_code_of_a_file_without_run(
         stderr=subprocess.DEVNULL,
     )
     try:
-        # built by the supervisor, then by the app that it runs
-        _wait_for(lambda: len(_runs(log)) >= 2)
+        # built by the supervisor, then by the app that it runs. In place, also the app's event
+        # loop running: the supervisor runs anew an app that doesn't take a change in time
+        _wait_for(
+            lambda: (
+                len(_runs(log)) >= 2
+                and (not in_place or any(run[0] == "ready" for run in _runs(log)))
+            )
+        )
         app_file.write_text(_LOGGED_APP.replace("VERSION = 1", "VERSION = 2"))
         assert program.wait(timeout=_TIMEOUT) == 0
     finally:
