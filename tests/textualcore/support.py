@@ -56,12 +56,18 @@ async def _click_laid_out(pilot: Pilot[Any], widget: Widget) -> None:
     """Click `widget` once its screen has laid it out, e.g. on a screen just pushed.
 
     The pilot aims at the widget's region, empty until then: the click would land on the
-    screen's corner instead, on a slow machine.
+    screen's corner instead, on a slow machine. A button pressed less than 0.2 s ago keeps
+    its `-active` class and ignores the click: a timer removes it, late on a slow machine.
     """
     for _ in range(100):
         if widget.region.area > 0:
             break
         await pilot.pause()
+    for _ in range(200):
+        if not widget.has_class("-active"):
+            break
+        await pilot.pause(0.05)
+    assert not widget.has_class("-active")
     assert await pilot.click(widget)
 
 
