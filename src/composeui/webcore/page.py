@@ -3,11 +3,14 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 from string import Template
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 from markupsafe import Markup, escape
 
 from composeui.webcore.uploads import MAX_UPLOAD_FILES
+
+if TYPE_CHECKING:
+    from composeui.core.jobs import Jobs
 
 _STATIC = Path(__file__).parent / "static"
 
@@ -111,19 +114,33 @@ SESSION_TAG_FIELD = "session"
 JOBS_POLL_MS = 300
 
 
-def jobs_poller(*, is_running: bool, oob: bool = False) -> Markup:
+def jobs_poll_delay(jobs: Jobs) -> int | None:
+    """Get the milliseconds the jobs' poller waits before its next fetch, or None for none.
+
+    `JOBS_POLL_MS` while a job runs. While a repeating task only waits for its next run,
+    its `every`: that run's start then shows at most one wait late, and an idle dashboard
+    asks once a wait rather than every `JOBS_POLL_MS`.
+    """
+    if jobs.is_running:
+        return JOBS_POLL_MS
+    every = jobs.repeat_every
+    return None if every is None else max(JOBS_POLL_MS, round(every * 1000))
+
+
+def jobs_poller(*, delay_ms: int | None, oob: bool = False) -> Markup:
     """Get the element asking the server for what the jobs changed, while they run.
 
     No response carries what a job's result changes (see `RenderTarget.pending`). While
-    the main view's jobs run, this element fetches itself every `JOBS_POLL_MS`, which
-    brings the changes along, until it comes back without a fetch once they are over.
+    the main view's jobs run, or a task repeats, this element fetches itself after
+    `delay_ms` (`jobs_poll_delay`), which brings the changes along, until it comes back
+    without a fetch once they are over.
     """
     swap = Markup(' hx-swap-oob="true"') if oob else Markup()
     poll = (
         Markup(
             ' hx-get="/_composeui/jobs" hx-trigger="load delay:{}ms" hx-swap="outerHTML"'
-        ).format(JOBS_POLL_MS)
-        if is_running
+        ).format(delay_ms)
+        if delay_ms is not None
         else Markup()
     )
     return Markup('<div id="cui-jobs"{}{} hidden></div>').format(poll, swap)

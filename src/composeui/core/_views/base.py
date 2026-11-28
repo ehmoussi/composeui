@@ -706,17 +706,27 @@ class View:
         self.retranslate()
 
     def build_task(
-        self, work: Callable[Concatenate[Job[R, ProgressT], P], R], *, debounce: float = 0.2
+        self,
+        work: Callable[Concatenate[Job[R, ProgressT], P], R],
+        *,
+        debounce: float = 0.2,
+        every: float | None = None,
+        backoff: float = 2.0,
+        max_wait: float | None = None,
     ) -> Task[R, P, ProgressT]:
         """Build a reusable task for `work`, run by the jobs of this view's main view.
 
         Call it on the main thread, e.g. in `__attrs_post_init__`. The task can start once a
         main view holds this view: once the main view is built, or a list builds the row.
-        `debounce` is the seconds `Task.start_latest` waits for a newer call.
+        `debounce` is the seconds `Task.start_latest` waits for a newer call. With `every`,
+        the task repeats its runs, `every` seconds apart, with `backoff` and `max_wait` after
+        failures (see `Task`).
         """
         _check_main_thread("View.build_task")
         jobs = None if self._task_jobs is None else self._task_jobs()
-        task: Task[R, P, ProgressT] = Task(None, work, debounce=debounce)
+        task: Task[R, P, ProgressT] = Task(
+            None, work, debounce=debounce, every=every, backoff=backoff, max_wait=max_wait
+        )
         if jobs is not None:
             jobs._adopt(task)  # noqa: SLF001 (shared task lifecycle)
         if self._own_tasks is None:

@@ -23,7 +23,13 @@ from composeui.core.view import (
 )
 from composeui.webcore.downloads import Downloads, OpenedUrl, downloads_marker
 from composeui.webcore.icons import icon_url
-from composeui.webcore.page import NO_LINKS, get_page, jobs_poller, reload_poller
+from composeui.webcore.page import (
+    NO_LINKS,
+    get_page,
+    jobs_poll_delay,
+    jobs_poller,
+    reload_poller,
+)
 from composeui.webcore.rendertarget import _RENDER_TARGET, RenderTarget, call_in_session
 
 if TYPE_CHECKING:
@@ -428,7 +434,7 @@ class WebMainRenderer(MainRenderer[MainView, str]):
                 dialogs_html=self._dialogs_html(),
             ),
             self._view.language,
-            pollers=jobs_poller(is_running=self._view.jobs.is_running)
+            pollers=jobs_poller(delay_ms=jobs_poll_delay(self._view.jobs))
             + reload_poller(reload_instance),
             max_upload_size=self._view.max_upload_size,
             session_tag=session_tag,

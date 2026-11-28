@@ -98,9 +98,6 @@ The SQLite model is complete otherwise: do not rebuild it.
 
 What an app needs to follow work that runs outside it, such as a solver or a cluster's job.
 
-- **Repeating jobs** (Next). A job that runs every N seconds, with a backoff after an error. New,
-  Open and closing the app stop it, as they stop the other jobs. A `loaded` callback starts it
-  again for the study opened. For polling a server, a folder or a cluster.
 - **Services of the app** (Next). Work for the whole process, started with the app and stopped
   at its shutdown, shared by every web session, such as one poller or one connection. Today
   `shared_data` loads once, but has no end.

@@ -150,6 +150,7 @@ not in the package: run them from a clone of the repository (see
     - [Run the latest call only](user-guide/threads.md#run-the-latest-call-only)
     - [Show a task's state](user-guide/threads.md#show-a-tasks-state)
     - [Disable views while a task runs](user-guide/threads.md#disable-views-while-a-task-runs)
+    - [Repeat a task](user-guide/threads.md#repeat-a-task)
   - [Data shared by the sessions](user-guide/threads.md#data-shared-by-the-sessions)
   - [A limit on the jobs that run at once](user-guide/threads.md#a-limit-on-the-jobs-that-run-at-once)
   - [How jobs behave](user-guide/threads.md#how-jobs-behave)

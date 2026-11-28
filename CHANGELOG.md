@@ -16,6 +16,14 @@ backends' modules included, can change in any release without an entry here.
   for long names. Grouped and stacked bars, reference lines, hover, clicks and report images
   work as in a chart that stands. A study doesn't save it, as `bar_mode`.
 
+- A task built with `every` repeats its runs, `every` seconds after the end of each one, for
+  polling a server, a folder or a cluster: `jobs.task(work, every=30.0)` or
+  `view.build_task(work, every=30.0)`. After a failure, the wait grows by `backoff` at each
+  failure in a row, up to `max_wait`. A run keeps the result before until its own, and
+  `Task.is_repeating` tells whether it repeats. `cancel`, New, Open and closing the app stop
+  it, and a `loaded` callback starts it again. On the web, the page polls once each `every`
+  while the task waits.
+
 - `TextEditorView` is a box where the user edits the text of a file, such as a solver's input
   file: a fixed-width font, numbered lines that never wrap, and Tab that indents. A bar shows
   the file's name and the caret's line and column. The user saves the text to a file or copies

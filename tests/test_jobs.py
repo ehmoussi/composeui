@@ -8,6 +8,7 @@ import logging
 import subprocess
 import sys
 import threading
+import time
 import weakref
 from typing import TYPE_CHECKING, cast
 
@@ -16,10 +17,11 @@ import pytest
 from typing_extensions import override
 
 from composeui.core.application import ModelApplication
-from composeui.core.jobs import CalledInJobError, JobCanceledError, starting_study
+from composeui.core.jobs import CalledInJobError, JobCanceledError, repeat_wait, starting_study
 from composeui.core.model import Model, RefusedError
 from composeui.core.reactivity import reactive, start_reactions
 from composeui.core.registry import RendererType
+from composeui.core.study import new_study
 from composeui.core.view import (
     OMIT,
     ActionView,
@@ -35,6 +37,7 @@ from composeui.core.view import (
 )
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from pytestqt.qtbot import QtBot
@@ -1223,3 +1226,230 @@ def test_a_view_replaced_in_its_main_view_is_freed_with_its_tasks_callbacks() ->
     main_view.panel = _Panel()
     gc.collect()
     assert old() is None
+
+
+def _until(main_view: MainView, condition: Callable[[], bool]) -> None:
+    """Emit what the jobs of `main_view`, rendered by no toolkit, give until `condition` holds.
+
+    A repeating task's next run comes from the timer's thread, after its wait.
+    """
+    deadline = time.monotonic() + 10
+    while True:
+        main_view.jobs.wait()
+        if condition() or time.monotonic() > deadline:
+            break
+        time.sleep(0.01)
+    assert condition()
+
+
+@pytest.mark.parametrize(
+    ("max_wait", "failures", "wait"),
+    [
+        (None, 0, 1.0),  # no failure: `every`
+        (None, 1, 2.0),
+        (None, 3, 8.0),
+        (None, 4, 10.0),  # ten times `every` at most
+        (None, 5000, 10.0),  # past what a float holds
+        (5.0, 3, 5.0),
+    ],
+)
+def test_a_repeating_task_waits_longer_after_each_failure_in_a_row(
+    max_wait: float | None, failures: int, wait: float
+) -> None:
+    assert repeat_wait(1.0, 2.0, max_wait, failures) == wait
+
+
+@pytest.mark.parametrize(
+    ("options", "message"),
+    [
+        ({"every": 0.0}, "every must be more than 0 seconds"),
+        ({"every": 1.0, "backoff": 0.5}, "backoff must be 1 or more"),
+        ({"every": 2.0, "max_wait": 1.0}, "must be every"),
+    ],
+)
+def test_a_task_refuses_a_wait_that_can_t_repeat_it(
+    options: dict[str, float], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        MainView().jobs.task(_read, **options)
+
+
+def test_a_failed_run_waits_longer_and_a_run_that_succeeds_waits_every_again() -> None:
+    main_view = MainView()
+    times: list[tuple[float, float]] = []  # each run's start and end, one run at a time
+
+    def work(_job: Job[int]) -> int:
+        start = time.monotonic()
+        try:
+            if len(times) in (0, 2):
+                msg = "the server didn't answer"
+                raise RefusedError(msg)
+            return len(times)
+        finally:
+            times.append((start, time.monotonic()))
+
+    # after a failure, 0.5 s; after two in a row, 25 s: longer than `_until` waits
+    task = main_view.jobs.task(work, every=0.01, backoff=50.0, max_wait=100.0)
+    task.start()
+    _until(main_view, lambda: task.error is not None)
+    assert not task.has_result
+
+    _until(main_view, lambda: task.has_result)
+    assert task.error is None  # the success replaced the failure
+    assert times[1][0] - times[0][1] >= 0.5  # never sooner than the wait
+
+    # the success set the count of failures back: the next failure waits 0.5 s again
+    _until(main_view, lambda: len(times) == 4 and not task.is_running)
+    task.cancel()
+
+
+def test_start_latest_repeats_a_task_with_its_new_arguments() -> None:
+    main_view = MainView()
+    runs: list[str] = []
+    entered, release = threading.Event(), threading.Event()
+
+    def work(_job: Job[str], name: str) -> str:
+        runs.append(name)
+        if name == "first":
+            entered.set()
+            assert release.wait(10)
+        return name
+
+    task = main_view.jobs.task(work, every=0.01, debounce=0.0)
+    try:
+        assert task.start("first")
+        assert entered.wait(10)
+        assert not task.start("second")  # it repeats: already started
+        task.start_latest("latest")  # while the first run goes on: it no longer counts
+    finally:
+        release.set()
+    _until(main_view, lambda: runs.count("latest") >= 2)
+    task.cancel()
+
+    assert runs[0] == "first"
+    assert set(runs[1:]) == {"latest"}
+    assert task.result == "latest"
+
+
+def test_a_run_that_the_timer_posted_before_a_stop_starts_no_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main_view = _PollMainView()
+    jobs = main_view.jobs
+    runs: list[int] = []
+    posted, release, delivered = threading.Event(), threading.Event(), threading.Event()
+    post = jobs._post  # noqa: SLF001 (held, then let through, as a busy main thread would)
+
+    def held(callback: Callable[[], None]) -> None:
+        posted.set()
+        assert release.wait(10)
+        post(callback)
+        delivered.set()
+
+    monkeypatch.setattr(jobs, "_post", held)
+
+    def work(_job: Job[int]) -> int:
+        runs.append(1)
+        if len(runs) == 2:  # its next run then comes after the test, 100 s later
+            msg = "the server didn't answer"
+            raise RefusedError(msg)
+        return len(runs)
+
+    task = jobs.task(work, every=0.01, backoff=10_000.0, max_wait=1000.0)
+    task.cancel_with(main_view.stop)
+    try:
+        task.start()
+        _until(main_view, lambda: task.has_result)
+        assert posted.wait(10)  # the next run is on its way to the main thread
+        assert main_view.stop.is_enabled  # between two runs, Stop still stops it
+
+        task.cancel()
+        assert not main_view.stop.is_enabled
+        task.start()  # again, while the run posted before the stop is on its way
+    finally:
+        release.set()
+    assert delivered.wait(10)
+    jobs.wait()
+
+    assert runs == [1, 1]  # the start's run, not the one posted before the stop
+    task.cancel()
+
+
+def test_cancelling_the_jobs_during_a_run_ends_the_repeat() -> None:
+    main_view = MainView()
+    entered, release = threading.Event(), threading.Event()
+
+    def work(job: Job[int]) -> int:
+        entered.set()
+        assert release.wait(10)
+        return 1 if job.is_canceled else 2
+
+    task = main_view.jobs.task(work, every=0.01)
+    try:
+        task.start()
+        assert entered.wait(10)
+        main_view.jobs.cancel()
+    finally:
+        release.set()
+    main_view.jobs.wait()
+
+    assert task.result == 1
+    assert not task.is_repeating
+    assert main_view.jobs.repeat_every is None
+
+
+def test_cancelling_the_jobs_stops_a_task_waiting_for_its_next_run() -> None:
+    main_view = MainView()
+    task = main_view.jobs.task(_read, every=0.01)
+    task.start("status")
+    # its run is over: the next one, due or not, waits for `wait` to start
+    _until(main_view, lambda: task.has_result and not task.is_running)
+    heard: list[bool] = []
+    task.changed.connect(lambda: heard.append(task.is_repeating))
+    once = main_view.jobs.task(_read)  # no repeat to stop: nothing to tell
+    once.changed.connect(lambda: heard.append(True))
+
+    main_view.jobs.cancel()
+    main_view.jobs.wait()
+
+    assert heard == [False]  # e.g. a Stop button disabled
+    assert not task.is_running  # a run posted before the cancel starts nothing
+
+
+@define_view
+class _PollMainView(MainView):
+    status: InputView = child(InputView)
+    stop: ButtonView = child(ButtonView)
+
+
+def test_new_stops_a_repeating_task_and_a_loaded_callback_starts_it_for_the_new_study() -> None:
+    main_view = _PollMainView()
+    runs: list[str] = []
+
+    def work(_job: Job[str], study: str) -> str:
+        runs.append(study)
+        return f"{study} checked {len(runs)} times"
+
+    task = main_view.jobs.task(work, every=0.01)
+    task.finished.connect(lambda status: setattr(main_view.status, "text", status))
+    studies = iter(["first", "second"])
+
+    def start_checking() -> None:
+        task.start(next(studies))
+
+    main_view.loaded.connect(start_checking)
+    new_study(main_view, None)  # as the app's start does
+    # between two runs: the next one, posted or not, can start only in `wait`, after New
+    _until(main_view, lambda: len(runs) >= 2 and not task.is_running)
+    # each run is the study's, as the one that the start started: no change of the user's
+    assert not main_view.has_unsaved_changes()
+
+    new_study(main_view, None)
+
+    assert not task.has_result  # the run before belongs to the study replaced
+    count = len(runs)
+    _until(main_view, lambda: runs.count("second") >= 2 and not task.is_running)
+    task.cancel()
+
+    assert set(runs[count:]) == {"second"}  # the first study's repeat stopped
+    assert not main_view.has_unsaved_changes()

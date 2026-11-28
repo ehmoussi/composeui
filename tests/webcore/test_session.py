@@ -114,6 +114,40 @@ def test_a_closed_session_runs_none_of_its_jobs_callbacks() -> None:
     assert called == []
 
 
+def test_a_closed_session_starts_no_run_of_its_repeating_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    main_view = DataFileMainView()
+    session = WebSession(main_view)
+    jobs = main_view.jobs
+    runs: list[int] = []
+    posted, release, delivered = threading.Event(), threading.Event(), threading.Event()
+    post = jobs._post  # noqa: SLF001 (held, then let through, as a busy session's lock would)
+
+    def held(callback: Callable[[], None]) -> None:
+        posted.set()
+        assert release.wait(30)
+        post(callback)
+        delivered.set()
+
+    monkeypatch.setattr(jobs, "_post", held)
+    task = jobs.task(lambda _job: runs.append(1), every=0.01)
+    try:
+        with session.lock:
+            task.start()
+        assert posted.wait(30)  # the next run is on its way to the session
+        heard: list[bool] = []
+        task.changed.connect(lambda: heard.append(True))
+        session.close()
+    finally:
+        release.set()
+    assert delivered.wait(30)
+
+    assert runs == [1]
+    assert not task.is_running
+    assert heard == []  # the app's code runs in no other session's request
+
+
 class _Guestbook(Model):
     def __init__(self) -> None:
         self.names: list[str] = []
@@ -700,6 +734,19 @@ def _hold_a_job(session: WebSession, stack: contextlib.ExitStack, _tmp_path: Pat
     jobs.start(lambda _job: may_end.wait(10))
 
 
+def _hold_a_repeating_task(
+    session: WebSession, stack: contextlib.ExitStack, _tmp_path: Path
+) -> None:
+    jobs = session.main_view.jobs
+    task = jobs.task(lambda _job: None, every=60.0)
+    stack.callback(task.cancel)
+    task.start()
+    for _ in range(200):  # until its run is over: it only waits for the next one
+        if not jobs.has_workers and not task.is_running:
+            return
+        time.sleep(0.05)
+
+
 def _hold_a_download(session: WebSession, _stack: contextlib.ExitStack, _tmp_path: Path) -> None:
     session.main_view.download("report.txt", b"made by the app")
 
@@ -746,6 +793,8 @@ def _hold_a_request(session: WebSession, stack: contextlib.ExitStack, _tmp_path:
     [
         (_HoldingMainView, _hold_nothing, False),
         (_HoldingMainView, _hold_a_job, True),
+        # waking emits `loaded`, which starts it again
+        (_HoldingMainView, _hold_a_repeating_task, False),
         (_HoldingMainView, _hold_a_download, True),
         (_HoldingMainView, _hold_a_question, True),
         (_HoldingMainView, _hold_an_upload, False),

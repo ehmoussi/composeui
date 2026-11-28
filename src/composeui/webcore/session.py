@@ -49,7 +49,7 @@ from composeui.webcore._renderers.tables import WebSourceTableRenderer, WebTable
 from composeui.webcore.changes import collect_dirty
 from composeui.webcore.downloads import downloads_marker
 from composeui.webcore.order import PostOrder
-from composeui.webcore.page import NO_LINKS, jobs_poller, page_marker
+from composeui.webcore.page import NO_LINKS, jobs_poll_delay, jobs_poller, page_marker
 from composeui.webcore.rendertarget import RenderTarget, rendering_into
 from composeui.webcore.sessionfolder import (
     SEEN_NAME,
@@ -371,7 +371,9 @@ class WebSession(RenderTarget):
         while it shows what its views' state and its model's data don't hold: a dialog's
         question, a large table's source given since `loaded`, a console's text or an
         uploaded file in a view that the session doesn't keep (`session_views`), such as a
-        `ListView`'s. Nor when the app says so (`MainView.can_hibernate`).
+        `ListView`'s. Nor when the app says so (`MainView.can_hibernate`). A task that only
+        waits for its next run doesn't count: waking emits `loaded`, whose callbacks start it
+        again.
         """
         with self.lock:
             main_view = self.main_view
@@ -402,8 +404,9 @@ class WebSession(RenderTarget):
             self.has_ended = True
             # weak references would free them too, but only once collected
             stop_reactions(self.main_view)
-            # not `drop`: its signals would run the app's code in another session's request
-            self.main_view.jobs.cancel()
+            # not `drop`, nor `cancel`, which stops the repeating tasks: their signals would run
+            # the app's code in another session's request
+            self.main_view.jobs._cancel_runs()  # noqa: SLF001 (the session's own end)
             if self.model is not None:
                 self.model.close()
 
@@ -854,7 +857,7 @@ class WebSession(RenderTarget):
             route = None if router is None else router.current_route
             main_view = self.main_view
             language, title = main_view.language, main_view.title
-            jobs_running = main_view.jobs.is_running
+            poll_delay = jobs_poll_delay(main_view.jobs)
             with collect_dirty() as dirty:
                 # the reactive methods run once for all of the event's changes
                 with batch():
@@ -869,8 +872,8 @@ class WebSession(RenderTarget):
                 body += main_view.renderer.brand_html(oob=True)
             if (main_view.language, main_view.title) != (language, title):
                 body += page_marker(main_view.language, main_view.title, oob=True)
-            if main_view.jobs.is_running != jobs_running:
-                body += jobs_poller(is_running=main_view.jobs.is_running, oob=True)
+            if jobs_poll_delay(main_view.jobs) != poll_delay:
+                body += jobs_poller(delay_ms=jobs_poll_delay(main_view.jobs), oob=True)
             body += self._downloads_marker()
             if router is None or router.current_route == route:
                 return body, None
@@ -1026,7 +1029,8 @@ class WebSession(RenderTarget):
             pending = render_dirty(self.take_pending())
             self._remove_replaced_uploads()
             downloads = self._downloads_marker()
-            return jobs_poller(is_running=self.main_view.jobs.is_running) + pending + downloads
+            poller = jobs_poller(delay_ms=jobs_poll_delay(self.main_view.jobs))
+            return poller + pending + downloads
 
     @property
     def _downloads(self) -> Downloads:
