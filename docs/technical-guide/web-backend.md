@@ -284,8 +284,14 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   that reads it as its view is built would read the server's account instead.
 - **The user** (`MainView.user`, `WebSettings.user_header`). `UserHeaderMiddleware` refuses a
   request whose header doesn't name one UTF-8 user, after the origin check: a request of no
-  user would share another's sessions. Each `SessionStore` entry keeps the user it was built
-  for. `_entry` gives no other user's request that entry: it doesn't wake it, wait for its
+  user would share another's sessions. It also refuses two of the name's or the email's header
+  (`UserHeaders.refusal`), the sign of a proxy that adds its header beside the browser's. A
+  missing, empty or non-UTF-8 name or email is None, so that a name in another encoding doesn't
+  lock its user out. Only the id (`User.id`) keys the sessions: each `SessionStore` entry and
+  each save keep the id that they were built for. The whole `User` reaches the main views
+  through `building_for_browser`, so a woken session takes the name and the email of the
+  request that wakes it, and nothing on disk holds them. `_entry` gives no other user's request
+  that entry: it doesn't wake it, wait for its
   save, or mark it used, and the request gets a new session, whose id replaces the cookie's.
   The previous user's session stays until `session_ttl`, as their cookie may come back. A save
   holds its user in a `user` file beside it, which `_find_saved` reads again; a save without

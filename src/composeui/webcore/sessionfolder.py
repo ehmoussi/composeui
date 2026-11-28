@@ -140,7 +140,7 @@ def read_user(path: Path) -> str | None:
     """Read the user of a session's save; None if `path` is absent.
 
     A damaged name names no user: no proxy sends the character that replaces a byte it
-    can't read, and `header_user` takes no empty name.
+    can't read, and `UserHeaders` takes no empty id.
     """
     try:
         return path.read_text(encoding="utf-8", errors="replace")

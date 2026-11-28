@@ -580,18 +580,40 @@ class WebSettings:
     #: `display_path` shows the whole path.
     client: ClientCapabilities = attrs.field(factory=ClientCapabilities.served)
     #: The header that names the user, which a login proxy in front of the server sets on
-    #: each request, such as ``"Remote-User"`` or ``"X-Forwarded-User"`` (`MainView.user`).
-    #: The server then answers 403 to a request without it, and gives each user sessions of
-    #: their own. Set it only when the proxy alone reaches the server, and always sets the
-    #: header: a request that reaches the server another way can name any user. None, the
-    #: default, reads no user.
+    #: each request, such as ``"Remote-User"`` or ``"X-Forwarded-User"`` (`MainView.user`,
+    #: its `User.id`). The server then answers 403 to a request without it, and gives each
+    #: user sessions of their own. Set it only when the proxy alone reaches the server, and
+    #: always sets the header: a request that reaches the server another way can name any
+    #: user. None, the default, reads no user.
     user_header: Optional[str] = attrs.field(default=None)
+    #: The header that gives the user's name for display, such as ``"Remote-Name"``
+    #: (`User.name`), with `user_header` only. A request without it, or with a name that
+    #: isn't UTF-8, gives no name. The proxy must set it on each request too.
+    user_name_header: Optional[str] = attrs.field(default=None)
+    #: The header that gives the user's email address, such as ``"Remote-Email"`` or
+    #: ``"X-Forwarded-Email"`` (`User.email`), as `user_name_header` gives the name.
+    user_email_header: Optional[str] = attrs.field(default=None)
 
     @user_header.validator
-    def _check_user_header(self, _attribute: object, value: str | None) -> None:
-        if value is not None and _HEADER_NAME.fullmatch(value) is None:
-            msg = f"user_header={value!r} isn't the name of a header"
+    @user_name_header.validator
+    @user_email_header.validator
+    def _check_user_header(self, attribute: attrs.Attribute[object], value: str | None) -> None:
+        if value is None:
+            return
+        if _HEADER_NAME.fullmatch(value) is None:
+            msg = f"{attribute.name}={value!r} isn't the name of a header"
             raise ValueError(msg)
+        if attribute.name == "user_header":
+            return
+        if self.user_header is None:
+            msg = f"{attribute.name}={value!r} needs a user_header: the user's id"
+            raise ValueError(msg)
+        # header names ignore case: one header would give two of the user's values
+        others = {"user_header": self.user_header, "user_name_header": self.user_name_header}
+        for other, name in others.items():
+            if other != attribute.name and name is not None and name.lower() == value.lower():
+                msg = f"{attribute.name}={value!r} is the header of {other} too"
+                raise ValueError(msg)
 
 
 @overload

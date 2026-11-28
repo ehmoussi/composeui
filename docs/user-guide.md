@@ -157,6 +157,7 @@ not in the package: run them from a clone of the repository (see
 - [A SQLite model](user-guide/sqlite-model.md)
   - [A database shared by every session](user-guide/sqlite-model.md#a-database-shared-by-every-session)
     - [Filled once, read-only](user-guide/sqlite-model.md#filled-once-read-only)
+    - [Record the app's users](user-guide/sqlite-model.md#record-the-apps-users)
 - [Importing CSV data](user-guide/csv-import.md)
   - [A CSV table](user-guide/csv-import.md#a-csv-table)
   - [CSV files](user-guide/csv-import.md#csv-files)

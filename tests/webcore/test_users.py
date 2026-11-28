@@ -18,18 +18,22 @@ pytest.importorskip("httpx2" if sys.version_info >= (3, 11) else "httpx")
 from typing_extensions import override
 
 from composeui.core.application import WebSettings
+from composeui.core.client import User
 from composeui.core.view import define_view
 from composeui.webcore.webapplication import WebApplication
 from examples.webhello import HelloMainView
 from tests.webcore.support import _action_id, _Browser, _field_id, _HelloApp, _type_name
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
     from starlette.applications import Starlette
     from starlette.types import ASGIApp, Message
 
-_USERS = WebSettings(user_header="Remote-User")
+_USERS = WebSettings(
+    user_header="Remote-User", user_name_header="Remote-Name", user_email_header="Remote-Email"
+)
 
 
 def _cookie_data(cookie: str) -> str:
@@ -45,7 +49,7 @@ class _UserNamedMainView(HelloMainView):
     @override
     def __attrs_post_init__(self) -> None:
         super().__attrs_post_init__()
-        self.form.name.text = self.user or ""
+        self.form.name.text = "" if self.user is None else self.user.id
 
 
 class _UserNamedApp(WebApplication[_UserNamedMainView]):
@@ -107,8 +111,11 @@ def _answer(app: ASGIApp, headers: list[tuple[bytes, bytes]]) -> tuple[int, set[
         # a proxy that adds its header beside the browser's, rather than replace it
         ([(b"remote-user", b"ada"), (b"remote-user", b"grace")], 403),
         ([(b"remote-user", b"\xff")], 403),
+        # the browser's name or email beside the proxy's: either may come first
+        ([(b"remote-user", b"ada"), (b"remote-name", b"x"), (b"remote-name", b"y")], 403),
+        ([(b"remote-user", b"ada"), (b"remote-email", b"x"), (b"remote-email", b"y")], 403),
     ],
-    ids=["one", "none", "empty", "two", "not-utf8"],
+    ids=["one", "none", "empty", "two", "not-utf8", "two-names", "two-emails"],
 )
 def test_only_a_request_that_names_one_user_is_served(
     headers: list[tuple[bytes, bytes]], status: int
@@ -121,7 +128,38 @@ def test_only_a_request_that_names_one_user_is_served(
     # a refusal too: another site's frame gets no page to show
     assert {b"content-security-policy", b"x-frame-options"} <= names
     # no session built for nobody
-    assert [view.user for view in app.session_views] == (["ada"] if status == 200 else [])
+    assert [view.user for view in app.session_views] == ([User(id="ada")] if status == 200 else [])
+
+
+@pytest.mark.parametrize(
+    ("headers", "user"),
+    [
+        (
+            [
+                (b"remote-user", b"ada"),
+                (b"remote-name", "Ada Lövelace".encode()),
+                (b"remote-email", b"ada@example.org"),
+            ],
+            User(id="ada", name="Ada Lövelace", email="ada@example.org"),
+        ),
+        ([(b"remote-user", b"ada"), (b"remote-name", b""), (b"remote-email", b"")], User(id="ada")),
+        # a name in Latin-1, which an IdP may send: no name, but the user still gets in
+        (
+            [(b"remote-user", b"ada"), (b"remote-name", b"L\xf6velace")],
+            User(id="ada"),
+        ),
+    ],
+    ids=["all", "empty", "not-utf8"],
+)
+def test_the_user_s_name_and_email_come_from_their_headers(
+    headers: list[tuple[bytes, bytes]], user: User
+) -> None:
+    app = _HelloApp(_USERS)
+
+    sent, _ = _answer(app.create_starlette_app(), headers)
+
+    assert sent == 200
+    assert [view.user for view in app.session_views] == [user]
 
 
 def test_each_user_of_a_browser_gets_their_own_session_and_browser_id() -> None:
@@ -145,7 +183,7 @@ def test_each_user_of_a_browser_gets_their_own_session_and_browser_id() -> None:
     assert ada.form.name.text == "Bob"
     assert 'value="Bob"' not in other_user
     ada, grace = app.session_views
-    assert (ada.user, grace.user) == ("Ada Lovelace", "grace")
+    assert (ada.user, grace.user) == (User(id="Ada Lovelace"), User(id="grace"))
     assert grace.browser_id != ada.browser_id
     # signed, not encrypted: anyone who has the cookie reads it
     assert "grace" not in _cookie_data(cookie)
@@ -183,13 +221,38 @@ def test_a_saved_session_opens_for_its_own_user_only(
         cookie = browser.cookies["session"]
 
     second, starlette_app = serve(next_settings)
-    headers = {} if user is None else {"Remote-User": user}
+    # the proxy gives the user's email now: the session woken takes it
+    headers = {} if user is None else {"Remote-User": user, "Remote-Email": f"{user}@example.org"}
     with _Browser(starlette_app, headers) as browser:
         browser.cookies.set("session", cookie)
         page = browser.get("/").text
 
     assert ('value="Bob"' in page) is keeps_it
-    assert second.session_views[0].user == user
+    assert second.session_views[0].user == (
+        None if user is None else User(id=user, email=f"{user}@example.org")
+    )
+
+
+def test_a_saved_session_that_a_poll_wakes_takes_the_user_s_headers_of_the_poll(
+    tmp_path: Path,
+) -> None:
+    """Not only the page: any request of the session wakes it, built again for its user."""
+    settings = attrs.evolve(_USERS, session_folder=tmp_path)
+    first = _HelloApp(settings)
+    with _Browser(first.create_starlette_app(), {"Remote-User": "ada"}) as browser:
+        browser.get("/")
+        _type_name(browser, first.session_views[0], "Bob")
+        cookie = browser.cookies["session"]
+
+    second = _HelloApp(settings)
+    headers = {"Remote-User": "ada", "Remote-Name": "Ada"}
+    with _Browser(second.create_starlette_app(), headers) as browser:
+        browser.cookies.set("session", cookie)
+        browser.get("/_composeui/jobs")
+
+    (main_view,) = second.session_views
+    assert main_view.form.name.text == "Bob"  # her session, not a new one
+    assert main_view.user == User(id="ada", name="Ada")
 
 
 def test_new_builds_the_initial_view_for_the_session_s_own_user() -> None:
@@ -229,6 +292,49 @@ def test_a_reload_keeps_what_the_user_typed_in_a_field_that_starts_with_their_na
 
 
 @pytest.mark.parametrize("header", ["", "Remote User", "Rémote-User"])
-def test_a_user_header_that_names_no_header_is_refused(header: str) -> None:
-    with pytest.raises(ValueError, match="isn't the name of a header"):
-        WebSettings(user_header=header)
+@pytest.mark.parametrize(
+    ("setting", "settings"),
+    [
+        ("user_header", lambda header: WebSettings(user_header=header)),
+        (
+            "user_name_header",
+            lambda header: WebSettings(user_header="Remote-User", user_name_header=header),
+        ),
+        (
+            "user_email_header",
+            lambda header: WebSettings(user_header="Remote-User", user_email_header=header),
+        ),
+    ],
+    ids=["user", "name", "email"],
+)
+def test_a_user_header_that_names_no_header_is_refused(
+    setting: str, settings: Callable[[str], WebSettings], header: str
+) -> None:
+    with pytest.raises(ValueError, match=f"{setting}=.* isn't the name of a header"):
+        settings(header)
+
+
+@pytest.mark.parametrize(
+    ("settings", "message"),
+    [
+        (lambda: WebSettings(user_email_header="Remote-Email"), "needs a user_header"),
+        (
+            lambda: WebSettings(user_header="Remote-User", user_name_header="remote-user"),
+            "of user_header too",
+        ),
+        (
+            lambda: WebSettings(
+                user_header="Remote-User",
+                user_name_header="Remote-Name",
+                user_email_header="REMOTE-NAME",
+            ),
+            "of user_name_header too",
+        ),
+    ],
+    ids=["no-user-header", "name-is-the-user", "email-is-the-name"],
+)
+def test_a_name_or_email_header_that_isn_t_its_own_is_refused(
+    settings: Callable[[], WebSettings], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        settings()

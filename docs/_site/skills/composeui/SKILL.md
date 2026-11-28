@@ -205,9 +205,11 @@ See https://ehmoussi.github.io/composeui/user-guide/building-views.html#structur
   never grant access by it.
   See
   https://ehmoussi.github.io/composeui/user-guide/running-the-app.html#show-a-browser-its-own-work
-- **Read the logged-in user with `main_view.user`,** which a login proxy names in the header
-  of `WebSettings(user_header=...)`. It is None without one, and on Qt and Textual. Each user
-  gets their own sessions and `browser_id`. Never read the header yourself.
+- **Read the logged-in user with `main_view.user`,** a `User` that a login proxy names in the
+  header of `WebSettings(user_header=...)`: its `id`, and its `name` and `email` from
+  `user_name_header` and `user_email_header`, each None when the proxy gives none. It is None
+  without a login, and on Qt and Textual. Each user id gets its own sessions and `browser_id`.
+  Grant access by `id` only, never by the name or the email. Never read the headers yourself.
   See
   https://ehmoussi.github.io/composeui/user-guide/running-the-app.html#know-the-user-behind-a-login-proxy
 - **Give the user a file with `DownloadView`**, or `main_view.download(...)` from a callback,

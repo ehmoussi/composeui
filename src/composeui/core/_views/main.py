@@ -67,6 +67,7 @@ from composeui.core._views.files import (
 from composeui.core._views.tables import RecordTableView, SourceTableView, TableMixin
 from composeui.core.autosave import Autosave
 from composeui.core.client import (
+    User,
     building_for_browser,
     check_url,
     current_browser_id,
@@ -511,7 +512,7 @@ class MainView(View):
         factory=current_browser_id, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
     #: the user that a login proxy named (`user`), fixed as the view is built
-    _user: Optional[str] = attrs.field(
+    _user: Optional[User] = attrs.field(
         factory=current_user, init=False, repr=False, eq=False, metadata={OMIT: True}
     )
 
@@ -828,14 +829,15 @@ class MainView(View):
         return self._browser_id
 
     @property
-    def user(self) -> str | None:
-        """Get the name of the user whom a login proxy let in, on the web; else None.
+    def user(self) -> User | None:
+        """Get the user whom a login proxy let in, on the web; else None.
 
-        A web server with `WebSettings.user_header` reads it from that header, which the
-        proxy sets on each request. Each session belongs to its user: another user, even in
-        the same browser, gets a session and a `browser_id` of their own. Without a login,
-        on Qt and Textual, and on the web without `user_header`, it is None. It never
-        changes for a main view, and is known once the main view is made.
+        A web server with `WebSettings.user_header` reads the user's `User.id` from that
+        header, which the proxy sets on each request, and their name and email from
+        `user_name_header` and `user_email_header`. Each session belongs to its user's id:
+        another user, even in the same browser, gets a session and a `browser_id` of their
+        own. Without a login, on Qt and Textual, and on the web without `user_header`, it is
+        None. It never changes for a main view, and is known once the main view is made.
         """
         return self._user
 
