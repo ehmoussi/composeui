@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     from textual.widget import Widget
 
 
-from tests.textualcore.support import _app_of, _field_widget, _names, _widget
+from tests.textualcore.support import _app_of, _field_widget, _names, _wait_until, _widget
 
 
 @pytest.mark.asyncio
@@ -117,9 +117,8 @@ async def test_a_notification_stays_above_the_scrolling_content_until_the_user_c
         content = app.screen.query_one(VerticalScroll)
         assert bar.region.bottom <= content.region.y
         shown_at = bar.region
-        content.scroll_end(animate=False)
-        await pilot.pause()
-        assert content.scroll_y > 0
+        content.scroll_end(animate=False)  # after the next refresh
+        await _wait_until(pilot, lambda: content.scroll_y > 0)
         assert bar.region == shown_at  # the content scrolls beneath it
 
         assert await pilot.click(bar.query_one(Button))
@@ -525,8 +524,15 @@ async def test_graphics_draw_an_image_at_its_size_or_shrunk_to_the_width() -> No
         assert (pixels.size.width, pixels.size.height) == (40, 10)
 
         await pilot.resize_terminal(20, 30)
-        await pilot.pause()
-        assert (pixels.size.width, pixels.size.height) == (image.size.width, image.size.width // 4)
+        # laid out again by a timer of the app
+        await _wait_until(
+            pilot,
+            lambda: (
+                image.size.width <= 20
+                and (pixels.size.width, pixels.size.height)
+                == (image.size.width, image.size.width // 4)
+            ),
+        )
 
 
 async def _wait_for_size(pilot: Pilot[Any], widget: Widget, size: tuple[int, int]) -> None:

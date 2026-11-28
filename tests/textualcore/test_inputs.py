@@ -8,7 +8,7 @@ pytest.importorskip("textual")
 pytest.importorskip("textual_fspicker")
 
 import datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from attrs import Factory
 from rich.text import Text
@@ -47,9 +47,17 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from textual.app import App
+    from textual.pilot import Pilot
 
 
-from tests.textualcore.support import _app_of, _field_widget, _names, _widget
+from tests.textualcore.support import (
+    _app_of,
+    _click_laid_out,
+    _field_widget,
+    _names,
+    _wait_for_screen,
+    _widget,
+)
 
 
 @pytest.mark.asyncio
@@ -402,6 +410,15 @@ async def test_a_date_input_is_typed_in_the_language_s_format_marking_what_isn_t
         assert changes[-1] == datetime.date(2027, 1, 1)
 
 
+async def _open_calendar(pilot: Pilot[Any], field: ComposeDateInput) -> None:
+    """Click the date's button, once it takes a click, and wait for its calendar.
+
+    A button pressed less than 0.2 s ago ignores a click: on a slow machine, the last one.
+    """
+    await _click_laid_out(pilot, field.button)
+    await _wait_for_screen(pilot, ComposeCalendar, ComposeMonth)
+
+
 @pytest.mark.asyncio
 async def test_a_date_input_s_calendar_names_its_days_in_the_language_and_keeps_to_the_range() -> (
     None
@@ -416,8 +433,7 @@ async def test_a_date_input_s_calendar_names_its_days_in_the_language_and_keeps_
         field = _field_widget(arrival.renderer)
         assert isinstance(field, ComposeDateInput)
         await pilot.pause()
-        await pilot.click(field.button)
-        await pilot.pause()
+        await _open_calendar(pilot, field)
         month = app.screen.query_one(ComposeMonth)
         assert month.has_focus
         rendered = month.render()
@@ -431,14 +447,12 @@ async def test_a_date_input_s_calendar_names_its_days_in_the_language_and_keeps_
         assert (arrival.value, field.input.value) == (datetime.date(2026, 11, 25), "25/11/2026")
         assert changes == [datetime.date(2026, 11, 25)]
         assert texts == ["25/11/2026"]  # picked, not typed
-        await pilot.click(field.button)
-        await pilot.pause()
+        await _open_calendar(pilot, field)
         await pilot.press("enter")  # the same day again: nothing to report
         await pilot.pause()
         assert (changes, texts) == ([datetime.date(2026, 11, 25)], ["25/11/2026"])
 
-        await pilot.click(field.button)
-        await pilot.pause()
+        await _open_calendar(pilot, field)
         month = app.screen.query_one(ComposeMonth)
         await pilot.press("pagedown", "pagedown")  # past the maximum: its last day
         await pilot.pause()
@@ -447,8 +461,7 @@ async def test_a_date_input_s_calendar_names_its_days_in_the_language_and_keeps_
         await pilot.click(month, offset=(1 * 3 + 2, 2))
         await pilot.pause()
         assert arrival.value == datetime.date(2026, 12, 1)
-        await pilot.click(field.button)
-        await pilot.pause()
+        await _open_calendar(pilot, field)
         await pilot.press("escape")
         await pilot.pause()
         assert not isinstance(app.screen, ComposeCalendar)
@@ -593,8 +606,7 @@ async def test_a_date_input_s_calendar_keeps_off_the_days_before_its_minimum() -
         await pilot.pause()
         arrival.minimum = datetime.date(2026, 10, 10)
         await pilot.pause()
-        await pilot.click(field.button)
-        await pilot.pause()
+        await _open_calendar(pilot, field)
         month = app.screen.query_one(ComposeMonth)
         await pilot.click(month, offset=(3 * 3 + 2, 2))  # Thursday the 1st, before it
         await pilot.click(month, offset=(1, 12))  # under the weeks
@@ -628,8 +640,7 @@ async def test_a_date_input_s_calendar_opens_and_stops_on_the_first_and_last_dat
         arrival.minimum, arrival.maximum = None, None
         arrival.value = edge
         await pilot.pause()
-        await pilot.click(field.button)
-        await pilot.pause()
+        await _open_calendar(pilot, field)
         month = app.screen.query_one(ComposeMonth)
         for key in keys:
             await pilot.press(key)
@@ -649,8 +660,7 @@ async def test_a_date_input_s_calendar_picks_no_day_outside_a_range_changed_whil
         field = _field_widget(arrival.renderer)
         assert isinstance(field, ComposeDateInput)
         await pilot.pause()
-        await pilot.click(field.button)
-        await pilot.pause()
+        await _open_calendar(pilot, field)
         month = app.screen.query_one(ComposeMonth)
         month.maximum = datetime.date(2026, 10, 15)  # under the cursor, on the 18th
         await pilot.press("enter")

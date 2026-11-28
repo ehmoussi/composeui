@@ -14,6 +14,8 @@ from textual.widgets import (
     Input,
     ProgressBar,
 )
+from textual_fspicker import FileSave
+from textual_fspicker.parts import DirectoryNavigation
 
 from composeui.core.application import _add_reference_to_signals
 from composeui.core.registry import RendererType
@@ -28,7 +30,7 @@ from tests.downloading import ReportMainView
 from tests.opening import HELP_URL, OpeningMainView
 from tests.pages import PagesMainView
 from tests.sidebar import SidebarMainView
-from tests.textualcore.support import _names, _widget
+from tests.textualcore.support import _click_laid_out, _names, _wait_for_screen, _widget
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -180,8 +182,9 @@ async def test_an_app_s_files_are_saved_where_the_user_picks_one_dialog_at_a_tim
         files = _names(tmp_path)  # the second cancelled
 
         view.report = StreamContent(lambda sink: sink.write(b"streamed"))  # written in a job
-        await pilot.click(_widget(view.export))
-        await pilot.pause()
+        # clicked again: once it takes a click
+        await _click_laid_out(pilot, _widget(view.export))
+        await _wait_for_screen(pilot, FileSave, DirectoryNavigation)
         app.screen.dismiss(tmp_path / "b.csv")
         for _ in range(100):  # until the job's outcome reaches the status bar
             if view.status_bar.message == "Saved b.csv.":
