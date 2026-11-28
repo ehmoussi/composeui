@@ -181,7 +181,7 @@ def homepage(request: Request) -> Response:
     if path is not None:
         return RedirectResponse(path, status_code=303, headers=_NO_STORE)
     html = session.page_html(_reload_instance(request), _style_links(request))
-    return HTMLResponse(html, headers=_NO_STORE)
+    return _page_response(request, session, html)
 
 
 def page(request: Request) -> Response:
@@ -196,7 +196,7 @@ def page(request: Request) -> Response:
     if not session.open_route(request.path_params["route"]):
         return PlainTextResponse("Not Found", status_code=404, headers=_NO_STORE)
     html = session.page_html(_reload_instance(request), _style_links(request))
-    return HTMLResponse(html, headers=_NO_STORE)
+    return _page_response(request, session, html)
 
 
 def reload_poll(request: Request) -> Response:
@@ -241,14 +241,57 @@ async def widget_event(request: Request) -> Response:
         return _widget_response(request, session, *result)
 
 
+# Log out's flag, and the answers that check it, are modelled in specs/LogOut.tla, which
+# `make specs` checks: change the spec with them, in the same commit.
+async def log_out(request: Request) -> Response:
+    """Answer the user's Log out (`MainView.on_log_out`), as `widget_event` answers a click.
+
+    Without the session that served its page, the page goes to the logout address at once:
+    no app's code is left to ask first.
+    """
+    logout_url: str | None = request.app.state.logout_url
+    if logout_url is None:
+        return PlainTextResponse("Not Found", status_code=404, headers=_NO_STORE)
+    session = await _session_off_loop(request)
+    if session is None:
+        return Response(headers={**_NO_STORE, "HX-Redirect": logout_url})
+    with session.held():
+        async with session.post_order.turn(request.headers):
+            result = await run_in_threadpool(session.log_out_clicked)
+        return _widget_response(request, session, *result)
+
+
+def _leave(request: Request, session: WebSession, url: str, *, is_page: bool = False) -> Response:
+    """Send the page to `url`; the session ends there if the app closed it (`MainView.close`).
+
+    A page's load (`is_page`) goes there itself; htmx's requests follow ``HX-Redirect``.
+    """
+    if session.closed:
+        # e.g. Exit: end the session; the page it lands on starts a fresh one
+        _store(request).drop(request.session.get(SESSION_KEY))
+    if is_page:
+        return RedirectResponse(url, status_code=303, headers=_NO_STORE)
+    return Response(headers={**_NO_STORE, "HX-Redirect": url})
+
+
+def _page_response(request: Request, session: WebSession, html: str) -> Response:
+    """Answer a page's load with `html`, or with the logout address the app asked for.
+
+    E.g. a job's callback logged the user out while the page reloaded.
+    """
+    logout_url = session.take_log_out()
+    if logout_url is not None:
+        return _leave(request, session, logout_url, is_page=True)
+    return HTMLResponse(html, headers=_NO_STORE)
+
+
 def _widget_response(
     request: Request, session: WebSession, body: str, path: str | None
 ) -> Response:
     """Answer a widget request with the fragments it changed, `body`, and its page."""
-    if session.closed:
-        # e.g. Exit: end the session; the page it lands on starts a fresh one
-        _store(request).drop(request.session.get(SESSION_KEY))
-        return Response(headers={**_NO_STORE, "HX-Redirect": "/"})
+    logout_url = session.take_log_out()
+    if session.closed or logout_url is not None:
+        return _leave(request, session, logout_url or "/")
     # a navigation puts the new page's address in the browser's history
     headers = _NO_STORE if path is None else {**_NO_STORE, "HX-Push-Url": path}
     return HTMLResponse(body, headers=headers)
@@ -335,6 +378,10 @@ def widget_fragment(request: Request) -> Response:
     body = session.fragment(request.path_params["widget_id"])
     if body is None:
         return PlainTextResponse("Unknown widget", status_code=404)
+    # what changed outside any request came along, e.g. a job's callback that logged out
+    logout_url = session.take_log_out()
+    if logout_url is not None:
+        return _leave(request, session, logout_url)
     return HTMLResponse(body, headers=_NO_STORE)
 
 
@@ -474,7 +521,12 @@ def jobs_poll(request: Request) -> Response:
     session = _session(request)
     if session is None:
         return Response(headers=_RELOAD)
-    return HTMLResponse(session.poll_jobs(), headers=_NO_STORE)
+    body = session.poll_jobs()
+    # e.g. a job's callback logged the user out: the page doesn't wait for a click
+    logout_url = session.take_log_out()
+    if logout_url is not None:
+        return _leave(request, session, logout_url)
+    return HTMLResponse(body, headers=_NO_STORE)
 
 
 def state_download(request: Request) -> Response:

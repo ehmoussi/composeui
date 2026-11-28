@@ -11,6 +11,13 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `WebSettings(logout_url="/oauth2/sign_out")` shows the user at the right of the web page's
+  header, in a menu with their email and a Log out entry, which sends the page to the login
+  proxy's logout address. The session stays, as when the tab closes. An app overrides
+  `MainView.on_log_out` to ask first or to end the session too, and calls `MainView.log_out`
+  when the user can leave. While a job that `on_log_out` started runs, another click on Log out
+  does nothing.
+
 - `WebSettings(user_header="Remote-User")` takes the user from a login proxy in front of the
   server, such as nginx with Basic Auth or OAuth2 Proxy for OIDC, and `MainView.user` gives it
   to the app, a `User`. Its `name` and `email` come from the headers of `user_name_header` and

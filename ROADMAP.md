@@ -226,8 +226,6 @@ What an app needs to follow work that runs outside it, such as a solver or a clu
 - **Formulas in CSV exports** (Now: a `shared` database holds what other users wrote). A table's
   Export CSV and `frame_content` escape a text cell that a spreadsheet would run as a formula,
   with a way to keep the exact values.
-- **Log out** (Now). A "Log out" entry on the web, which opens the proxy's logout address that
-  the app sets.
 - **Users' recipes** (Later). A SAML2 recipe, one for Cloudflare Tunnel with Cloudflare
   Access, and the recipes of the login proxies run in containers.
 - **Signed identity headers** (When needed). Check the token that Cloudflare Access, Google's

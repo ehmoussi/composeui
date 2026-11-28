@@ -35,6 +35,7 @@ from starlette.routing import Route as StarletteRoute
 
 from composeui.core import chartimage
 from composeui.core._views.files import DOWNLOAD_CHUNK_SIZE
+from composeui.core.application import WebSettings
 from composeui.core.view import (
     ButtonView,
     ChartView,
@@ -1320,6 +1321,22 @@ def test_the_status_bar_clears_itself_once_its_message_times_out(page: Page) -> 
     expect(status_bar).to_have_text("Hello, Alice!")
     # nothing else is sent: the bar asks for its own state once the message has expired
     expect(status_bar).to_have_text("", timeout=(_MESSAGE_TIMEOUT + 5) * 1000)
+
+
+def test_log_out_in_the_user_menu_goes_to_the_login_proxy_s_address(browser: Browser) -> None:
+    settings = WebSettings(user_header="Remote-User", logout_url="/signed-out")
+    app = WebApplication(build_main_view=HelloMainView, settings=settings)
+    with (
+        _serve(app.create_starlette_app()) as url,
+        # as a login proxy names the user on each request
+        browser.new_context(base_url=url, extra_http_headers={"Remote-User": "ada"}) as context,
+    ):
+        page = context.new_page()
+        page.goto("/")
+        page.get_by_role("button", name="ada").click()
+        page.get_by_role("button", name="Log out").click()
+
+        expect(page).to_have_url(f"{url}/signed-out")
 
 
 def test_the_theme_menu_overrides_the_browser_until_set_back_to_system(page: Page) -> None:

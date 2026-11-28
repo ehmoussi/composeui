@@ -84,6 +84,7 @@ from composeui.core.renderer import MainRenderer
 from composeui.core.signal import SignalNoArgs
 from composeui.core.translation import (
     CATALOGS_DIR,
+    T,
     translator,
 )
 
@@ -103,6 +104,8 @@ if TYPE_CHECKING:
 STATE_FORMAT = 1
 #: `MainView._saved_study` of a study changed whatever it holds: no study has its mark
 _UNSAVED_STUDY = ("", -1)
+#: the text of the web's Log out entry (`MainView.on_log_out`), which the renderer shows
+LOG_OUT_TEXT = T("Log out")
 
 
 def _is_version(value: Any) -> bool:
@@ -877,6 +880,30 @@ class MainView(View):
             self._launch(url, url)
         else:
             self.notify(self.tr("Open {url} in your browser.").format(url=url), LogType.WARNING)
+
+    def on_log_out(self) -> None:
+        """Answer the user's click on Log out: log them out (`log_out`).
+
+        The web has a Log out entry with `WebSettings.logout_url`. Override it to choose what
+        Log out does, then call `log_out`, or not, to keep the user in the app. E.g. ask
+        first with a dialog, ``self.confirm.ask(self.log_out)``, or end the session too,
+        with `close` then `log_out`. While a job that it started runs, and until its result
+        arrives, another click on Log out doesn't call it.
+        """
+        self.log_out()
+
+    def log_out(self) -> None:
+        """Send the user to the login proxy's logout address (`WebSettings.logout_url`).
+
+        The page goes there with the next answer that the session gives it: of the click,
+        the dialog's answer, the poll that brings a job's result, or the page's load. The
+        session stays, as when the user closes the tab: until it ends (`session_ttl`), the
+        same user who logs in again finds it. `close` first ends it. Without `logout_url`,
+        and on Qt and Textual, it does nothing. Call it on the main thread.
+        """
+        _check_main_thread("MainView.log_out")
+        if isinstance(self.renderer, MainRenderer):
+            self.renderer.log_out()
 
     def display_path(self, path: Path, roots: Iterable[Path] = ()) -> str:
         """Get the text that names `path` for the user.

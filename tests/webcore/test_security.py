@@ -92,9 +92,10 @@ def test_a_post_from_another_origin_is_refused(app: _HelloApp, headers: dict[str
                 files={"file": ("a.txt", b"a")},
                 headers=headers,
             ),
+            browser.post("/_composeui/log-out", headers=headers),
         ]
 
-    assert [response.status_code for response in responses] == [403, 403, 403, 403]
+    assert [response.status_code for response in responses] == [403, 403, 403, 403, 403]
     assert main_view.form.name.text == ""
     assert saved == []
 

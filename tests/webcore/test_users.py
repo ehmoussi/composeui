@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import functools
 import secrets
 import sys
+import threading
+import time
 from typing import TYPE_CHECKING
 
 import attrs
@@ -19,17 +22,29 @@ from typing_extensions import override
 
 from composeui.core.application import WebSettings
 from composeui.core.client import User
-from composeui.core.view import define_view
+from composeui.core.view import ButtonView, DialogKind, DialogView, child, define_view
 from composeui.webcore.webapplication import WebApplication
 from examples.webhello import HelloMainView
-from tests.webcore.support import _action_id, _Browser, _field_id, _HelloApp, _type_name
+from tests.webcore.support import (
+    _action_id,
+    _Browser,
+    _field_id,
+    _find,
+    _HelloApp,
+    _swapped,
+    _type_name,
+    _widget_id,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
     from starlette.applications import Starlette
+    from starlette.testclient import TestClient
     from starlette.types import ASGIApp, Message
+
+    from composeui.core.jobs import Job
 
 _USERS = WebSettings(
     user_header="Remote-User", user_name_header="Remote-Name", user_email_header="Remote-Email"
@@ -334,6 +349,382 @@ def test_a_user_header_that_names_no_header_is_refused(
     ids=["no-user-header", "name-is-the-user", "email-is-the-name"],
 )
 def test_a_name_or_email_header_that_isn_t_its_own_is_refused(
+    settings: Callable[[], WebSettings], message: str
+) -> None:
+    with pytest.raises(ValueError, match=message):
+        settings()
+
+
+_LOG_OUT = attrs.evolve(_USERS, logout_url="/oauth2/sign_out?rd=%2F")
+
+
+@pytest.mark.parametrize(
+    ("settings", "headers", "shown"),
+    [
+        (
+            _LOG_OUT,
+            {"Remote-User": "ada", "Remote-Name": "<b>Ada</b>", "Remote-Email": "ada@example.org"},
+            ["<b>Ada</b>", "ada@example.org", "Log out"],
+        ),
+        # no name: the user's id; no email: no line for it
+        (_LOG_OUT, {"Remote-User": "ada"}, ["ada", "Log out"]),
+        # a login, but no address to log out at: nothing to offer
+        (_USERS, {"Remote-User": "ada"}, None),
+    ],
+    ids=["name-and-email", "id-alone", "no-logout-url"],
+)
+def test_the_header_shows_the_user_and_log_out_with_a_logout_url(
+    settings: WebSettings, headers: dict[str, str], shown: list[str] | None
+) -> None:
+    with _Browser(_HelloApp(settings).create_starlette_app(), headers) as browser:
+        page = browser.get("/").text
+
+    menu = _find(page, "cui-user-menu")
+    if shown is None:
+        assert menu is None
+        return
+    assert menu is not None
+    # the proxy's text as it is: shown, not run as markup
+    assert menu.text == "".join(shown)
+
+
+def test_log_out_sends_the_page_to_the_logout_url_and_keeps_the_session() -> None:
+    app = _HelloApp(_LOG_OUT)
+    with _Browser(app.create_starlette_app(), {"Remote-User": "ada"}) as browser:
+        browser.get("/")
+        _type_name(browser, app.session_views[0], "Bob")
+        answer = browser.post("/_composeui/log-out")
+        # the proxy logs her in again: her session is as she left it
+        page = browser.get("/").text
+        typed = browser.post(
+            f"/_composeui/widget/{_field_id(app.session_views[0].form.name)}",
+            data={"value": "Bo", "event": "input"},
+        )
+
+    assert answer.headers["hx-redirect"] == "/oauth2/sign_out?rd=%2F"
+    assert 'value="Bob"' in page
+    assert "hx-redirect" not in typed.headers  # the page left once: it stays now
+    assert len(app.session_views) == 1
+
+
+def test_log_out_without_its_session_goes_to_the_logout_url() -> None:
+    """E.g. the session expired: no app's code is left to run."""
+    app = _HelloApp(_LOG_OUT)
+    with _Browser(app.create_starlette_app(), {"Remote-User": "ada"}) as browser:
+        answer = browser.post("/_composeui/log-out")
+
+    assert answer.headers["hx-redirect"] == "/oauth2/sign_out?rd=%2F"
+    assert app.session_views == []
+
+
+@define_view
+class _LeavingMainView(HelloMainView):
+    """Logs the user out from a button of its own."""
+
+    leave: ButtonView = child(ButtonView, text="Leave")
+
+    @override
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.leave.clicked.connect(self.log_out)
+
+
+class _LeavingApp(WebApplication[_LeavingMainView]):
+    def __init__(self, settings: WebSettings) -> None:
+        super().__init__(build_main_view=_LeavingMainView, settings=settings)
+        self.session_views: list[_LeavingMainView] = []
+
+    @override
+    def setup_session(self, main_view: _LeavingMainView) -> None:
+        self.session_views.append(main_view)
+
+
+@pytest.mark.parametrize(
+    ("settings", "redirect"),
+    [(_LOG_OUT, "/oauth2/sign_out?rd=%2F"), (_USERS, None)],
+    ids=["logout-url", "no-logout-url"],
+)
+def test_an_app_logs_the_user_out_from_its_own_button(
+    settings: WebSettings, redirect: str | None
+) -> None:
+    app = _LeavingApp(settings)
+    with _Browser(app.create_starlette_app(), {"Remote-User": "ada"}) as browser:
+        browser.get("/")
+        (main_view,) = app.session_views
+        answer = browser.post(
+            f"/_composeui/widget/{_widget_id(main_view.leave.renderer)}", data={"event": "click"}
+        )
+
+    assert answer.status_code == 200
+    assert answer.headers.get("hx-redirect") == redirect
+
+
+def test_the_log_out_route_is_not_found_without_a_logout_url() -> None:
+    app = _HelloApp(_USERS)
+    with _Browser(app.create_starlette_app(), {"Remote-User": "ada"}) as browser:
+        browser.get("/")
+        answer = browser.post("/_composeui/log-out")
+
+    assert answer.status_code == 404
+    assert "hx-redirect" not in answer.headers
+
+
+@define_view
+class _ConfirmedLogOutMainView(HelloMainView):
+    """Asks before Log out; ends the session too, or not, as `ends_session` says."""
+
+    confirm_log_out: DialogView = child(DialogView, title="Log out?", kind=DialogKind.CONFIRM)
+    ends_session: bool = False
+
+    @override
+    def on_log_out(self) -> None:
+        self.confirm_log_out.ask(self._leave)
+
+    def _leave(self) -> None:
+        if self.ends_session:
+            self.close()
+        self.log_out()
+
+
+class _ConfirmedLogOutApp(WebApplication[_ConfirmedLogOutMainView]):
+    def __init__(self, *, ends_session: bool) -> None:
+        super().__init__(
+            build_main_view=lambda: _ConfirmedLogOutMainView(ends_session=ends_session),
+            settings=_LOG_OUT,
+        )
+        self.session_views: list[_ConfirmedLogOutMainView] = []
+
+    @override
+    def setup_session(self, main_view: _ConfirmedLogOutMainView) -> None:
+        self.session_views.append(main_view)
+
+
+@pytest.mark.parametrize("ends_session", [False, True], ids=["keeps-session", "ends-session"])
+def test_an_app_asks_before_log_out_and_logs_out_once_the_user_agrees(
+    *, ends_session: bool
+) -> None:
+    app = _ConfirmedLogOutApp(ends_session=ends_session)
+    with _Browser(app.create_starlette_app(), {"Remote-User": "ada"}) as browser:
+        browser.get("/")
+        (main_view,) = app.session_views
+        _type_name(browser, main_view, "Bob")
+        asked = browser.post("/_composeui/log-out")
+        answer = f"/_composeui/widget/{_widget_id(main_view.confirm_log_out.renderer)}"
+        canceled = browser.post(answer, data={"event": "reject"})
+        browser.post("/_composeui/log-out")
+        agreed = browser.post(answer, data={"event": "accept"})
+        page = browser.get("/").text
+
+    assert "hx-redirect" not in asked.headers
+    dialog_id = _widget_id(main_view.confirm_log_out.renderer)
+    assert "hidden" not in _swapped(asked.text, dialog_id).attributes  # asked: shown
+    assert "hx-redirect" not in canceled.headers
+    assert agreed.headers["hx-redirect"] == "/oauth2/sign_out?rd=%2F"
+    # closed: the page she comes back to is a new session's
+    assert ('value="Bob"' in page) is not ends_session
+    assert len(app.session_views) == (2 if ends_session else 1)
+
+
+#: what holds the job of `_SavedLogOutMainView` until the test lets it end
+_SAVE_RELEASE = threading.Event()
+
+
+#: a None for each time `on_log_out` of `_SavedLogOutMainView` ran
+_LOG_OUTS: list[None] = []
+
+
+def _save(_job: Job[None, None]) -> None:
+    assert _SAVE_RELEASE.wait(30)
+
+
+@define_view
+class _SavedLogOutMainView(HelloMainView):
+    """Logs out once a job, e.g. a save to the app's database, is over."""
+
+    @override
+    def on_log_out(self) -> None:
+        _LOG_OUTS.append(None)
+        job = self.jobs.start(_save)
+        job.finished.connect(lambda _result: self.log_out())
+
+
+class _SavedLogOutApp(WebApplication[_SavedLogOutMainView]):
+    def __init__(self) -> None:
+        super().__init__(build_main_view=_SavedLogOutMainView, settings=_LOG_OUT)
+        self.session_views: list[_SavedLogOutMainView] = []
+
+    @override
+    def setup_session(self, main_view: _SavedLogOutMainView) -> None:
+        self.session_views.append(main_view)
+
+
+def test_log_out_from_a_job_s_callback_leaves_with_the_poll_that_brings_it() -> None:
+    app = _SavedLogOutApp()
+    with _Browser(app.create_starlette_app(), {"Remote-User": "ada"}) as browser:
+        browser.get("/")
+        _SAVE_RELEASE.clear()
+        try:
+            clicked = browser.post("/_composeui/log-out")
+        finally:
+            _SAVE_RELEASE.set()
+        left = _poll_until_redirect(browser)
+
+    assert "hx-redirect" not in clicked.headers
+    assert left == "/oauth2/sign_out?rd=%2F"
+
+
+def _poll_until_redirect(browser: TestClient) -> str | None:
+    """Poll as the page does while the jobs run, until an answer sends it away."""
+    poll = browser.get("/_composeui/jobs")
+    for _ in range(600):
+        if "hx-redirect" in poll.headers:
+            break
+        time.sleep(0.05)
+        poll = browser.get("/_composeui/jobs")
+    redirect: str | None = poll.headers.get("hx-redirect")
+    return redirect
+
+
+def test_a_second_log_out_while_the_first_one_s_job_runs_does_nothing() -> None:
+    """Its job's log out would wait in the session, and send the user back from the proxy."""
+    app = _SavedLogOutApp()
+    with _Browser(app.create_starlette_app(), {"Remote-User": "ada"}) as browser:
+        browser.get("/")
+        (main_view,) = app.session_views
+        _LOG_OUTS.clear()
+        _SAVE_RELEASE.clear()
+        try:
+            browser.post("/_composeui/log-out")
+            second = browser.post("/_composeui/log-out")  # nothing seems to happen
+        finally:
+            _SAVE_RELEASE.set()
+        left = _poll_until_redirect(browser)
+        # back from the proxy: the page, then a click, stay
+        back = browser.get("/", follow_redirects=False)
+        typed = browser.post(
+            f"/_composeui/widget/{_field_id(main_view.form.name)}",
+            data={"value": "Bob", "event": "input"},
+        )
+        clicks_before = len(_LOG_OUTS)
+        # Log out is over: a new one runs again
+        _SAVE_RELEASE.clear()
+        try:
+            browser.post("/_composeui/log-out")
+        finally:
+            _SAVE_RELEASE.set()
+        left_again = _poll_until_redirect(browser)
+
+    assert second.status_code == 200
+    assert "hx-redirect" not in second.headers
+    assert left == "/oauth2/sign_out?rd=%2F"
+    assert back.status_code == 200
+    assert "hx-redirect" not in typed.headers
+    assert clicks_before == 1  # the second click didn't run `on_log_out`
+    assert len(_LOG_OUTS) == 2
+    assert left_again == "/oauth2/sign_out?rd=%2F"
+
+
+@pytest.mark.parametrize("request_kind", ["page", "fragment"])
+def test_log_out_from_a_job_s_callback_leaves_with_the_next_request_after_it(
+    request_kind: str,
+) -> None:
+    """E.g. the user reloads the page, or a status bar fetches itself, before a poll."""
+    app = _SavedLogOutApp()
+    with _Browser(app.create_starlette_app(), {"Remote-User": "ada"}) as browser:
+        browser.get("/")
+        (main_view,) = app.session_views
+        where = (
+            "/"
+            if request_kind == "page"
+            else f"/_composeui/widget/{_widget_id(main_view.status_bar.renderer)}"
+        )
+        _SAVE_RELEASE.clear()
+        try:
+            browser.post("/_composeui/log-out")
+        finally:
+            _SAVE_RELEASE.set()
+        # its result waits for the session's next request, as no poll fetches it
+        for _ in range(600):
+            if not main_view.jobs.has_workers:
+                break
+            time.sleep(0.05)
+        assert not main_view.jobs.has_workers
+        loaded = browser.get(where, follow_redirects=False)
+        again = browser.get(where, follow_redirects=False)
+
+    if where == "/":
+        assert loaded.status_code == 303
+        assert loaded.headers["location"] == "/oauth2/sign_out?rd=%2F"
+    else:
+        assert loaded.headers["hx-redirect"] == "/oauth2/sign_out?rd=%2F"
+    # once: the user back from the proxy gets the page
+    assert again.status_code == 200
+    assert "hx-redirect" not in again.headers
+
+
+@define_view
+class _FrenchMainView(HelloMainView):
+    french: ButtonView = child(ButtonView, text="Français")
+
+    @override
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.french.clicked.connect(lambda: self.set_language("fr"))
+
+
+class _FrenchApp(WebApplication[_FrenchMainView]):
+    def __init__(self) -> None:
+        super().__init__(build_main_view=_FrenchMainView, settings=_LOG_OUT)
+        self.session_views: list[_FrenchMainView] = []
+
+    @override
+    def setup_session(self, main_view: _FrenchMainView) -> None:
+        self.session_views.append(main_view)
+
+
+def test_the_user_menu_follows_the_language() -> None:
+    app = _FrenchApp()
+    views = app.session_views
+    with _Browser(app.create_starlette_app(), {"Remote-User": "ada"}) as browser:
+        browser.get("/")
+        body = browser.post(
+            f"/_composeui/widget/{_widget_id(views[0].french.renderer)}", data={"event": "click"}
+        ).text
+
+    assert "Se déconnecter" in _swapped(body, "cui-user-menu").text
+
+
+@pytest.mark.parametrize(
+    "url", ["/oauth2/sign_out", "/logout?rd=%2F", "https://login.example.org/logout?a=1"]
+)
+def test_a_logout_url_is_a_path_or_an_http_url(url: str) -> None:
+    assert WebSettings(user_header="Remote-User", logout_url=url).logout_url == url
+
+
+@pytest.mark.parametrize(
+    ("settings", "message"),
+    [
+        (lambda: WebSettings(logout_url="/oauth2/sign_out"), "needs a user_header"),
+        *(
+            (
+                functools.partial(WebSettings, user_header="Remote-User", logout_url=url),
+                "isn't a path of the server nor an http or https URL",
+            )
+            for url in (
+                "javascript:alert(1)",
+                "oauth2/sign_out",
+                "//login.example.org/logout",
+                "https:///logout",
+                "ftp://login.example.org/logout",
+                "/log out",
+                "/déconnexion",
+                "/logout\r\nSet-Cookie: a=b",
+                "/\\login.example.org/logout",
+            )
+        ),
+    ],
+)
+def test_a_logout_url_that_the_page_can_t_go_to_is_refused(
     settings: Callable[[], WebSettings], message: str
 ) -> None:
     with pytest.raises(ValueError, match=message):
