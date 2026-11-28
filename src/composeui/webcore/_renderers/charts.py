@@ -30,6 +30,7 @@ class ChartViewLike(ViewLike, Protocol):
     reference_lines: list[ReferenceLine]
     categories: list[str]
     bar_mode: BarMode
+    horizontal: bool
     save_image_text: str
     clicked: Signal[float, float]
     height: int | None
@@ -187,6 +188,7 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
                     "reference_lines",
                     "categories",
                     "bar_mode",
+                    "horizontal",
                     "save_image_text",
                     "height",
                 ),
@@ -243,6 +245,9 @@ class WebChartRenderer(WebRenderer[ChartViewLike]):
             spec["bar_step"] = ChartView.bar_step(view.series, view.categories)
         if len(view.categories) > 0:
             spec["categories"] = view.categories
+        if view.horizontal:
+            # the x down the left side, the y along the bottom
+            spec["horizontal"] = True
         points = [
             _chart_points(
                 series,

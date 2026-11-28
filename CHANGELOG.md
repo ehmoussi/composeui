@@ -11,6 +11,11 @@ backends' modules included, can change in any release without an entry here.
 
 ### Added
 
+- `ChartView.horizontal` lays the bars of a chart of bars alone along its y axis, drawn at the
+  bottom, with its x axis down the left side and the first category at the top, for example
+  for long names. Grouped and stacked bars, reference lines, hover, clicks and report images
+  work as in a chart that stands. A study doesn't save it, as `bar_mode`.
+
 - `TextEditorView` is a box where the user edits the text of a file, such as a solver's input
   file: a fixed-width font, numbered lines that never wrap, and Tab that indents. A bar shows
   the file's name and the caret's line and column. The user saves the text to a file or copies

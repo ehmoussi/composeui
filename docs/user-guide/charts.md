@@ -108,6 +108,46 @@ energy: ChartView = bar_chart("Energy", ["Kitchen", "Bedroom", "Office"], y=Axis
 pandas, Polars, or PyArrow frame. It leaves out the rows missing a value. Its `name` is the y
 column's, or the `name` that you give.
 
+### Horizontal bars
+
+`horizontal=True` lays the bars along the y axis, for example when the names of the categories
+are long. The y axis is then at the bottom of the chart, and the x axis is down its left side,
+with its first category at the top:
+
+```python
+from composeui.core.view import Axis, ChartView, ReferenceLine, Series
+
+languages = ChartView(
+    title="Developers",
+    x=Axis("Language"),
+    y=Axis("Developers", unit="k"),
+    categories=["Python", "JavaScript", "TypeScript"],
+    horizontal=True,
+    series=[Series.bars("2025", [520, 480, 310]), Series.bars("2026", [580, 470, 360])],
+    reference_lines=[ReferenceLine(400, "Target")],
+)
+```
+
+- **The same axes.** `x` and `y` keep their meaning: only where the chart draws them changes.
+  Set `horizontal` back to `False`, and the same series stand again.
+- **Bars alone, on `y`.** A horizontal chart has bar series only, none on `y2`, and no time
+  axis. `ChartView` raises `ValueError` for a line or dots, for a series or a reference line
+  on `y2`, and for `Scale.TIME` on `x`.
+- **Stacks and numbers.** The bars can stack (`bar_mode`). Without categories, each bar lies at
+  its number on the x axis, the smallest at the top.
+- **Reference lines.** A line at a y value is upright. A `vertical` line, at an x, lies across
+  the chart.
+- **Hover, clicks, and zoom.** Qt and the web show the values of the category at the
+  pointer's height. `clicked` emits the x, then the y, as in a chart that stands. On the web,
+  a drag down the side zooms an x axis of numbers.
+- **Not saved.** `horizontal` belongs to the code of the app, as `bar_mode` does. A study
+  checks its series against a new chart of the app: when that chart is horizontal, a study
+  that saved a line in it doesn't open.
+
+Qt, Textual, the web, and report images draw horizontal bars. A terminal has few rows: on
+Textual, give a horizontal chart with many bars a `height`, or neighbouring bars cover each
+other.
+
 ## Axes
 
 The `x` and `y` of the chart are its axes. Each one is an `Axis`: a title, a `unit`, and a

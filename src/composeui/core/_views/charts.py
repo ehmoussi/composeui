@@ -353,6 +353,29 @@ def _check_bar_mode(view: View, _attribute: attrs.Attribute[Any], mode: BarMode)
         raise ValueError(msg)
 
 
+def _check_horizontal(view: View, attribute: attrs.Attribute[Any], value: object) -> None:
+    """Check that a horizontal chart holds what it draws: bars alone, on `y`, at numbers."""
+    chart = {name: getattr(view, name) for name in ("horizontal", "x", "series", "reference_lines")}
+    chart[attribute.name] = value
+    if not chart["horizontal"]:
+        return
+    name = type(view).__name__
+    for curve in chart["series"]:
+        if curve.kind is not ChartKind.BAR:
+            msg = f"Cannot show the series {curve.name!r} in a horizontal {name}: only bars."
+            raise ValueError(msg)
+        if curve.on_y2:
+            msg = f"Cannot show the series {curve.name!r} on y2 in a horizontal {name}: only y."
+            raise ValueError(msg)
+    for line in chart["reference_lines"]:
+        if line.is_on_y2:
+            msg = f"Cannot show the line {line.label!r} on y2 in a horizontal {name}: only y."
+            raise ValueError(msg)
+    if chart["x"].is_time:
+        msg = f"Cannot show {name}.x as times in a horizontal chart: only numbers."
+        raise ValueError(msg)
+
+
 #: a time axis' round steps between two ticks, in seconds, each with its labels' format
 _TIME_STEPS = (
     *((seconds, "%H:%M:%S") for seconds in (1, 2, 5, 10, 15, 30)),
@@ -378,7 +401,7 @@ class ChartView(View):
     Its series are layers over the same axes, each drawn as its own kind: a line, dots
     or bars. With `categories`, the x axis shows them, and a series' x is the index of a
     category. The bars at an x stand beside each other, in a group, or stacked
-    (`bar_mode`).
+    (`bar_mode`). A chart of bars alone can lie them along its y axis (`horizontal`).
 
     Its axes, `x` and `y`, hold their titles, units and scales (see `Axis`). They are the
     app's, as a title is: a study doesn't save them. A series or a reference line with
@@ -397,19 +420,27 @@ class ChartView(View):
     _renderer_key = "chart"
 
     title: str = attrs.field(default="", metadata={UI_TEXT: True})
-    x: Axis = attrs.field(factory=Axis, metadata={UI_TEXT: True})
+    x: Axis = attrs.field(factory=Axis, validator=[_check_horizontal], metadata={UI_TEXT: True})
     y: Axis = attrs.field(factory=Axis, validator=[_check_value_axis], metadata={UI_TEXT: True})
     #: the second y axis, at the right, of the series and reference lines with `on_y2`
     y2: Axis = attrs.field(factory=Axis, validator=[_check_value_axis], metadata={UI_TEXT: True})
-    series: list[Series] = attrs.field(factory=list[Series])
+    series: list[Series] = attrs.field(factory=list[Series], validator=[_check_horizontal])
     #: lines at values, e.g. a limit, drawn over the series
-    reference_lines: list[ReferenceLine] = attrs.field(factory=list[ReferenceLine])
+    reference_lines: list[ReferenceLine] = attrs.field(
+        factory=list[ReferenceLine], validator=[_check_horizontal]
+    )
     #: what the x axis shows instead of numbers, by the index each series' x names
     categories: list[str] = attrs.field(factory=list[str])
     #: how the bars at an x stand: beside each other, or stacked, on linear y axes. The
     #: app's layout, not a study's
     bar_mode: BarMode = attrs.field(
         default=BarMode.GROUPED, validator=[_check_bar_mode], metadata={OMIT: True}
+    )
+    #: whether the bars lie along the value axis, `y`, drawn at the bottom, with `x` down
+    #: the left side, its first category at the top, e.g. for long names. Bars alone, on
+    #: `y`. The app's layout, not a study's
+    horizontal: bool = attrs.field(
+        default=False, validator=[_check_horizontal], metadata={OMIT: True}
     )
     #: the action saving the chart as a report's image (see `composeui.core.chartimage`),
     #: where the backend has one: with the `report` extra installed

@@ -27,6 +27,7 @@ class ChartViewLike(ViewLike, Protocol):
     reference_lines: list[ReferenceLine]
     categories: list[str]
     bar_mode: BarMode
+    horizontal: bool
     save_image_text: str
     height: int | None
 
@@ -52,6 +53,7 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
                 "reference_lines": self._refresh_reference_lines,
                 "categories": self._refresh_categories,
                 "bar_mode": self._refresh_bar_mode,
+                "horizontal": self._refresh_horizontal,
                 "save_image_text": self._refresh_save_image_text,
                 "height": self._refresh_height,
             }
@@ -110,6 +112,13 @@ class TextualChartRenderer(TextualWidgetRenderer[ChartViewLike, ComposeChart]):
         _view: ChartViewLike, rendered_object: ComposeChart, value: BarMode
     ) -> None:
         rendered_object.bar_mode = value
+        rendered_object.refresh()
+
+    @staticmethod
+    def _refresh_horizontal(
+        _view: ChartViewLike, rendered_object: ComposeChart, value: bool
+    ) -> None:
+        rendered_object.horizontal = value
         rendered_object.refresh()
 
     @staticmethod

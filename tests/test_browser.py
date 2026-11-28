@@ -19,7 +19,7 @@ import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from typing_extensions import override
@@ -3675,11 +3675,68 @@ def test_stacked_bars_stand_on_the_values_before_them(chart_pages_page: Page) ->
     assert [dot.is_visible() for dot in dots.all()] == [False, False, False, True, False]
 
 
+def test_horizontal_bars_lie_along_the_bottom_axis_the_first_category_at_the_top(
+    chart_pages_page: Page,
+) -> None:
+    chart_pages_page.goto("/chart")
+    pickups = chart_pages_page.locator("figure").filter(has_text="Pickups")
+    expect(pickups.locator("canvas")).to_have_count(1)
+    plot = pickups.locator("[data-chart]")
+    weekdays = pickups.locator(".u-legend .u-series").filter(has_text="Weekdays")
+    color = weekdays.locator(".u-marker").evaluate(
+        "marker => getComputedStyle(marker).backgroundColor"
+    )
+    # whether the canvas has the color at a point of the axes: the y along the bottom, the
+    # x down the side
+    has_color_at = (
+        "(element, [x, y, color]) => { const chart = ComposeUI.charts.drawn.get(element);"
+        " const probe = document.createElement('canvas').getContext('2d');"
+        " probe.fillStyle = color; probe.fillRect(0, 0, 1, 1);"
+        " const expected = probe.getImageData(0, 0, 1, 1).data;"
+        " const pixel = chart.ctx.getImageData(chart.valToPos(y, 'y', true),"
+        " chart.valToPos(x, 'x', true), 1, 1).data;"
+        " return [0, 1, 2].every(i => Math.abs(pixel[i] - expected[i]) <= 16); }"
+    )
+
+    # the centre's weekday bar, in its slot above the station's middle, 65 k long
+    assert plot.evaluate(has_color_at, [0.8, 60, color])
+    assert not plot.evaluate(has_color_at, [0.8, 70, color])
+    north, south = plot.evaluate(
+        "element => { const chart = ComposeUI.charts.drawn.get(element);"
+        " return [chart.valToPos(0, 'x'), chart.valToPos(2, 'x')]; }"
+    )
+    assert north < south  # the first station at the top
+
+    pickups.scroll_into_view_if_needed()  # the mouse reaches only what the window shows
+    hovered, clicked = plot.evaluate(
+        "element => { const chart = ComposeUI.charts.drawn.get(element);"
+        " return [[chart.valToPos(10, 'y'), chart.valToPos(1, 'x')],"
+        " [chart.valToPos(30, 'y'), chart.valToPos(2, 'x')]]; }"
+    )
+    pickups.locator(".u-over").hover(position={"x": hovered[0], "y": hovered[1]})
+    legend = pickups.locator(".u-legend")
+    expect(legend).to_contain_text("Centre")
+    expect(weekdays.locator(".u-value")).to_have_text("65 k")
+    # a click posts the axes' x, then their y
+    with chart_pages_page.expect_request(
+        lambda request: request.method == "POST" and "/_composeui/widget/" in request.url
+    ) as posted:
+        pickups.locator(".u-over").click(position={"x": clicked[0], "y": clicked[1]})
+    form = parse_qs(posted.value.post_data or "")
+    assert (float(form["x"][0]), float(form["y"][0])) == (
+        pytest.approx(2, abs=0.05),
+        pytest.approx(30, abs=1),
+    )
+
+
 def test_bars_without_categories_show_whole_and_a_zoom_stays_as_it_is(
     chart_pages_page: Page,
 ) -> None:
     chart_pages_page.goto("/chart")
-    ages = chart_pages_page.locator("figure").filter(has_text="Ages")
+    # by its caption alone: "Save Image" then "Station" read "ageS" in the Pickups' text
+    ages = chart_pages_page.locator("figure").filter(
+        has=chart_pages_page.get_by_text("Ages", exact=True)
+    )
     expect(ages.locator("canvas")).to_have_count(1)
     scales = (
         "element => { const chart = ComposeUI.charts.drawn.get(element);"

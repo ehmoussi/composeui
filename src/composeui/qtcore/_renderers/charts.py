@@ -28,6 +28,7 @@ class ChartViewLike(ViewLike, Protocol):
     reference_lines: list[ReferenceLine]
     categories: list[str]
     bar_mode: BarMode
+    horizontal: bool
     save_image_text: str
     clicked: Signal[float, float]
     height: int | None
@@ -50,6 +51,7 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
                 "reference_lines": self._refresh_reference_lines,
                 "categories": self._refresh_categories,
                 "bar_mode": self._refresh_bar_mode,
+                "horizontal": self._refresh_horizontal,
                 "save_image_text": self._refresh_save_image_text,
                 "height": self._refresh_height,
             }
@@ -98,6 +100,10 @@ class QtChartRenderer(QtWidgetRenderer[ChartViewLike, QChart]):
     @staticmethod
     def _refresh_bar_mode(_view: ChartViewLike, rendered_object: QChart, value: BarMode) -> None:
         rendered_object.set_bar_mode(value)
+
+    @staticmethod
+    def _refresh_horizontal(_view: ChartViewLike, rendered_object: QChart, value: bool) -> None:
+        rendered_object.set_horizontal(horizontal=value)
 
     @staticmethod
     def _refresh_save_image_text(_view: ChartViewLike, rendered_object: QChart, value: str) -> None:

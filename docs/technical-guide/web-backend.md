@@ -168,6 +168,13 @@ a form. `jobs_poll` runs no event: its response sends the changes that the threa
   stacked bar, which would stand at the series' own value. Textual's plotext has no base:
   each bar goes from 0 to where it ends, the stack's last series first, which the others then
   cover.
+- **A chart's horizontal bars.** `charts.js` turns the x scale upright (uPlot's `ori: 1`,
+  with `dir: -1` for the first category at the top) and the y scale along the bottom, and puts
+  their axes at the left and the bottom. uPlot's bars' builder then draws the bars along the y,
+  from the same facets. uPlot gives a left axis a fixed width: `fittedAxisSize` measures its
+  widest value, so that a category's name shows whole. A click posts the pointer's height as
+  the x and its left offset as the y. The rest of `charts.js` names the scales as before: the
+  x range, the zoom kept across a swap, and the image's address stay those of the x.
 - **A chart's bounds.** `charts.js` wraps each scale's range function last, so that an axis'
   bounds (`Axis.minimum`, `Axis.maximum`) win over the bars' 0 and the reference lines. The x
   range keeps a zoom as the user made it, which uPlot also asks the range function for. The

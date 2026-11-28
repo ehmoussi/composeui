@@ -76,6 +76,11 @@ class _PlotMonitor(Protocol):
     ylabel: list[str | None]
     #: each plot's y axis: "left" or "right"
     yside: list[str]
+    #: by the y axis' side: the ticks given, and their labels
+    yticks: list[list[float] | None]
+    ylabels: list[list[str] | None]
+    #: each text drawn, such as a reference line's label
+    text: list[str]
     hcoord: list[list[float]]
     vcoord: list[list[float]]
     #: the ranges drawn, by side: the bottom's then the top's, the left's then the right's
@@ -95,6 +100,11 @@ def _plot_monitor(chart: ComposeChart) -> _PlotMonitor:
     # textual-plotext's stubs omit the private state these rendering checks inspect.
     figure = cast("_PlotFigure", chart.plt)
     return figure._active.monitor  # noqa: SLF001 (plotext has no public monitor API)
+
+
+def _y_tick_labels(plotted: _PlotMonitor) -> dict[float, str]:
+    """Get the label of each tick given to the left y axis."""
+    return dict(zip(plotted.yticks[0] or [], plotted.ylabels[0] or []))
 
 
 @pytest.mark.asyncio
@@ -302,6 +312,60 @@ async def test_stacked_bars_are_plotted_to_where_each_ends() -> None:
         ]
         ends = [max(rectangle, key=abs) for rectangle in plotted.y[:12]]
         assert ends[3:12] == [-40, -20, -60, 150, 0, 140, 120, 80, 95]
+
+
+@pytest.mark.asyncio
+async def test_horizontal_bars_are_plotted_along_the_x_axis_the_first_category_at_the_top() -> None:
+    view = ChartPagesMainView()
+    view.render(RendererType.TEXTUAL)
+    assert isinstance(view.renderer, TextualMainRenderer)
+    app = view.renderer.app
+    assert app is not None
+    pickups = view.router.chart.pickups
+    assert isinstance(pickups.renderer, TextualWidgetRenderer)
+    chart = pickups.renderer.widget
+    assert isinstance(chart, ComposeChart)
+
+    async with app.run_test(size=(120, 200)) as pilot:
+        view.router.current_route = "chart"
+        await pilot.pause()
+        text = chart.render().plain  # type: ignore[union-attr]
+        plotted = _plot_monitor(chart)
+
+        for name in ("Station", "Pickups (k)", "North", "South", "Goal", "Split"):
+            assert name in text
+        # from 0 along x, each bar in its slot down y: plotext's y goes up, so the first
+        # station at its top, 3
+        assert [max(bar) for bar in plotted.x] == [40, 65, 30, 25, 50, 20]
+        assert [min(bar) for bar in plotted.x] == [0] * 6
+        assert (min(plotted.y[0]), max(plotted.y[0])) == pytest.approx((3.0, 3.4))
+        assert (min(plotted.y[3]), max(plotted.y[3])) == pytest.approx((2.6, 3.0))
+        assert plotted.ylim[0] == [0.5, 3.5]
+        # each tick's label: plotext keeps them as pairs, in no order
+        assert _y_tick_labels(plotted) == {3: "North", 2: "Centre", 1: "South"}
+
+        pickups.horizontal = False
+        await pilot.pause()
+        chart.render()
+        plotted = _plot_monitor(chart)
+        assert [max(bar) for bar in plotted.y[:3]] == [40, 65, 30]  # standing again
+        assert plotted.xlim[0] == [0.5, 3.5]
+
+        # bars at numbers, upside down, labeled as they are; pickups on a bounded log axis;
+        # lines without labels
+        pickups.horizontal = True
+        pickups.categories = []
+        pickups.y = attrs.evolve(pickups.y, scale=Scale.LOG, maximum=100)
+        pickups.reference_lines = [ReferenceLine(10), ReferenceLine(0.5, vertical=True)]
+        await pilot.pause()
+        text = chart.render().plain  # type: ignore[union-attr]
+        plotted = _plot_monitor(chart)
+        assert _y_tick_labels(plotted) == {0: "0", -1: "1", -2: "2"}
+        assert plotted.xscale[0] == "log"
+        assert plotted.xlim[0][1] == pytest.approx(2)  # the log of 100
+        # the line at 10 pickups upright, at its log; the one at an x across, upside down
+        assert (plotted.vcoord[0], plotted.hcoord[0]) == ([1], [-0.5])
+        assert plotted.text == []  # no label
 
 
 @pytest.mark.asyncio
