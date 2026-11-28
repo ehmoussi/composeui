@@ -11,6 +11,7 @@ import inspect
 import logging
 import logging.handlers
 import os
+import re
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Generic, Optional, Protocol, TextIO, TypeVar, cast
@@ -511,9 +512,13 @@ class ModelApplication(Application[MainViewT], Generic[MainViewT, ModelT]):
 BACKEND_VARIABLE = "COMPOSEUI_BACKEND"
 
 
+#: the name of an HTTP header: a token (RFC 9110)
+_HEADER_NAME = re.compile(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+")
+
+
 @attrs.frozen(kw_only=True)
 class WebSettings:
-    """The limits of a web server: how long its sessions live, and how many it serves.
+    """The settings of a web server: its sessions' limits, its client and its login proxy.
 
     Pass them to `run`, which gives them to the web backend only, e.g.
     ``run(build_main_view, web_settings=WebSettings(session_ttl=8 * 3600.0))``. A
@@ -574,6 +579,19 @@ class WebSettings:
     #: outside a container: `MainView.open_folder` then opens their file manager, and
     #: `display_path` shows the whole path.
     client: ClientCapabilities = attrs.field(factory=ClientCapabilities.served)
+    #: The header that names the user, which a login proxy in front of the server sets on
+    #: each request, such as ``"Remote-User"`` or ``"X-Forwarded-User"`` (`MainView.user`).
+    #: The server then answers 403 to a request without it, and gives each user sessions of
+    #: their own. Set it only when the proxy alone reaches the server, and always sets the
+    #: header: a request that reaches the server another way can name any user. None, the
+    #: default, reads no user.
+    user_header: Optional[str] = attrs.field(default=None)
+
+    @user_header.validator
+    def _check_user_header(self, _attribute: object, value: str | None) -> None:
+        if value is not None and _HEADER_NAME.fullmatch(value) is None:
+            msg = f"user_header={value!r} isn't the name of a header"
+            raise ValueError(msg)
 
 
 @overload

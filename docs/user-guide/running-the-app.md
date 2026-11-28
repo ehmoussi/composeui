@@ -234,7 +234,9 @@ On Qt and Textual, `browser_id` is the name of the account that runs the app
 (`getpass.getuser()`). Each user of a terminal app served by `textual-serve` or a shared SSH
 account has the same id.
 
-The id is not a user, and doesn't prove one: never grant access by it. It is not secret
+The id is not a user, and doesn't prove one: never grant access by it. To know the user, see
+[Know the user behind a login proxy](#know-the-user-behind-a-login-proxy): each user of a
+browser then gets their own id. It is not secret
 either, and an app can show it: it doesn't open the session. ComposeUI never removes what the
 app labels with it. The app decides when to remove the work of a browser that no longer comes.
 
@@ -420,10 +422,11 @@ For a fuller example, see [`src/examples/webhello.py`](../../src/examples/webhel
 
 Read this section before other people use the app, on a network or behind a reverse proxy.
 
-- **No login.** The app has no users or passwords: anyone who reaches its address uses it.
-  Before you give it an address that other people can reach, restrict the access in front
-  of it, for example with a password in the reverse proxy (see
-  [Deploy behind nginx](#deploy-behind-nginx)).
+- **No login of its own.** The app has no users or passwords: anyone who reaches its address
+  uses it. Before you give it an address that other people can reach, restrict the access in
+  front of it, for example with a password in the reverse proxy (see
+  [Deploy behind nginx](#deploy-behind-nginx)). To know who is logged in, let the proxy name
+  the user (see [Know the user behind a login proxy](#know-the-user-behind-a-login-proxy)).
 - **Single process only.** The sessions live in the memory of one server process. By default,
   a restart starts them all over. The server signs the session cookie with a key that it makes
   when it starts. So after a restart, each browser gets a new, empty session, and the work that
@@ -713,4 +716,101 @@ printf "ada:%s\n" "$(openssl passwd -apr1)" >> /etc/nginx/app.htpasswd
 
 nginx then asks for a user and a password before the first page, and the browser sends
 them with each of the app's requests. Each user still gets their own session in each
-browser: the app does not know which user is logged in.
+browser. To tell the app which user is logged in, see
+[Know the user behind a login proxy](#know-the-user-behind-a-login-proxy).
+
+### Know the user behind a login proxy
+
+The app can take the user from a login proxy in front of it. The proxy logs the user in, with
+a password, OIDC or SAML2, and names the user in a header of each request. Set the header's
+name in `user_header`, and read the user in `MainView.user`, for example to label the records
+that each user writes:
+
+```python
+from composeui.core.application import WebSettings, run
+from composeui.core.view import LabelView, MainView, child, define_view
+
+
+@define_view
+class GreetingView(MainView):
+    hello: LabelView = child(LabelView)
+
+    def __attrs_post_init__(self) -> None:
+        super().__attrs_post_init__()
+        self.hello.text = f"Hello, {self.user}" if self.user else "Hello"
+
+
+if __name__ == "__main__":
+    run(GreetingView, web_settings=WebSettings(user_header="Remote-User"))
+```
+
+With `user_header`, the server works as follows:
+
+- **Each request names its user.** The server answers 403 to a request without the header, with
+  an empty one, with two of them, or with a name that isn't UTF-8. A missing line in the
+  proxy's configuration shows at the first page.
+- **Each user gets their own sessions.** A session belongs to the user that it was made for.
+  When another user logs in to the same browser, that user gets a new session, and the page of
+  the previous user's session reloads. A session saved to disk (`session_idle`,
+  `session_folder`, `--reload`) opens for its own user only. A server without `user_header`
+  opens none of the sessions that users saved.
+- **Each user of a browser gets their own `browser_id`.** Two users of one browser don't see
+  each other's work (see [Show a browser its own work](#show-a-browser-its-own-work)).
+- **`user` never changes for a main view.** It is known once the main view is made. Without
+  `user_header`, and on Qt and Textual, it is None.
+
+The server can't tell the proxy's requests from others. Anyone who reaches the server
+another way can name any user in the header. So:
+
+- **Only the proxy may reach the server.** Keep the server on its default address
+  `127.0.0.1`, behind a proxy on the same machine, or on a network that only the proxy reaches.
+- **The proxy sets the header on each request.** It must replace a header of that name that the
+  browser sent. nginx's `proxy_set_header` does.
+
+With the Basic Auth of [Deploy behind nginx](#deploy-behind-nginx), add this line to the
+`location` block. nginx then sends the name that the user typed:
+
+```nginx
+        proxy_set_header Remote-User $remote_user;
+```
+
+For OIDC, such as Keycloak, Microsoft Entra ID or Google, put
+[OAuth2 Proxy](https://oauth2-proxy.github.io/oauth2-proxy/) beside nginx. nginx asks OAuth2
+Proxy whether each request is logged in (`auth_request`), and sends the user that it answers.
+This recipe follows OAuth2 Proxy's guide for nginx, and has not been tried with ComposeUI yet.
+Start OAuth2 Proxy with the client that the identity provider gave the app, with
+`--reverse-proxy` and `--set-xauthrequest`, then add these blocks to the `server` block:
+
+```nginx
+    location /oauth2/ {
+        proxy_pass http://127.0.0.1:4180;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Auth-Request-Redirect $request_uri;
+    }
+
+    location = /oauth2/auth {
+        proxy_pass http://127.0.0.1:4180;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Content-Length "";
+        proxy_pass_request_body off;
+    }
+
+    location @oauth2_signin {
+        return 302 /oauth2/sign_in?rd=$scheme://$host$request_uri;
+    }
+```
+
+In the app's `location /` block, add:
+
+```nginx
+        auth_request /oauth2/auth;
+        error_page 401 = @oauth2_signin;
+        auth_request_set $user $upstream_http_x_auth_request_user;
+        proxy_set_header Remote-User $user;
+```
+
+The user is the provider's id of the user. With `--prefer-email-to-user`, OAuth2 Proxy gives
+the user's email instead. A link to `/oauth2/sign_out` logs the user out of OAuth2 Proxy, not
+of the identity provider.

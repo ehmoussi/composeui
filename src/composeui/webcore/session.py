@@ -54,11 +54,14 @@ from composeui.webcore.rendertarget import RenderTarget, rendering_into
 from composeui.webcore.sessionfolder import (
     SEEN_NAME,
     UPLOADS_FOLDER_NAME,
+    USER_NAME,
     FolderLock,
     claim,
     folder_key,
     read_seen,
+    read_user,
     write_seen,
+    write_user,
 )
 from composeui.webcore.uploads import MAX_UPLOAD_FILES, UploadRefusal
 from composeui.webcore.webrenderer import UnsupportedEventError, handle_event, render_dirty
@@ -1124,10 +1127,12 @@ class _Place(enum.Enum):
 class _Entry:
     """A session of the store, wherever it is."""
 
-    __slots__ = ("last_seen", "place", "session", "settled", "touched", "unsaveable")
+    __slots__ = ("last_seen", "place", "session", "settled", "touched", "unsaveable", "user")
 
-    def __init__(self, session: WebSession | None, place: _Place) -> None:
+    def __init__(self, session: WebSession | None, place: _Place, user: str | None) -> None:
         self.place = place
+        #: the user it belongs to (`MainView.user`): no other user's request gets it
+        self.user = user
         #: None while on disk
         self.session = session
         self.last_seen = time.monotonic()
@@ -1269,7 +1274,7 @@ class SessionStore:
             if _is_session_name(path.name, _PARTIAL_SUFFIX):
                 shutil.rmtree(path, ignore_errors=True)
             elif _SESSION_ID.fullmatch(path.name) is not None and path.is_dir():
-                entry = _Entry(None, _Place.ON_DISK)
+                entry = _Entry(None, _Place.ON_DISK, read_user(path / USER_NAME))
                 if self._folder is not None:
                     seen = read_seen(path / SEEN_NAME)
                     # unreadable: the save's own time, never later than its last use
@@ -1296,17 +1301,20 @@ class SessionStore:
             if path.name.startswith("composeui-") and path not in named:
                 shutil.rmtree(path, ignore_errors=True)
 
-    def get(self, session_id: Any) -> WebSession | None:
+    def get(self, session_id: Any, user: str | None = None) -> WebSession | None:
         """Return the session with this id (from a cookie, so of any type), or None.
 
-        One on disk is woken. One being saved or woken is waited for: the caller is never
-        a route's coroutine, which would hold up the event loop.
+        Only `user`'s session: another user's is no session for this request, even with its
+        cookie. One on disk is woken. One being saved or woken is waited for: the caller is
+        never a route's coroutine, which would hold up the event loop.
         """
-        found = self._find(session_id, may_create=False)
+        found = self._find(session_id, user, may_create=False)
         return None if found is None else found[1]
 
-    def get_or_create(self, session_id: Any) -> tuple[str, WebSession] | None:
-        """Return the session with this id as `get` does, else a new one with its own id.
+    def get_or_create(
+        self, session_id: Any, user: str | None = None
+    ) -> tuple[str, WebSession] | None:
+        """Return `user`'s session with this id as `get` does, else a new one with its own id.
 
         None while `max_sessions` are in memory. A full store refuses new sessions rather
         than dropping old ones: requests without a cookie, which anyone can send, would
@@ -1314,14 +1322,16 @@ class SessionStore:
         without room to wake is refused too, never replaced by a new one, which would take
         its cookie: the decision is one, under the lock, as a slot can free at any time.
         """
-        return self._find(session_id, may_create=True)
+        return self._find(session_id, user, may_create=True)
 
-    def _find(self, session_id: Any, *, may_create: bool) -> tuple[str, WebSession] | None:
-        """Find, wake or build the session, each step decided with the lock held."""
+    def _find(
+        self, session_id: Any, user: str | None, *, may_create: bool
+    ) -> tuple[str, WebSession] | None:
+        """Find, wake or build `user`'s session, each step decided with the lock held."""
         while True:
             with self._lock:
                 self._drop_expired()
-                entry = self._entries.get(session_id) if isinstance(session_id, str) else None
+                entry = self._entry(session_id, user)
                 if entry is None:
                     if not may_create or self._in_memory() >= self._max_sessions:
                         return None
@@ -1342,13 +1352,21 @@ class SessionStore:
             assert settled is not None  # saving or waking
             settled.wait()
         if entry is None:
-            return self._create()
+            return self._create(user)
         return session_id, self._wake(session_id, entry)
 
-    def is_at_hand(self, session_id: Any) -> bool:
+    def _entry(self, session_id: Any, user: str | None) -> _Entry | None:
+        """Get `user`'s entry with this id, None if it's another user's. With the lock held.
+
+        Another user's is left as it is, not woken nor waited for: their cookie may come back.
+        """
+        entry = self._entries.get(session_id) if isinstance(session_id, str) else None
+        return entry if entry is not None and entry.user == user else None
+
+    def is_at_hand(self, session_id: Any, user: str | None = None) -> bool:
         """Tell whether `get` answers at once: the session is in memory, or there is none."""
         with self._lock:
-            entry = self._entries.get(session_id) if isinstance(session_id, str) else None
+            entry = self._entry(session_id, user)
             return entry is None or entry.place is _Place.LIVE
 
     def _in_memory(self) -> int:
@@ -1406,14 +1424,14 @@ class SessionStore:
         entry.settled = None
         return settled
 
-    def _create(self) -> tuple[str, WebSession]:
-        """Build a new session, which `_find` made room for (`_building`)."""
+    def _create(self, user: str | None) -> tuple[str, WebSession]:
+        """Build a new session of `user`, which `_find` made room for (`_building`)."""
         try:
             # built outside the store's lock: building runs app code, which may be slow
             session = self._built_session()
             session_id = secrets.token_urlsafe(32)
             with self._lock:
-                self._entries[session_id] = _Entry(session, _Place.LIVE)
+                self._entries[session_id] = _Entry(session, _Place.LIVE, user)
         finally:
             with self._lock:
                 self._building -= 1
@@ -1469,14 +1487,16 @@ class SessionStore:
         """Count the sessions on disk, or being saved or woken. With the lock held."""
         return sum(entry.place is not _Place.LIVE for entry in self._entries.values())
 
-    def _save(self, session_id: str, session: WebSession, last_seen: float) -> bool:
-        """Save `session` into its directory, if it `can_hibernate`; tell whether it did.
+    def _save(self, session_id: str, entry: _Entry) -> bool:
+        """Save `entry`'s session into its directory, if it `can_hibernate`; tell whether it did.
 
-        In a folder, with when it was `last_seen` (`time.monotonic`), as a clock time: the
-        next process's `monotonic` starts elsewhere. Written beside it, then put in its
-        place: a crash leaves only the partial one, which the next start removes.
+        With its user, and in a folder with when it was last used (`idle_since`), as a clock
+        time: the next process's `monotonic` starts elsewhere. Written beside it, then put
+        in its place: a crash leaves only the partial one, which the next start removes.
         """
         assert self._directory is not None  # only a store with one saves
+        session = entry.session
+        assert session is not None  # in memory until now
         directory = self._directory / session_id
         partial = directory.with_name(f"{session_id}{_PARTIAL_SUFFIX}")
         try:
@@ -1491,8 +1511,9 @@ class SessionStore:
                 # that starts with another value at each build, e.g. a date, would else be
                 # taken for an edit of the code
                 session.save_to(partial, code_edits=self._code_may_change)
+                write_user(partial / USER_NAME, entry.user)
                 if self._folder is not None:
-                    seen = time.time() - (time.monotonic() - last_seen)
+                    seen = time.time() - (time.monotonic() - entry.idle_since())
                     write_seen(partial / SEEN_NAME, seen)
                 # complete, under its id: a crash before leaves only the partial one
                 partial.replace(directory)
@@ -1510,7 +1531,7 @@ class SessionStore:
         assert session is not None  # in memory until now
         failed = False
         try:
-            can_hibernate = self._save(session_id, session, entry.idle_since())
+            can_hibernate = self._save(session_id, entry)
         except Exception:
             LOGGER.exception("Can't save an idle session to disk: it stays in memory.")
             failed = True
@@ -1545,14 +1566,15 @@ class SessionStore:
         assert self._directory is not None  # only such a server's lifespan calls it
         with self._lock:
             sessions = [
-                (session_id, entry.session)
+                (session_id, entry.session, entry.user)
                 for session_id, entry in self._entries.items()
                 if entry.place is _Place.LIVE and entry.session is not None
             ]
-        for session_id, session in sessions:
+        for session_id, session, user in sessions:
             directory = self._directory / session_id
             directory.mkdir(exist_ok=True)
             session.save_to(directory)
+            write_user(directory / USER_NAME, user)
 
     def drop(self, session_id: Any) -> None:
         """Close the live session with this id, as its app asked (e.g. Exit)."""
@@ -1625,7 +1647,7 @@ class SessionStore:
         elif not entry.unsaveable:
             try:
                 # exactly when it was used: no request comes after the stop
-                kept = self._save(session_id, session, entry.idle_since())
+                kept = self._save(session_id, entry)
             except Exception:
                 LOGGER.exception("Can't save a session as the server stops: it's lost.")
         if kept:

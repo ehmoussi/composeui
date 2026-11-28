@@ -19,6 +19,8 @@ KEY_PARTIAL_NAME = f"{KEY_NAME}.partial"
 LOCK_NAME = "lock"
 #: the file of a session's save that holds when it was last used
 SEEN_NAME = "last-seen"
+#: the file of a session's save that names its user, absent without a login
+USER_NAME = "user"
 #: the folder of the sessions' uploads, each in a directory that one saved session names
 UPLOADS_FOLDER_NAME = "uploads"
 
@@ -126,3 +128,21 @@ def read_seen(path: Path) -> float | None:
     except (OSError, ValueError):
         return None
     return seen if math.isfinite(seen) else None
+
+
+def write_user(path: Path, user: str | None) -> None:
+    """Write the user of a session's save at `path`; nothing without one."""
+    if user is not None:
+        path.write_text(user, encoding="utf-8")
+
+
+def read_user(path: Path) -> str | None:
+    """Read the user of a session's save; None if `path` is absent.
+
+    A damaged name names no user: no proxy sends the character that replaces a byte it
+    can't read, and `header_user` takes no empty name.
+    """
+    try:
+        return path.read_text(encoding="utf-8", errors="replace")
+    except FileNotFoundError:
+        return None

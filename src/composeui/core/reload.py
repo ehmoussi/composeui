@@ -247,8 +247,9 @@ def save_reloaded_state(
         "views": session_data(main_view),
     }
     if code_edits:
-        # built now, while it's still the previous code: what its fields start as
-        session["initial"] = main_view.build_initial_view().state_data()
+        # built now, while it's still the previous code: what its fields start as, for its
+        # own browser and user, as the process that opens it builds them
+        session["initial"] = main_view._initial_view().state_data()  # noqa: SLF001 (the view's own browser and user)
     # Prepare the session first so a build or serialization error leaves the old save intact.
     session_text = json.dumps(session)
     save_study(main_view, model, directory / _STUDY_NAME)
@@ -274,7 +275,8 @@ def load_reloaded_state(
     session = _read_session(directory / _SESSION_NAME)
     previous_code_state = session.get("initial")
     # built as `save_reloaded_state` builds it, not `main_view`, which a function may have
-    # filled: the two would differ with no edit, and the user's values be lost
+    # filled: the two would differ with no edit, and the user's values be lost. For the
+    # browser and user of `main_view`, which the web's request that opens it gives
     code_state = (
         json.loads(json.dumps(main_view.build_initial_view().state_data()))
         if isinstance(previous_code_state, dict)
