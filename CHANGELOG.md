@@ -274,6 +274,10 @@ backends' modules included, can change in any release without an entry here.
 
 ### Fixed
 
+- On the web, a chart's zoom shows the x range that the user selected. Before, the range grew
+  to each vertical reference line out of it, so the user couldn't zoom into a part of the chart
+  without its lines.
+
 - On Textual, a radio group doesn't emit `value_changed` any more when code sets its `value`,
   nor for its first value as it shows. It reports the user's picks only, as on Qt and the web.
 

@@ -403,7 +403,7 @@ def test_a_step_series_is_drawn_in_steps_its_fill_a_step_area() -> None:
 
     (axes,) = chart_figure(jobs).axes
 
-    running, queued = axes.get_lines()
+    running, queued, _deadline = axes.get_lines()  # and the vertical line at 10 h
     assert running.get_drawstyle() == queued.get_drawstyle() == "steps-post"
     (area,) = axes.collections  # the running jobs', filled
     # its outline's corners: each count held until the next change, e.g. 1 from 0 to 2

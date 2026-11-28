@@ -3608,8 +3608,10 @@ def test_an_axis_shows_the_app_s_bounds_until_the_user_zooms(chart_pages_page: P
     chart_pages_page.mouse.down()
     chart_pages_page.mouse.move(box["x"] + box["width"] * 0.6, middle, steps=5)
     chart_pages_page.mouse.up()
-    # the user's zoom, not the bounds
-    assert plot.evaluate(scales)[0] == pytest.approx(3, abs=0.2)
+    # the user's zoom, not the bounds, nor out to the vertical line at 15
+    zoom_min, zoom_max = plot.evaluate(scales)[:2]
+    assert zoom_min == pytest.approx(3, abs=0.2)
+    assert zoom_max == pytest.approx(6, abs=0.2)
     expect(link).to_have_attribute("href", re.compile(r"&x_min="))
 
     chart_pages_page.mouse.dblclick(box["x"] + box["width"] / 2, middle)
@@ -3831,6 +3833,28 @@ def test_a_step_series_holds_each_value_until_the_next_point(chart_pages_page: P
     expect(legend.locator(".u-series").filter(has_text="Queued").locator(".u-value")).to_have_text(
         "1.000"
     )
+
+
+def test_a_zoom_on_all_the_data_but_not_a_vertical_line_past_it_is_kept(
+    chart_pages_page: Page,
+) -> None:
+    chart_pages_page.goto("/chart")
+    jobs = chart_pages_page.locator("figure").filter(has_text="Jobs")
+    expect(jobs.locator("canvas")).to_have_count(1)
+    link = jobs.get_by_role("link", name="Save Image")
+    expect(link).to_have_attribute("href", re.compile(r"\?format=pdf$"))  # 0 h to the line's 10 h
+    jobs.scroll_into_view_if_needed()  # the mouse reaches only what the window shows
+    box = jobs.locator(".u-over").bounding_box()
+    assert box is not None
+    middle = box["y"] + box["height"] / 2
+
+    # from 7 h to past the left edge: from 0 h, the data's first x, over all of it
+    chart_pages_page.mouse.move(box["x"] + box["width"] * 0.7, middle)
+    chart_pages_page.mouse.down()
+    chart_pages_page.mouse.move(box["x"] - 30, middle, steps=5)
+    chart_pages_page.mouse.up()
+
+    expect(link).to_have_attribute("href", re.compile(r"&x_min=0&x_max="))
 
 
 def test_the_image_link_follows_the_zoom_and_the_format(chart_page: Page) -> None:
