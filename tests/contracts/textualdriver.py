@@ -51,6 +51,11 @@ class TextualDriver:
     async def by_code(self) -> AsyncGenerator[None, None]:
         assert self._pilot is not None
         yield
+        # a renderer can show the code's value after the screen's next refresh
+        # (`call_after_refresh`), which its timer brings late on a slow machine: the wait's own
+        # callback runs after the renderer's
+        await self._pilot.pause()
+        await self._pilot.app.screen.wait_for_refresh()
         await self._pilot.pause()
 
     async def wait_until(self, condition: Callable[[], bool]) -> None:
