@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, NoReturn
 import pytest
 from hypothesis import settings
 
+from tests.slow_runner import LATENESS, make_late
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
@@ -19,6 +21,29 @@ settings.register_profile("composeui", settings.get_profile("default"), deadline
 # on CI, Hypothesis's own profile: the same examples each run (`derandomize`), without a
 # time limit, so that a pull request fails for its change, not for a new random draw
 settings.load_profile("ci" if os.environ.get("CI") else "composeui")
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--slow-runner",
+        choices=sorted(LATENESS),
+        help="make one side of the tests' races late, as on a slow runner (tests/slow_runner.py)",
+    )
+
+
+#: the patches of `--slow-runner`, for the whole run
+_SLOW_RUNNER = pytest.MonkeyPatch()
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    lateness = config.getoption("--slow-runner")
+    if lateness is not None:
+        make_late(lateness, _SLOW_RUNNER)
+
+
+def pytest_unconfigure() -> None:
+    _SLOW_RUNNER.undo()
+
 
 #: whether the pyside6 extra is installed: else pytest-qt can't start (run pytest with
 #: `-p no:pytest-qt`), and no Qt test can run

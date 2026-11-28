@@ -84,6 +84,11 @@ the work itself:
   send one more request once the flag is set: it takes the lock after the
   callback is over. `test_a_user_unchecks_a_base_on_the_web_and_downloads_the_rows_shown`
   read a summary still empty on Windows with Python 3.9.
+- **A value that later work replaces,** such as a repeating task's result: a wait for it
+  misses it once the next run is quicker than the test. Hold the next run with an event
+  until the test has read the value. On Windows, a test waited for a result that the next run
+  replaced 0.05 s later:
+  `test_a_repeating_task_runs_again_and_keeps_its_result_until_the_next_run`.
 - **Without such a hook,** pause in a bounded loop until the state the test reads
   arrives, then assert it: `for _ in range(100): await pilot.pause(0.05)`, with a
   `break` once it is there, as the Textual tests of a sorting job do.
@@ -383,7 +388,9 @@ rewrites), each passing validation on its own.
 3. For a test that reads what a worker thread or a job does, slow that work
    down: a temporary `time.sleep(0.5)` in the production code it runs, such as
    `MainView.save_state`. The test must still pass; a test that waits on time
-   fails. Revert the delay before continuing.
+   fails. Revert the delay before continuing. `make slow-test SLOW_TESTS=<module>`
+   makes the test's steps, the threads and the Textual timers late in turn, without
+   an edit.
 4. For changed concurrency tests, temporarily break the protected waiting,
    cancellation, or locking behavior and verify that the test fails for that
    reason. Restore the code. Repeat the affected test group several times

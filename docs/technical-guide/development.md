@@ -26,6 +26,7 @@ make mypy          # mypy on composeui, examples and tests, Qt binding resolved 
 make typecheck     # mypy on source + tests; Pyright, Pyrefly and ty on tests
 make pyright pyrefly ty  # individual test checkers
 make test          # pytest in parallel, with coverage (browser tests excluded)
+make slow-test     # the tests three times, one side of their races late each time
 make hooks         # git's hooks of .githooks/ in this clone
 make browser-test  # the web backend in headless Chromium (tests/test_browser.py, Playwright)
 make translations  # each app's catalogs against the text it translates
@@ -44,7 +45,8 @@ the Windows job in CI, run `.\make.ps1 translations test`. The Linux `check` job
 `make mypy`. The `browser` job runs `make js-check`. Locally, `make check` includes both.
 
 In PowerShell, pass `EXAMPLES` as `-Examples pipeform, batman`, `TAILWIND_PLATFORM` as
-`-TailwindPlatform`, `TSC_PLATFORM` as `-TscPlatform`, and `PYTEST_WORKERS` as `-Workers`.
+`-TailwindPlatform`, `TSC_PLATFORM` as `-TscPlatform`, `PYTEST_WORKERS` as `-Workers`, and
+`SLOW_TESTS` as `-SlowTests`.
 When you change a target in the `Makefile`, change it in `make.ps1` too:
 `tests/test_code_rules.py` checks that both have the same targets and translated apps.
 
@@ -103,6 +105,15 @@ Every behavior change needs a test in `tests/`.
   test races, show that the test then fails each time, and show that the fix passes in the
   same condition. A fix of a guessed cause lets the failure come back. Toolkits have timers
   too: a Textual `Button` ignores a click for 0.2 s after a press.
+- `make slow-test` runs the tests as a slow runner does, three times: with the test's own
+  steps late, with every thread late, and with every Textual timer late (`--slow-runner`,
+  `tests/slow_runner.py`). A test that waits by chance fails there each time, on any machine.
+  Run it on a test that you add or change: `make slow-test SLOW_TESTS=tests/<module>.py`.
+  It doesn't slow Qt's own timers.
+- Don't wait for a value that later work replaces, such as a repeating task's result or a
+  progress report: hold that work with an event until the test has read the value. On
+  Textual, wait for what a timer or a thread makes with `_wait_until`, and click a button
+  that may not take a click yet with `_click_laid_out` (`tests/textualcore/support.py`).
 - Qt tests in a headless environment (CI, WSL) need `QT_QPA_PLATFORM=offscreen`.
   `make test` sets it. To run one file or test:
 
@@ -309,7 +320,9 @@ On a pull request, the `repeat` job runs each test module that the pull request 
 changes on Windows with Python 3.9, the slowest runner. It runs each module 20 times, and
 fewer when many modules change, down to 3 times. A test that races a timer or another thread
 can pass one run by chance. Repeated, it fails there before it reaches `main`. The job leaves
-out `tests/test_browser.py`, and runs only when a test module changes.
+out `tests/test_browser.py`, and runs only when a test module changes. The `slow` job runs the
+same modules with `make slow-test`, on Linux with Python 3.9: there, such a test fails each
+time, without luck. The "Required checks" job needs both to pass when they run.
 
 The existing mypy matrix checks source, examples, and tests together. Separate jobs run
 `make pyright`, `make pyrefly`, and `make ty` on tests on Python 3.9, matching their
