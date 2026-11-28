@@ -29,7 +29,6 @@ from composeui.core.application import _add_reference_to_signals
 from composeui.core.registry import RendererType
 from composeui.core.renderer import RendererContainer
 from composeui.core.view import (
-    SEARCH_DELAY_MS,
     SOURCE_TABLE_JOB_ROWS,
     CellStyle,
     CellWidget,
@@ -791,8 +790,9 @@ def test_the_filter_bar_searches_and_adds_filters_shown_as_chips(qtbot: QtBot) -
     bar, table = box.bar, box.table
 
     qtbot.keyClicks(bar.search, "ROOM")
-    qtbot.waitUntil(lambda: view.rooms.search == "ROOM", timeout=SEARCH_DELAY_MS * 5)
-    assert _shown_column(table, 0) == ["Bedroom"]
+    # Enter searches at once: a wait for the typing's delay fails on a busy runner
+    qtbot.keyClick(bar.search, Qt.Key.Key_Return)
+    assert (view.rooms.search, _shown_column(table, 0)) == ("ROOM", ["Bedroom"])
     assert bar.count.text() == "1 of 4"
     bar.search.selectAll()
     qtbot.keyClick(bar.search, Qt.Key.Key_Backspace)
@@ -856,8 +856,11 @@ def test_escape_empties_the_search_then_goes_on_to_the_window(qtbot: QtBot) -> N
     escaped: list[bool] = []
     QShortcut(QKeySequence("Escape"), box.window()).activated.connect(lambda: escaped.append(True))
     bar.search.setFocus()
+    qtbot.waitUntil(bar.search.hasFocus)  # the window's shortcuts work once it's active
     qtbot.keyClicks(bar.search, "ROOM")
-    qtbot.waitUntil(lambda: view.rooms.search == "ROOM", timeout=SEARCH_DELAY_MS * 5)
+    # Enter searches at once: a wait for the typing's delay fails on a busy runner
+    qtbot.keyClick(bar.search, Qt.Key.Key_Return)
+    assert view.rooms.search == "ROOM"
 
     # the search is empty at once, not after the delay of typing; the shortcut waits
     qtbot.keyClick(bar.search, Qt.Key.Key_Escape)
