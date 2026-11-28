@@ -5,47 +5,39 @@
   </picture>
 </h1>
 
-A small, framework-agnostic MVVM layer for building UIs in Python. You declare views as typed
-[`attrs`](https://www.attrs.org/) classes. They hold the state of the UI, but no toolkit code: in
-MVVM terms, they are the view-models
-([how ComposeUI maps to MVVM](https://ehmoussi.github.io/composeui/user-guide/core-concepts.html#how-composeui-maps-to-mvvm)).
-A `Renderer` binds each view to a toolkit widget, which plays the View role of MVVM:
+Turn a Python script into an app that your colleagues can use. ComposeUI is for the data
+scientists and simulation engineers who know Python, and want to put a form, a chart, or a
+"Run" button around their work.
 
-- a desktop window with [Qt](https://pypi.org/project/QtPy/), through `qtpy`;
-- a terminal with [Textual](https://textual.textualize.io/);
-- a web page served with [Starlette](https://www.starlette.io/) and [htmx](https://htmx.org/).
+**No GUI toolkit, HTML, or JavaScript to learn. Just Python.**
 
-`Signal` objects carry events between view, model, and application code.
+You describe the screen in plain Python classes: the inputs, the tables, the charts. ComposeUI
+draws it, and the same code runs in three places:
 
-> **Status:** early-stage / pre-alpha. The API is small and still moving.
+| A desktop window ([Qt](https://pypi.org/project/QtPy/)) | A terminal ([Textual](https://textual.textualize.io/)) | A web page ([Starlette](https://www.starlette.io/), [htmx](https://htmx.org/)) |
+| --- | --- | --- |
+| <img alt="The pipe sweep example in a Qt window" src="https://raw.githubusercontent.com/ehmoussi/composeui/main/docs/images/pipesweep-qt.png"> | <img alt="The pipe sweep example in a terminal" src="https://raw.githubusercontent.com/ehmoussi/composeui/main/docs/images/pipesweep-textual.png"> | <img alt="The pipe sweep example on a web page" src="https://raw.githubusercontent.com/ehmoussi/composeui/main/docs/images/pipesweep-web.png"> |
+| For an app on your own computer | For a remote computer or a cluster, over SSH | For your team, in their browsers |
 
-## Why
+> **Status:** early-stage / pre-alpha. The API can still change in any release.
 
-- **Declarative views.** A view is an `attrs` class with typed fields. You do not build
-  widgets or wire their signals by hand.
-- **Reactive by construction.** When you set an attribute of a view (`view.text = "..."`),
-  the view pushes the change to its renderer. Normal state changes need no `update()` or
-  `refresh()` calls.
-- **Toolkit-agnostic core.** `composeui.core` does not import Qt, Textual, or Starlette
-  when Python imports it. Each backend is imported only when a view renders with it.
-- **Typed callback injection.** `Signal.connect` and `Application.connect` read the
-  parameter names of a callback. They inject `view`, `main_view`, or `model` when the
-  callback asks for them. So callbacks stay short, without manual lookups.
+## What you can build
 
-## When to use it
-
-- **Choose ComposeUI** when one app must show as a desktop window, in a terminal, and in a
-  browser, or may move from one to another later. It also suits an app whose state must be
-  typed, saved as a file, and tested without a UI
-  ([Testing your app](https://ehmoussi.github.io/composeui/user-guide/testing.html)).
-- **Compared with Streamlit,** the views are explicit classes that keep their state, and
-  nothing runs the script again on each change. The same app also runs as a desktop
-  window or in a terminal.
-- **Compared with Qt, Textual, or a web framework alone,** the app gives up the widgets
-  that only one toolkit has, and keeps one code base for the three.
-- **Not yet** for an app that needs a stable API, or a widget that is still missing, such
-  as a context menu or a wizard (see
-  [`ROADMAP.md`](https://github.com/ehmoussi/composeui/blob/main/ROADMAP.md)).
+- **The input form of a simulation.** Fields, choices, and checks that tell the
+  user what is wrong before the run starts
+  ([Building views](https://ehmoussi.github.io/composeui/user-guide/building-views.html)).
+- **A front end for a solver.** Run a long computation or an external program in the
+  background, with a progress bar, its output, and a "Cancel" button
+  ([Running work in threads](https://ehmoussi.github.io/composeui/user-guide/threads.html)).
+- **A dashboard from a dataframe.** Filters, metrics, charts, a map, and a table of a pandas or
+  Polars frame, with a download of the rows shown
+  ([Dashboards from a dataframe](https://ehmoussi.github.io/composeui/user-guide/dashboards.html)).
+- **Results that you can explore.** Line and scatter charts, Matplotlib figures, and tables of
+  a million rows that the user sorts and filters
+  ([Charts](https://ehmoussi.github.io/composeui/user-guide/charts.html),
+  [Tables](https://ehmoussi.github.io/composeui/user-guide/tables.html)).
+- **Studies that you save and open again.** The File menu saves all the inputs of the app in
+  one file, so a user can come back to a study, or send it to a colleague.
 
 ## Installation
 
@@ -143,6 +135,49 @@ to serve it to other users, read
    has forms, radio groups, a check box, a read-only table, checks, and a File menu that
    saves and opens:
    `uv run python -m examples.pipeform --backend qt`, or `textual`, or `web`.
+
+## Build with your coding agent
+
+ComposeUI ships a skill for coding agents, such as Claude Code: a `SKILL.md` file with the
+rules that keep an app correct on every backend. Install it in your project, then ask your
+agent for the app that you need, for example:
+
+> Build a ComposeUI app with a form for the parameters of my solver. A "Run" button runs the
+> solver with a progress bar, and a chart plots the results.
+
+[Using a coding agent](https://ehmoussi.github.io/composeui/user-guide/coding-agents.html) says
+how to install the skill.
+
+## Why ComposeUI
+
+- **Plain Python, no GUI code.** A screen is a class with typed fields. You do not create
+  widgets or connect them by hand.
+- **Set a value, and the screen follows.** When your code sets `view.text = "..."`, the screen
+  shows the new text. You never call `update()` or `refresh()`.
+- **Write the app once.** Start as a web page for your team, and run the same app as a
+  desktop window or in a terminal, with one option: `--backend`.
+- **Test it without a screen.** The state of the app is plain Python objects, so your tests
+  set inputs and read results without a window or a browser
+  ([Testing your app](https://ehmoussi.github.io/composeui/user-guide/testing.html)).
+
+## When to use it
+
+- **Choose ComposeUI** to put an app around a computation or a dataset, when it must show
+  as a desktop window, in a terminal, or in a browser, or may move from one to another later.
+  It also suits an app whose inputs must be saved as a file and checked by tests.
+- **Compared with Streamlit,** the screen is made of explicit classes that keep their state,
+  and nothing runs the script again on each change. The same app also runs as a desktop
+  window or in a terminal.
+- **Compared with Qt, Textual, or a web framework alone,** the app gives up the widgets
+  that only one toolkit has, and keeps one code base for the three.
+- **Not yet** for an app that needs a stable API, or a widget that is still missing, such
+  as a context menu or a wizard (see
+  [`ROADMAP.md`](https://github.com/ehmoussi/composeui/blob/main/ROADMAP.md)).
+
+For software developers: ComposeUI is an MVVM layer. The views are typed
+[`attrs`](https://www.attrs.org/) classes, the view-models of MVVM, and a renderer binds each
+one to a widget of the backend
+([how ComposeUI maps to MVVM](https://ehmoussi.github.io/composeui/user-guide/core-concepts.html#how-composeui-maps-to-mvvm)).
 
 ## Documentation
 
