@@ -99,6 +99,10 @@ Every behavior change needs a test in `tests/`.
   waiting, cancellation, or cleanup state that a test protects. Do not rely on incidental
   execution, elapsed time, or a fixed number of event-loop turns. Required coverage must
   remain exercised on platforms where other tests are skipped.
+- Fix a flaky test from a failure that you cause. Stretch the timer or delay the work that the
+  test races, show that the test then fails each time, and show that the fix passes in the
+  same condition. A fix of a guessed cause lets the failure come back. Toolkits have timers
+  too: a Textual `Button` ignores a click for 0.2 s after a press.
 - Qt tests in a headless environment (CI, WSL) need `QT_QPA_PLATFORM=offscreen`.
   `make test` sets it. To run one file or test:
 
